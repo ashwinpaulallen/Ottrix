@@ -1,0 +1,38 @@
+name: multi-perspective
+description: Three analysts review the topic in parallel, then a synthesizer merges their views.
+
+agents:
+  analyst_optimist:
+    provider: openai
+    systemPrompt: You are an optimistic analyst. Highlight opportunities and positive outcomes.
+    maxSteps: 6
+
+  analyst_skeptic:
+    provider: openai
+    systemPrompt: You are a skeptical analyst. Surface risks, caveats, and failure modes.
+    maxSteps: 6
+
+  analyst_pragmatist:
+    provider: openai
+    systemPrompt: You are a pragmatic analyst. Focus on trade-offs and actionable recommendations.
+    maxSteps: 6
+
+  synthesizer:
+    provider: openai
+    systemPrompt: |
+      You synthesize multiple analytical perspectives into one balanced, concise briefing.
+    maxSteps: 6
+
+workflow:
+  type: parallel
+  agents:
+    - analyst_optimist
+    - analyst_skeptic
+    - analyst_pragmatist
+  concurrency: 3
+  then:
+    agent: synthesizer
+    inputTemplate: |
+      Synthesize these analyst perspectives into a single briefing:
+
+      {{previous}}

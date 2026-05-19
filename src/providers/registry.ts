@@ -6,6 +6,8 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '../types/provider.js';
+import { instrumentProvider } from '../observability/instrument.js';
+import type { Telemetry } from '../observability/telemetry.js';
 import { ProviderError } from './errors.js';
 
 /** Relative cost tier for provider capability matching and estimates. */
@@ -140,12 +142,14 @@ export class ProviderRegistry implements CompletionProvider {
   private defaultProviderName?: string;
   private fallbackChain: string[] = [];
   private readonly unhealthyFailureThreshold: number;
+  private readonly telemetry?: Telemetry;
 
   /**
-   * @param options - Optional health thresholds.
+   * @param options - Optional health thresholds and telemetry.
    */
-  constructor(options?: { unhealthyFailureThreshold?: number }) {
+  constructor(options?: { unhealthyFailureThreshold?: number; telemetry?: Telemetry }) {
     this.unhealthyFailureThreshold = options?.unhealthyFailureThreshold ?? 3;
+    this.telemetry = options?.telemetry;
   }
 
   /**
@@ -162,9 +166,12 @@ export class ProviderRegistry implements CompletionProvider {
   ): this {
     const capabilities = options.capabilities ?? {};
     const costTier = capabilities.costTier ?? 'medium';
+    const resolvedProvider = this.telemetry
+      ? instrumentProvider(provider, this.telemetry, { component: name })
+      : provider;
     this.providers.set(name, {
       name,
-      provider,
+      provider: resolvedProvider,
       capabilities,
       costRates: options.costRates ?? DEFAULT_COST_RATES[costTier],
       health: {

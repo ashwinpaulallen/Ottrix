@@ -1,0 +1,16 @@
+{
+  "name": "agentic-fabric-example-custom-provider",
+  "private": true,
+  "type": "module",
+  "description": "Custom BaseProvider implementation",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "agentic-fabric": "file:../.."
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.3"
+  }
+}

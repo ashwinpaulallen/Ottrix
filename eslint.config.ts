@@ -4,7 +4,14 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'docs/api/**',
+      '.tmp-smoke/**',
+      'agentic-fabric-*.tgz',
+    ],
   },
   eslint.configs.recommended,
   prettier,
@@ -25,6 +32,15 @@ export default tseslint.config(
       parserOptions: {
         project: './tsconfig.tools.json',
         tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
       },
     },
   },

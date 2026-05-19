@@ -1,1 +1,51 @@
-export {};
+export {
+  BaseTool,
+  DEFAULT_TOOL_TIMEOUT_MS,
+  ToolValidationError,
+  extractErrorDetails,
+  type BaseToolConfig,
+  type ToolExecutionEvent,
+  type ToolExecutionErrorEvent,
+  type ToolExecutionEvents,
+  type ToolExecutionResultEvent,
+} from './tool.js';
+
+export { FunctionTool, type FunctionToolConfig, type ToolExecuteFn } from './function-tool.js';
+
+export {
+  DuplicateToolError,
+  ToolNotFoundError,
+  ToolRegistry,
+  type ToolRegistryOnDuplicate,
+  type ToolRegistryRegisterOptions,
+} from './registry.js';
+
+export type { JsonRpcMessage, JsonRpcNotification, JsonRpcRequest } from './mcp/types.js';
+export type { MCPTransport } from './mcp/transport.js';
+
+export {
+  MCP_PROTOCOL_VERSION,
+  MCPClient,
+  MCPProtocolError,
+  MCPRegistry,
+  MCPTool,
+  MCPToolProvider,
+  SseMCPTransport,
+  SseParser,
+  StdioMCPTransport,
+  createMCPTool,
+  type MCPClientInfo,
+  type MCPClientOptions,
+  type MCPConnectionState,
+  type MCPInitializeResult,
+  type MCPReconnectOptions,
+  type MCPRegistryServerOptions,
+  type MCPServerConfig,
+  type MCPSseServerConfig,
+  type MCPStdioServerConfig,
+  type MCPToolConfig,
+  type MCPToolDefinition,
+  type MCPToolProviderOptions,
+} from './mcp.js';
+
+export { validateSchema, type SchemaValidationResult } from '../utils/schema-validator.js';

@@ -1,7 +1,7 @@
 {
-  "name": "agent-fabric",
+  "name": "agentic-fabric",
   "version": "1.0.0",
-  "description": "Composable agent framework for TypeScript",
+  "description": "TypeScript LLM agent framework: ReAct loop, tool calling, MCP, multi-agent workflows, memory, guardrails. Anthropic Claude, OpenAI, Ollama via fetch — vendor-neutral, zero SDK deps.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -9,7 +9,8 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "exports": {
     ".": {
@@ -51,6 +52,16 @@
       "types": "./dist/guardrails/index.d.ts",
       "import": "./dist/guardrails/index.js",
       "require": "./dist/guardrails/index.cjs"
+    },
+    "./observability": {
+      "types": "./dist/observability/index.d.ts",
+      "import": "./dist/observability/index.js",
+      "require": "./dist/observability/index.cjs"
+    },
+    "./agent": {
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js",
+      "require": "./dist/agent/index.cjs"
     }
   },
   "scripts": {
@@ -62,16 +73,43 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepublishOnly": "npm run build"
+    "docs": "typedoc",
+    "docs:check": "typedoc --emit none",
+    "verify:exports": "node scripts/verify-exports.mjs",
+    "verify:pack": "node scripts/verify-pack.mjs",
+    "prepublish:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:exports && npm run verify:pack",
+    "prepublishOnly": "npm run prepublish:check"
   },
   "keywords": [
-    "agent",
     "ai",
+    "agent",
     "llm",
-    "framework"
+    "framework",
+    "multi-agent",
+    "mcp",
+    "vendor-agnostic"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ashwinpaulallen/agent-fabric.git"
+  },
+  "homepage": "https://github.com/ashwinpaulallen/agent-fabric#readme",
+  "bugs": {
+    "url": "https://github.com/ashwinpaulallen/agent-fabric/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "js-yaml": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "js-yaml": {
+      "optional": true
+    }
+  },
   "engines": {
-    "node": "^20.19.0 || ^22.13.0 || >=24"
+    "node": "^22.13.0 || ^24.0.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -81,6 +119,7 @@
     "jiti": "2.7.0",
     "prettier": "3.8.3",
     "tsup": "8.5.1",
+    "typedoc": "^0.28.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.4",
     "vitest": "4.1.6"

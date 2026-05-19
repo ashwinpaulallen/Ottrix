@@ -1,3 +1,17 @@
+import type { ChatMessage } from './messages.js';
+
+/**
+ * Serializable snapshot of {@link import('../memory/working.js').WorkingMemory} state.
+ */
+export interface MemorySnapshot {
+  /** Snapshot format version for forward compatibility. */
+  version: 1;
+  /** Full message history at the time of the snapshot. */
+  messages: ChatMessage[];
+  /** Unix epoch milliseconds when the snapshot was taken. */
+  createdAt: number;
+}
+
 /**
  * A single unit of persisted agent memory.
  *

@@ -83,6 +83,22 @@ export interface ToolDefinition<TMeta extends ToolMetadata = ToolMetadata> {
 }
 
 /**
+ * Structured failure metadata attached to a {@link ToolResult}.
+ *
+ * Populated by {@link import('../tools/tool.js').BaseTool.execute} from the
+ * thrown error. Carries protocol-level codes (e.g. JSON-RPC `-32601`) and
+ * arbitrary `data` payloads so callers can branch without parsing strings.
+ */
+export interface ToolErrorDetails {
+  /** Error class name (e.g. `MCPProtocolError`, `ToolValidationError`). */
+  name: string;
+  /** Numeric error code if the error carries one. */
+  code?: number;
+  /** Additional structured payload from the error. */
+  data?: unknown;
+}
+
+/**
  * Outcome of a single tool execution.
  *
  * @typeParam TOutput - Successful return payload type.
@@ -94,6 +110,8 @@ export interface ToolResult<TOutput = unknown> {
   output: TOutput;
   /** Human-readable error message when `success` is false. */
   error?: string;
+  /** Structured error metadata (preserved error class name, code, data). */
+  errorDetails?: ToolErrorDetails;
 }
 
 /**

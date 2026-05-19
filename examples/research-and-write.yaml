@@ -1,0 +1,30 @@
+name: research-and-write
+description: Sequential pipeline that researches a topic then writes an article.
+
+agents:
+  researcher:
+    provider: openai
+    model: gpt-4o
+    systemPrompt: |
+      You are a thorough research assistant. Gather facts, cite sources when possible,
+      and produce clear structured notes.
+    maxSteps: 8
+
+  writer:
+    provider: openai
+    model: gpt-4o
+    systemPrompt: |
+      You are a skilled technical writer. Turn research notes into a clear,
+      engaging article for a general audience.
+    maxSteps: 8
+
+workflow:
+  type: sequential
+  steps:
+    - agent: researcher
+      inputTemplate: "Research the following topic in depth:\n\n{{input}}"
+    - agent: writer
+      inputTemplate: |
+        Write an article based on this research:
+
+        {{previous}}

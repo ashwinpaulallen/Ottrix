@@ -107,7 +107,10 @@ export class AnthropicProvider extends BaseProvider<AnthropicModel> {
    */
   constructor(config: AnthropicProviderConfig) {
     if (!config.apiKey) {
-      throw new Error('AnthropicProvider requires an apiKey');
+      throw new ProviderError('AnthropicProvider requires an apiKey', {
+        code: 'auth',
+        retryable: false,
+      });
     }
     super({
       ...config,

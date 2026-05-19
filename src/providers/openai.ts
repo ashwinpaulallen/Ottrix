@@ -136,7 +136,10 @@ export class OpenAIProvider extends BaseProvider<OpenAIModel> {
    */
   constructor(config: OpenAIProviderConfig) {
     if (!config.apiKey) {
-      throw new Error('OpenAIProvider requires an apiKey');
+      throw new ProviderError('OpenAIProvider requires an apiKey', {
+        code: 'auth',
+        retryable: false,
+      });
     }
     super({
       ...config,

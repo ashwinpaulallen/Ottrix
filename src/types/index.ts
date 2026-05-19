@@ -28,13 +28,29 @@ export type {
   JSONSchema,
   ToolMetadata,
   ToolDefinition,
+  ToolErrorDetails,
   ToolResult,
   ToolExecutor,
 } from './tools.js';
 
-export type { AgentStepType, AgentStep, AgentConfig, AgentResult } from './agent.js';
+export type {
+  AgentStepType,
+  AgentStep,
+  AgentConfig,
+  AgentResult,
+  AgentRunMetadata,
+  AgentToolRegistry,
+  AgentErrorAction,
+  AgentStopReason,
+  AgentEvent,
+} from './agent.js';
 
-export type { MemoryEntry, RetrievalOptions, MemoryProvider } from './memory.js';
+export type {
+  MemoryEntry,
+  MemorySnapshot,
+  RetrievalOptions,
+  MemoryProvider,
+} from './memory.js';
 
 export type {
   ValidationSeverity,
