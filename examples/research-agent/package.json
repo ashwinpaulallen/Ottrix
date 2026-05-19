@@ -1,0 +1,16 @@
+{
+  "name": "ottrix-example-research-agent",
+  "private": true,
+  "type": "module",
+  "description": "ReAct agent with mocked research tools",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "ottrix": "file:../.."
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "typescript": "^6.0.3"
+  }
+}
