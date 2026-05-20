@@ -53,7 +53,7 @@ Ideal for: backend services, CLI agents, automation scripts, internal copilots, 
 
 ## Requirements
 
-- **Node.js** **22** or **24** (`^22.13.0` or `^24.0.0`; tested through 24.15.x)
+- **Node.js** **20+** (`>=20`; CI tests 20, 22, and 24)
 - An API key for **Anthropic** or **OpenAI**, or a local **[Ollama](https://ollama.com/)** server
 
 ---

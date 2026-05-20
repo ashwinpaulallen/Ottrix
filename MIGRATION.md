@@ -52,7 +52,7 @@ import { AGENTIC_FABRIC_VERSION } from 'agentic-fabric';
 
 ### Node.js
 
-Requires Node.js `^22.13.0` or `^24.0.0` (22.x and 24.x).
+Requires Node.js `>=20`.
 
 ---
 

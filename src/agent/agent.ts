@@ -4,10 +4,14 @@ import type {
   AgentEvent,
   AgentResult,
   AgentRunMetadata,
+  AgentRunOptions,
   AgentStep,
   AgentStopReason,
   AgentToolRegistry,
 } from '../types/agent.js';
+import type { ZodTypeAny } from 'zod';
+import { ZodError } from 'zod';
+import type { z } from 'zod';
 import type { ChatMessage, ContentBlock, ToolUseBlock } from '../types/messages.js';
 import type {
   CompletionParams,
@@ -34,6 +38,15 @@ import { instrumentProvider, instrumentAgentToolRegistry } from '../observabilit
 import { ProviderRegistry } from '../providers/registry.js';
 import type { Telemetry } from '../observability/telemetry.js';
 import type { RunRecorder } from '../observability/replay.js';
+import { OpenAIProvider } from '../providers/openai.js';
+import {
+  StructuredOutputError,
+  appendStructuredOutputToSystemPrompt,
+  buildStructuredOutputRetryMessage,
+  createStructuredOutputContext,
+  parseAndValidateStructuredOutput,
+  type StructuredOutputContext,
+} from './structured-output.js';
 
 const DEFAULT_MAX_STEPS = 10;
 const EMPTY_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -93,10 +106,15 @@ export class Agent {
   /**
    * Run the agent to completion (non-streaming).
    */
-  async run(input: string): Promise<AgentResult> {
+  async run<TSchema extends ZodTypeAny = ZodTypeAny>(
+    input: string,
+    options?: AgentRunOptions<TSchema>,
+  ): Promise<AgentResult<AgentRunMetadata, z.infer<TSchema>>> {
     const telemetry = this.telemetry;
     if (!telemetry) {
-      return this.runCore(input);
+      return this.runCore(input, options) as Promise<
+        AgentResult<AgentRunMetadata, z.infer<TSchema>>
+      >;
     }
 
     const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
@@ -105,7 +123,10 @@ export class Agent {
     try {
       return await telemetry.withActiveSpan(rootSpan, async () => {
         try {
-          return await this.runCore(input, telemetry);
+          return (await this.runCore(input, options, telemetry)) as AgentResult<
+            AgentRunMetadata,
+            z.infer<TSchema>
+          >;
         } catch (error) {
           rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
           telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
@@ -118,13 +139,17 @@ export class Agent {
     }
   }
 
-  private async runCore(input: string, telemetry?: Telemetry): Promise<AgentResult> {
+  private async runCore(
+    input: string,
+    options?: AgentRunOptions,
+    telemetry?: Telemetry,
+  ): Promise<AgentResult> {
     this.config.guardrailMiddleware?.reset();
     const spanStart = telemetry?.finishedSpans.length ?? 0;
     this.runRecorder?.startRun(input, this.getName());
 
     try {
-      return await this.runCoreBody(input, telemetry, spanStart);
+      return await this.runCoreBody(input, options, telemetry, spanStart);
     } catch (error) {
       this.runRecorder?.cancelRun();
       throw error;
@@ -133,9 +158,19 @@ export class Agent {
 
   private async runCoreBody(
     input: string,
+    options: AgentRunOptions | undefined,
     telemetry: Telemetry | undefined,
     spanStart: number,
   ): Promise<AgentResult> {
+    const outputSchema = options?.outputSchema ?? this.config.outputSchema;
+    const structuredOutput = outputSchema
+      ? createStructuredOutputContext(
+          outputSchema,
+          this.config.structuredOutputRetries ?? 3,
+          this.supportsNativeJsonMode(),
+        )
+      : undefined;
+
     const prepared = await this.prepareRun(input);
     const messages = prepared.messages;
     for (const message of messages) {
@@ -148,11 +183,12 @@ export class Agent {
     let stopReason: AgentStopReason = 'completed';
     let warning: string | undefined;
     let finalResponse = '';
+    let parsedOutput: unknown;
 
     for (let iteration = 0; iteration < this.maxSteps; iteration++) {
       await this.contextManager.maybeSummarize(messages);
 
-      const providerCall = await this.callProvider(messages);
+      const providerCall = await this.callProvider(messages, structuredOutput);
       if (providerCall.blocked) {
         stopReason = mapGuardrailBlockCode(providerCall.code);
         warning = providerCall.reason;
@@ -290,8 +326,25 @@ export class Agent {
       );
     }
 
+    if (
+      structuredOutput &&
+      finalResponse &&
+      this.shouldValidateStructuredOutput(stopReason)
+    ) {
+      const resolved = await this.finalizeStructuredOutput(
+        messages,
+        finalResponse,
+        structuredOutput,
+        usages,
+        steps,
+      );
+      finalResponse = resolved.response;
+      parsedOutput = resolved.parsedOutput;
+    }
+
     const result: AgentResult = {
       response: finalResponse,
+      parsedOutput,
       steps,
       totalTokens: sumTokenUsage(usages),
       metadata,
@@ -376,7 +429,7 @@ export class Agent {
     for (let iteration = 0; iteration < this.maxSteps; iteration++) {
       await this.contextManager.maybeSummarize(messages);
 
-      const streamCall = await this.streamProvider(messages);
+      const streamCall = await this.streamProvider(messages, undefined);
       if ('blocked' in streamCall && streamCall.blocked) {
         stopReason = mapGuardrailBlockCode(streamCall.code);
         warning = streamCall.reason;
@@ -682,13 +735,104 @@ export class Agent {
     return '';
   }
 
+  private async finalizeStructuredOutput(
+    messages: ChatMessage[],
+    initialText: string,
+    ctx: StructuredOutputContext,
+    usages: TokenUsage[],
+    steps: AgentStep[],
+  ): Promise<{ response: string; parsedOutput: unknown }> {
+    let currentText = initialText;
+
+    while (ctx.attempts < ctx.maxAttempts) {
+      ctx.attempts += 1;
+      const validation = parseAndValidateStructuredOutput(currentText, ctx.schema);
+      if (validation.success) {
+        return { response: currentText, parsedOutput: validation.data };
+      }
+
+      ctx.lastRawOutput = currentText;
+      const zodError =
+        validation.kind === 'zod'
+          ? validation.error
+          : new ZodError([
+              {
+                code: 'custom',
+                path: [],
+                message: validation.error.message,
+              },
+            ]);
+      ctx.lastZodError = zodError;
+
+      if (ctx.attempts >= ctx.maxAttempts) {
+        throw new StructuredOutputError(
+          'Structured output validation failed after maximum retries',
+          currentText,
+          zodError,
+          ctx.attempts,
+        );
+      }
+
+      messages.push({
+        role: 'user',
+        content: buildStructuredOutputRetryMessage(
+          validation.kind === 'zod' ? validation.error : validation.error,
+        ),
+      });
+
+      const providerCall = await this.callProvider(messages, ctx, { forceJsonMode: true });
+      if (providerCall.blocked) {
+        throw new StructuredOutputError(
+          providerCall.reason,
+          currentText,
+          zodError,
+          ctx.attempts,
+        );
+      }
+
+      const completion = providerCall.result;
+      usages.push(completion.usage);
+      messages.push(buildAssistantMessage(completion.content));
+      currentText = await this.validateOutput(extractTextFromContent(completion.content));
+
+      this.recordStep(steps, {
+        type: 'response',
+        content: { text: currentText, structuredRetry: true },
+        tokenUsage: completion.usage,
+      });
+    }
+
+    throw new StructuredOutputError(
+      'Structured output validation failed after maximum retries',
+      currentText,
+      ctx.lastZodError ?? new ZodError([]),
+      ctx.attempts,
+    );
+  }
+
+  private shouldValidateStructuredOutput(stopReason: AgentStopReason): boolean {
+    if (stopReason === 'aborted' || stopReason === 'error' || stopReason === 'guardrail') {
+      return false;
+    }
+    if (stopReason === 'tool_blocked') {
+      return false;
+    }
+    return true;
+  }
+
+  private supportsNativeJsonMode(): boolean {
+    return this.config.provider instanceof OpenAIProvider;
+  }
+
   private async callProvider(
     messages: ChatMessage[],
+    structuredOutput?: StructuredOutputContext,
+    structuredOptions?: { forceJsonMode?: boolean },
   ): Promise<
     | { blocked: true; reason: string; code?: GuardrailBlockCode }
     | { blocked: false; result: CompletionResult }
   > {
-    let params = this.buildCompletionParams(messages);
+    let params = this.buildCompletionParams(messages, structuredOutput, structuredOptions);
     let guardedMessages = messages;
     const middleware = this.config.guardrailMiddleware;
 
@@ -749,13 +893,36 @@ export class Agent {
     return budget?.getUsageSnapshot().costUsd;
   }
 
-  private buildCompletionParams(messages: ChatMessage[]): CompletionParams {
+  private buildCompletionParams(
+    messages: ChatMessage[],
+    structuredOutput?: StructuredOutputContext,
+    structuredOptions?: { forceJsonMode?: boolean },
+  ): CompletionParams {
     const tools = this.toolRegistry.list();
+    const hasTools = tools.length > 0;
+
+    let systemPrompt = this.config.systemPrompt;
+    let responseFormat: CompletionParams['responseFormat'] = 'text';
+
+    if (structuredOutput) {
+      systemPrompt = appendStructuredOutputToSystemPrompt(
+        systemPrompt,
+        structuredOutput.jsonSchema,
+      );
+      const enableJsonMode =
+        structuredOutput.preferJsonResponseFormat &&
+        (structuredOptions?.forceJsonMode === true || !hasTools);
+      if (enableJsonMode) {
+        responseFormat = 'json';
+      }
+    }
+
     return {
       messages,
-      tools: tools.length > 0 ? tools : undefined,
-      systemPrompt: this.config.systemPrompt,
+      tools: hasTools ? tools : undefined,
+      systemPrompt,
       model: this.config.defaultModel,
+      responseFormat,
     };
   }
 
@@ -992,6 +1159,8 @@ export class Agent {
 
   private async streamProvider(
     messages: ChatMessage[],
+    structuredOutput?: StructuredOutputContext,
+    structuredOptions?: { forceJsonMode?: boolean },
   ): Promise<
     | { blocked: true; reason: string; code?: GuardrailBlockCode }
     | {
@@ -1001,7 +1170,7 @@ export class Agent {
         toolUses: ToolUseBlock[];
       }
   > {
-    let params = this.buildCompletionParams(messages);
+    let params = this.buildCompletionParams(messages, structuredOutput, structuredOptions);
     let guardedMessages = messages;
     const middleware = this.config.guardrailMiddleware;
 

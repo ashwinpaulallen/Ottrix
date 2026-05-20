@@ -9,6 +9,7 @@ export type {
   AgentConfig,
   AgentResult,
   AgentRunMetadata,
+  AgentRunOptions,
   AgentStep,
   AgentStepType,
   AgentStopReason,
@@ -16,6 +17,13 @@ export type {
   AgentToolRegistry,
   AgentErrorAction,
 } from './types/agent.js';
+
+export { StructuredOutputError } from './agent/structured-output.js';
+export {
+  zodToJsonSchema,
+  ensureZodPeer,
+  ZOD_REQUIRED_MESSAGE,
+} from './utils/zod-to-json-schema.js';
 
 export type {
   ChatMessage,

@@ -69,6 +69,7 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tools.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
+    "audit": "npm audit --audit-level=moderate",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -101,15 +102,19 @@
     "access": "public"
   },
   "peerDependencies": {
-    "js-yaml": "^4.0.0"
+    "js-yaml": "^4.0.0",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "js-yaml": {
       "optional": true
+    },
+    "zod": {
+      "optional": true
     }
   },
   "engines": {
-    "node": "^22.13.0 || ^24.0.0"
+    "node": ">=20"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -122,6 +127,7 @@
     "typedoc": "^0.28.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.4",
-    "vitest": "4.1.6"
+    "vitest": "4.1.6",
+    "zod": "4.4.3"
   }
 }

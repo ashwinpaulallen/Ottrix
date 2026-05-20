@@ -137,6 +137,24 @@ export interface AgentConfig<
    * When set, records each run for debugging and {@link import('../observability/replay.js').RunRecorder.replay}.
    */
   runRecorder?: import('../observability/replay.js').RunRecorder;
+  /**
+   * When set, the agent's final text response must parse and validate against this Zod schema.
+   * Requires the optional `zod` peer dependency.
+   */
+  /** Requires optional peer `zod`. */
+  outputSchema?: import('zod').ZodTypeAny;
+  /**
+   * Number of LLM re-prompts after a failed structured-output validation.
+   * Total validation attempts = 1 + this value.
+   * @defaultValue 3
+   */
+  structuredOutputRetries?: number;
+}
+
+/** Per-run options for {@link import('../agent/agent.js').Agent.run}. */
+export interface AgentRunOptions<TSchema extends import('zod').ZodTypeAny = import('zod').ZodTypeAny> {
+  /** Overrides {@link AgentConfig.outputSchema} for this run. */
+  outputSchema?: TSchema;
 }
 
 /**
@@ -161,9 +179,15 @@ export interface AgentRunMetadata extends Record<string, unknown> {
 
 export interface AgentResult<
   TMetadata extends Record<string, unknown> = AgentRunMetadata,
+  TOutput = unknown,
 > {
   /** Consolidated natural-language response for the user. */
   response: string;
+  /**
+   * Parsed object when {@link AgentConfig.outputSchema} or run `outputSchema` was set
+   * and validation succeeded.
+   */
+  parsedOutput?: TOutput;
   /** Ordered trace of steps taken during the run. */
   steps: AgentStep[];
   /** Aggregate token usage across all provider calls. */
@@ -171,3 +195,4 @@ export interface AgentResult<
   /** Run metadata (stop reason, warnings, model). */
   metadata: TMetadata;
 }
+

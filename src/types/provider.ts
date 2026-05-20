@@ -47,6 +47,11 @@ export interface CompletionParams<TModel extends string = string> {
   stopSequences?: string[];
   /** System prompt prepended or injected by the provider adapter. */
   systemPrompt?: string;
+  /**
+   * Hint for providers that support native JSON response modes (e.g. OpenAI `json_object`).
+   * @defaultValue `"text"`
+   */
+  responseFormat?: 'json' | 'text';
 }
 
 /**

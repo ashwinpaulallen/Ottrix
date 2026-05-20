@@ -274,6 +274,9 @@ export class OpenAIProvider extends BaseProvider<OpenAIModel> {
     if (params.maxTokens !== undefined) body.max_tokens = params.maxTokens;
     if (params.stopSequences?.length) body.stop = params.stopSequences;
     if (params.tools?.length) body.tools = mapTools(params.tools);
+    if (params.responseFormat === 'json') {
+      body.response_format = { type: 'json_object' };
+    }
 
     return body;
   }

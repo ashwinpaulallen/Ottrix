@@ -2,7 +2,7 @@
 
 **Package name:** `agentic-fabric`  
 **Version constant:** `AGENTIC_FABRIC_VERSION` (deprecated alias: `AGENT_FABRIC_VERSION`)  
-**Node.js:** `^22.13.0` or `^24.0.0` (22.x and 24.x only; Node 20 is not supported)  
+**Node.js:** `>=20` (20.x, 22.x, 24.x; CI tests 20, 22, and 24)  
 **Module format:** ESM (`"type": "module"`); CommonJS builds ship as `.cjs` alongside `.js`.
 
 ## Published artifact

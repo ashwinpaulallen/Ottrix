@@ -92,7 +92,7 @@ Consumers implement `BaseProvider` and pass the instance to `new Agent({ provide
 1. **Open an issue** for large features or breaking changes before significant work
 2. **Fork** the repo and branch from `main`
 3. **Implement** with tests and docs
-4. **Ensure CI passes** — GitHub Actions runs typecheck, lint, test, and build on Node 22 and 24
+4. **Ensure CI passes** — GitHub Actions runs `npm audit`, then typecheck, lint, test, and build on Node 20, 22, and 24
 5. **Open a PR** with:
    - Clear summary of what and why
    - Test plan (commands run, scenarios covered)
