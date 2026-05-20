@@ -13,6 +13,16 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+/** Circuit breaker settings for a provider instance. */
+export interface CircuitBreakerConfig {
+  /** Consecutive failures before opening the circuit. @defaultValue 5 */
+  failureThreshold?: number;
+  /** Ms before OPEN transitions to HALF_OPEN. @defaultValue 60000 */
+  resetTimeoutMs?: number;
+  /** Successful half-open probes required to close. @defaultValue 1 */
+  halfOpenMaxAttempts?: number;
+}
+
 /**
  * Connection and retry settings for a model provider.
  */
@@ -27,6 +37,10 @@ export interface ProviderConfig {
   maxRetries?: number;
   /** Request timeout in milliseconds. */
   timeout?: number;
+  /** Optional circuit breaker overrides (enabled by default on {@link BaseProvider}). */
+  circuitBreaker?: CircuitBreakerConfig;
+  /** Disable the circuit breaker for this provider. */
+  circuitBreakerDisabled?: boolean;
 }
 
 /**
@@ -54,6 +68,18 @@ export interface CompletionParams<TModel extends string = string> {
   responseFormat?: 'json' | 'text';
 }
 
+/** Optional metadata attached to completion results. */
+export interface CompletionResultMetadata {
+  /** Registry or logical provider name that served the request. */
+  provider?: string;
+  /** One-based attempt index on the serving provider (includes retries). */
+  attempt?: number;
+  /** Number of prior providers tried before success (0 when the first provider succeeded). */
+  fallbacksTriggered?: number;
+  /** Wall-clock time for the full chain including retries, backoff, and fallbacks (ms). */
+  totalLatencyMs?: number;
+}
+
 /**
  * Final result of a completed (non-streaming) model call.
  */
@@ -66,6 +92,8 @@ export interface CompletionResult<TModel extends string = string> {
   usage: TokenUsage;
   /** Provider-specific stop reason (e.g. `end_turn`, `max_tokens`, `tool_use`). */
   stopReason: string;
+  /** Routing and observability metadata (e.g. which provider served the request). */
+  metadata?: CompletionResultMetadata;
 }
 
 /** Incremental text emitted during streaming. */

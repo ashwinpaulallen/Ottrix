@@ -6,6 +6,7 @@ import type {
   ProviderConfig,
   StreamChunk,
 } from '../types/provider.js';
+import { CircuitBreaker, CircuitOpenError, type CircuitState } from './circuit-breaker.js';
 import { ProviderError, type ProviderErrorCode } from './errors.js';
 
 /** Default maximum retry attempts when not set in config. */
@@ -27,6 +28,8 @@ const DEFAULT_REQUESTS_PER_MINUTE = 60;
  * Extended provider configuration used by {@link BaseProvider}.
  */
 export interface BaseProviderConfig extends ProviderConfig {
+  /** Logical provider id for circuit breaker errors (e.g. `"openai"`). */
+  providerId?: string;
   /** Initial delay before the first retry (ms). @defaultValue 500 */
   retryInitialDelayMs?: number;
   /** Maximum delay between retries (ms). @defaultValue 30000 */
@@ -134,6 +137,7 @@ export abstract class BaseProvider<TModel extends string = string>
   private readonly maxRetries: number;
   private readonly initialDelayMs: number;
   private readonly maxDelayMs: number;
+  private readonly circuitBreaker?: CircuitBreaker;
 
   /**
    * @param config - Connection, retry, rate-limit, and logging settings.
@@ -145,20 +149,57 @@ export abstract class BaseProvider<TModel extends string = string>
     this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.initialDelayMs = config.retryInitialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
     this.maxDelayMs = config.retryMaxDelayMs ?? DEFAULT_MAX_DELAY_MS;
+
+    if (!config.circuitBreakerDisabled) {
+      const cb = config.circuitBreaker ?? {};
+      this.circuitBreaker = new CircuitBreaker({
+        provider: config.providerId ?? 'provider',
+        failureThreshold: cb.failureThreshold,
+        resetTimeoutMs: cb.resetTimeoutMs,
+        halfOpenMaxAttempts: cb.halfOpenMaxAttempts,
+      });
+    }
+  }
+
+  /** Whether the circuit breaker is in the OPEN state (not accepting traffic). */
+  isCircuitOpen(): boolean {
+    return this.circuitBreaker?.isOpen() ?? false;
+  }
+
+  /** Whether new requests would be rejected by the circuit breaker. */
+  isRequestBlocked(): boolean {
+    return this.circuitBreaker?.wouldRejectRequest() ?? false;
+  }
+
+  /** Milliseconds until the circuit may accept traffic again (0 if not open). */
+  getCircuitRetryAfterMs(): number {
+    return this.circuitBreaker?.retryAfterMs() ?? 0;
+  }
+
+  /** Current circuit breaker state, if enabled. */
+  getCircuitState(): CircuitState | undefined {
+    return this.circuitBreaker?.getState();
   }
 
   /**
    * Generate a completion with rate limiting and exponential-backoff retries.
    */
   async complete(params: CompletionParams<TModel>): Promise<CompletionResult<TModel>> {
-    return this.withRetry(() => this.executeComplete(params));
+    const operation = () => this.withRetry(() => this.executeComplete(params));
+    if (this.circuitBreaker) {
+      return this.circuitBreaker.execute(operation);
+    }
+    return operation();
   }
 
   /**
    * Stream completion chunks; retries only on connection-level failures before the first chunk.
    */
   stream(params: CompletionParams<TModel>): AsyncIterable<StreamChunk> {
-    return this.createStreamIterable(params);
+    if (!this.circuitBreaker) {
+      return this.createStreamIterable(params);
+    }
+    return this.createCircuitWrappedStream(params);
   }
 
   /**
@@ -365,6 +406,23 @@ export abstract class BaseProvider<TModel extends string = string>
     }
   }
 
+  /** Stream with circuit breaker success/failure tracking. */
+  private async *createCircuitWrappedStream(
+    params: CompletionParams<TModel>,
+  ): AsyncGenerator<StreamChunk> {
+    const breaker = this.circuitBreaker!;
+    breaker.beforeRequest();
+    let success = false;
+    try {
+      for await (const chunk of this.createStreamIterable(params)) {
+        yield chunk;
+      }
+      success = true;
+    } finally {
+      breaker.afterRequest(success);
+    }
+  }
+
   /**
    * Async generator implementing stream retries (connection errors only, before first chunk).
    */
@@ -383,6 +441,7 @@ export abstract class BaseProvider<TModel extends string = string>
         }
         return;
       } catch (error) {
+        if (CircuitOpenError.isCircuitOpenError(error)) throw error;
         const normalized = this.normalizeError(error);
         if (
           receivedChunk ||
@@ -406,6 +465,7 @@ export abstract class BaseProvider<TModel extends string = string>
     try {
       return await this._rawComplete(params);
     } catch (error) {
+      if (CircuitOpenError.isCircuitOpenError(error)) throw error;
       throw this.normalizeError(error);
     }
   }
@@ -417,6 +477,7 @@ export abstract class BaseProvider<TModel extends string = string>
       try {
         return await operation();
       } catch (error) {
+        if (CircuitOpenError.isCircuitOpenError(error)) throw error;
         const normalized = this.normalizeError(error);
         if (!normalized.retryable || attempt >= this.maxRetries) {
           throw normalized;
@@ -474,16 +535,19 @@ function isAbortError(error: unknown): boolean {
 /** Map HTTP status codes to {@link ProviderErrorCode}. */
 function httpStatusToErrorCode(status: number): ProviderErrorCode {
   if (status === 401 || status === 403) return 'auth';
+  if (status === 400) return 'invalid_request';
   if (status === 429) return 'rate_limit';
   if (status === 408) return 'timeout';
-  if (status === 413 || status === 422) return 'context_length';
+  if (status === 413) return 'context_length';
+  if (status === 422) return 'context_length';
+  if (status === 451) return 'content_filter';
   if (status >= 500) return 'server_error';
   return 'unknown';
 }
 
 /** Whether an HTTP status should be retried. */
 function isRetryableHttpStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500;
+  return status === 408 || status === 429 || (status >= 500 && status < 600);
 }
 
 /** Flatten `Headers` into a plain object for logging hooks. */

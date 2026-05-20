@@ -179,6 +179,49 @@ export class Telemetry {
     }
   }
 
+  /**
+   * Record a provider fallback-chain decision on the active span and metrics.
+   */
+  recordProviderChainEvent(event: {
+    type: 'retry' | 'fallback' | 'success' | 'exhausted';
+    provider: string;
+    attempt: number;
+    toProvider?: string;
+    error?: Error;
+  }): void {
+    const span = this.activeSpan;
+    if (span) {
+      span.addEvent(`provider.${event.type}`, {
+        provider: event.provider,
+        attempt: event.attempt,
+        ...(event.toProvider !== undefined ? { to_provider: event.toProvider } : {}),
+        ...(event.error ? { error: event.error.message } : {}),
+      });
+    }
+
+    if (event.type === 'retry' || event.type === 'fallback') {
+      this.counter('provider.fallback_decisions', {
+        provider: event.provider,
+        decision: event.type,
+      }).add(1);
+    }
+
+    if (event.type === 'success') {
+      this.counter('provider.chain_success', { provider: event.provider }).add(1);
+    }
+  }
+
+  /** Increment per-provider error counters for error-rate tracking. */
+  trackProviderError(provider: string, code: string): void {
+    this.counter('provider.errors', { provider, code }).add(1);
+    this.counter('provider.error_total', { provider }).add(1);
+  }
+
+  /** Record a successful provider chain completion. */
+  recordProviderChainSuccess(provider: string, attempt: number): void {
+    this.recordProviderChainEvent({ type: 'success', provider, attempt });
+  }
+
   /** Clear in-memory spans and metrics (for tests). */
   reset(): void {
     this.spans.length = 0;

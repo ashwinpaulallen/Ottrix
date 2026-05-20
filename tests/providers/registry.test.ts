@@ -5,9 +5,11 @@ import type {
   CompletionResult,
   StreamChunk,
 } from '../../src/types/provider.js';
+import { CircuitOpenError } from '../../src/providers/circuit-breaker.js';
 import { ProviderError } from '../../src/providers/errors.js';
 import {
   ProviderRegistry,
+  computeFallbackBackoffMs,
   estimateCost,
   shouldTryFallback,
 } from '../../src/providers/registry.js';
@@ -78,19 +80,36 @@ describe('shouldTryFallback', () => {
     ).toBe(true);
   });
 
-  it('returns false for auth and context_length', () => {
+  it('returns true for auth and context_length (fallback to next provider)', () => {
     expect(
       shouldTryFallback(new ProviderError('unauthorized', { code: 'auth', retryable: false })),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldTryFallback(
         new ProviderError('too long', { code: 'context_length', retryable: false }),
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('returns false for non-ProviderError', () => {
     expect(shouldTryFallback(new Error('generic'))).toBe(false);
+  });
+
+  it('returns true for CircuitOpenError', () => {
+    expect(shouldTryFallback(new CircuitOpenError('open', 'anthropic', 1000))).toBe(true);
+  });
+});
+
+describe('computeFallbackBackoffMs', () => {
+  it('caps delay at maxDelayMs', () => {
+    expect(
+      computeFallbackBackoffMs(10, {
+        baseDelayMs: 500,
+        maxDelayMs: 1000,
+        maxJitterMs: 0,
+        random: () => 0,
+      }),
+    ).toBe(1000);
   });
 });
 
@@ -119,7 +138,7 @@ describe('ProviderRegistry fallback chain', () => {
     expect(secondary.complete).toHaveBeenCalledOnce();
   });
 
-  it('does not fall back on non-retryable auth errors', async () => {
+  it('falls back immediately on auth without retrying the same provider', async () => {
     const registry = new ProviderRegistry({ unhealthyFailureThreshold: 10 });
 
     const primary = createMockProvider('anthropic', {
@@ -136,11 +155,11 @@ describe('ProviderRegistry fallback chain', () => {
       .register('openai', secondary)
       .setFallbackChain(['anthropic', 'openai']);
 
-    await expect(
-      registry.complete({ messages: [{ role: 'user', content: 'Hi' }] }),
-    ).rejects.toMatchObject({ code: 'auth' });
+    const result = await registry.complete({ messages: [{ role: 'user', content: 'Hi' }] });
 
-    expect(secondary.complete).not.toHaveBeenCalled();
+    expect(result.metadata?.provider).toBe('openai');
+    expect(primary.complete).toHaveBeenCalledOnce();
+    expect(secondary.complete).toHaveBeenCalledOnce();
   });
 
   it('skips unhealthy providers in the chain', async () => {

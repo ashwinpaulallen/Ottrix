@@ -8,6 +8,19 @@ import type {
 } from '../types/provider.js';
 import { instrumentProvider } from '../observability/instrument.js';
 import type { Telemetry } from '../observability/telemetry.js';
+import {
+  FallbackExecutor,
+  computeFallbackBackoffMs,
+  computeProviderBackoffMs,
+  isProviderCircuitOpen,
+  normalizeFallbackChain,
+  shouldTryFallback,
+  classifyProviderError,
+  type FallbackChainEntry,
+  type FallbackChainInput,
+  type FallbackExecutionEvent,
+} from './fallback-executor.js';
+import { CircuitOpenError } from './circuit-breaker.js';
 import { ProviderError } from './errors.js';
 
 /** Relative cost tier for provider capability matching and estimates. */
@@ -63,6 +76,46 @@ export interface ProviderRegistrationOptions {
   costRates?: ProviderCostRates;
 }
 
+/** Backoff settings between fallback provider attempts (legacy global default). */
+export interface FallbackBackoffOptions {
+  /** Base delay in ms before the first fallback. @defaultValue 500 */
+  baseDelayMs?: number;
+  /** Maximum delay cap in ms. @defaultValue 30000 */
+  maxDelayMs?: number;
+  /** Maximum random jitter added in ms. @defaultValue 250 */
+  maxJitterMs?: number;
+  /** Random source (for tests). @defaultValue `Math.random` */
+  random?: () => number;
+}
+
+/** Observability payload when falling back to another provider (legacy). */
+export interface ProviderFallbackEvent {
+  event: 'provider_fallback';
+  from: string;
+  to: string;
+  reason: string;
+}
+
+/** Constructor options for {@link ProviderRegistry}. */
+export interface ProviderRegistryOptions {
+  /** Consecutive failures before marking a provider unhealthy. @defaultValue 3 */
+  unhealthyFailureThreshold?: number;
+  /** Optional telemetry for instrumented providers. */
+  telemetry?: Telemetry;
+  /** Legacy global backoff defaults for string-only chains. */
+  fallbackBackoff?: FallbackBackoffOptions;
+  /** Invoked when the registry switches to the next provider (legacy). */
+  onProviderFallback?: (event: ProviderFallbackEvent) => void;
+  /** Invoked for each retry, fallback, success, or exhausted event. */
+  onFallbackEvent?: (event: FallbackExecutionEvent) => void;
+  /** Injectable sleep (for tests). */
+  sleep?: (ms: number) => Promise<void>;
+  /** Injectable clock (for tests). */
+  now?: () => number;
+  /** Injectable random (for tests). */
+  random?: () => number;
+}
+
 /** Internal health state for a provider. */
 interface ProviderHealthState {
   healthy: boolean;
@@ -75,6 +128,8 @@ interface ProviderHealthState {
 interface RegisteredProvider {
   name: string;
   provider: CompletionProvider;
+  /** Provider instance before telemetry instrumentation (for circuit state). */
+  sourceProvider: CompletionProvider;
   capabilities: ProviderCapabilities;
   costRates: ProviderCostRates;
   health: ProviderHealthState;
@@ -131,6 +186,24 @@ const LATENCY_ORDER: Record<NonNullable<ProviderCapabilities['latency']>, number
   slow: 2,
 };
 
+export type {
+  FallbackChainEntry,
+  FallbackChainInput,
+  FallbackChainBackoffConfig,
+  FallbackExecutionEvent,
+  ErrorDisposition,
+} from './fallback-executor.js';
+
+export {
+  classifyProviderError,
+  computeProviderBackoffMs,
+  computeFallbackBackoffMs,
+  isProviderCircuitOpen,
+  isProviderRequestBlocked,
+  shouldTryFallback,
+  normalizeFallbackChain,
+} from './fallback-executor.js';
+
 /**
  * Multi-provider registry with fallback chains, health tracking, selection, and cost aggregation.
  *
@@ -140,16 +213,59 @@ const LATENCY_ORDER: Record<NonNullable<ProviderCapabilities['latency']>, number
 export class ProviderRegistry implements CompletionProvider {
   private readonly providers = new Map<string, RegisteredProvider>();
   private defaultProviderName?: string;
-  private fallbackChain: string[] = [];
+  private fallbackChain: FallbackChainEntry[] = [];
   private readonly unhealthyFailureThreshold: number;
   private readonly telemetry?: Telemetry;
+  private readonly fallbackBackoff: FallbackBackoffOptions;
+  private readonly onProviderFallback?: (event: ProviderFallbackEvent) => void;
+  private readonly onFallbackEvent?: (event: FallbackExecutionEvent) => void;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly now: () => number;
+  private readonly random: () => number;
+  private readonly executor: FallbackExecutor;
 
   /**
-   * @param options - Optional health thresholds and telemetry.
+   * @param options - Optional health thresholds, telemetry, and fallback backoff.
    */
-  constructor(options?: { unhealthyFailureThreshold?: number; telemetry?: Telemetry }) {
+  constructor(options?: ProviderRegistryOptions) {
     this.unhealthyFailureThreshold = options?.unhealthyFailureThreshold ?? 3;
     this.telemetry = options?.telemetry;
+    this.fallbackBackoff = options?.fallbackBackoff ?? {};
+    this.onProviderFallback = options?.onProviderFallback;
+    this.onFallbackEvent = options?.onFallbackEvent;
+    this.sleep = options?.sleep ?? defaultSleep;
+    this.now = options?.now ?? Date.now;
+    this.random = options?.random ?? Math.random;
+
+    this.executor = new FallbackExecutor({
+      resolveProvider: (name) => {
+        const entry = this.getEntry(name);
+        return {
+          name: entry.name,
+          provider: entry.provider,
+          sourceProvider: entry.sourceProvider,
+          healthy: entry.health.healthy,
+        };
+      },
+      recordSuccess: (name) => this.recordSuccess(name),
+      recordFailure: (name) => this.recordFailure(name),
+      recordUsage: (name, usage) => this.recordUsage(name, usage),
+      telemetry: this.telemetry,
+      sleep: this.sleep,
+      now: this.now,
+      random: this.random,
+      onEvent: (event) => {
+        this.onFallbackEvent?.(event);
+        if (event.type === 'fallback' && event.toProvider) {
+          this.onProviderFallback?.({
+            event: 'provider_fallback',
+            from: event.provider,
+            to: event.toProvider,
+            reason: fallbackReasonFromError(event.error),
+          });
+        }
+      },
+    });
   }
 
   /**
@@ -172,6 +288,7 @@ export class ProviderRegistry implements CompletionProvider {
     this.providers.set(name, {
       name,
       provider: resolvedProvider,
+      sourceProvider: provider,
       capabilities,
       costRates: options.costRates ?? DEFAULT_COST_RATES[costTier],
       health: {
@@ -214,12 +331,15 @@ export class ProviderRegistry implements CompletionProvider {
   /**
    * Configure an ordered fallback chain for {@link ProviderRegistry.complete},
    * {@link ProviderRegistry.stream}, and {@link ProviderRegistry.countTokens}.
+   *
+   * Accepts provider names or detailed per-provider retry/backoff config.
    */
-  setFallbackChain(chain: string[]): this {
-    for (const name of chain) {
-      this.assertRegistered(name);
+  setFallbackChain(chain: FallbackChainInput[]): this {
+    const normalized = normalizeFallbackChain(chain);
+    for (const step of normalized) {
+      this.assertRegistered(step.provider);
     }
-    this.fallbackChain = [...chain];
+    this.fallbackChain = normalized.map((step) => this.applyLegacyBackoffDefaults(step));
     return this;
   }
 
@@ -306,86 +426,26 @@ export class ProviderRegistry implements CompletionProvider {
   /** @inheritdoc — uses fallback chain or default provider. */
   async complete(params: CompletionParams): Promise<CompletionResult> {
     const chain = this.resolveExecutionChain();
-    let lastError: unknown;
-
-    for (const name of chain) {
-      const entry = this.getEntry(name);
-      if (!entry.health.healthy) continue;
-
-      try {
-        const result = await entry.provider.complete(params);
-        this.recordSuccess(name);
-        this.recordUsage(name, result.usage);
-        return result;
-      } catch (error) {
-        this.recordFailure(name);
-        lastError = error;
-        if (!shouldTryFallback(error)) throw toError(error);
-      }
-    }
-
-    throwChainExhausted(lastError);
+    const { result, metadata } = await this.executor.executeComplete(params, chain);
+    return {
+      ...result,
+      metadata: {
+        ...result.metadata,
+        ...metadata,
+      },
+    };
   }
 
   /** @inheritdoc — uses fallback chain; only falls back before the first chunk. */
   stream(params: CompletionParams): AsyncIterable<StreamChunk> {
-    return this.createStreamIterable(params);
-  }
-
-  /** Stream with per-provider fallback before the first chunk. */
-  private async *createStreamIterable(
-    params: CompletionParams,
-  ): AsyncGenerator<StreamChunk> {
     const chain = this.resolveExecutionChain();
-    let lastError: unknown;
-
-    for (const name of chain) {
-      const entry = this.getEntry(name);
-      if (!entry.health.healthy) continue;
-
-      let receivedChunk = false;
-      try {
-        for await (const chunk of entry.provider.stream(params)) {
-          receivedChunk = true;
-          yield chunk;
-          if (chunk.type === 'done' && chunk.data && typeof chunk.data === 'object') {
-            const data = chunk.data as { usage?: TokenUsage };
-            if (data.usage) this.recordUsage(name, data.usage);
-          }
-        }
-        this.recordSuccess(name);
-        return;
-      } catch (error) {
-        this.recordFailure(name);
-        lastError = error;
-        if (receivedChunk || !shouldTryFallback(error)) throw toError(error);
-      }
-    }
-
-    throwChainExhausted(lastError);
+    return this.executor.executeStream(params, chain);
   }
 
   /** @inheritdoc — uses fallback chain or default provider. */
   async countTokens(messages: ChatMessage[]): Promise<number> {
     const chain = this.resolveExecutionChain();
-    let lastError: unknown;
-
-    for (const name of chain) {
-      const entry = this.getEntry(name);
-      if (!entry.health.healthy) continue;
-
-      try {
-        const count = await entry.provider.countTokens(messages);
-        this.recordSuccess(name);
-        return count;
-      } catch (error) {
-        this.recordFailure(name);
-        lastError = error;
-        if (!shouldTryFallback(error)) throw toError(error);
-      }
-    }
-
-    throwChainExhausted(lastError);
+    return this.executor.executeCountTokens(messages, chain);
   }
 
   private readonly usageTotals = new Map<string, Omit<ProviderUsageTotals, 'provider'>>();
@@ -410,13 +470,30 @@ export class ProviderRegistry implements CompletionProvider {
     }
   }
 
-  private resolveExecutionChain(): string[] {
+  private resolveExecutionChain(): FallbackChainEntry[] {
     if (this.fallbackChain.length > 0) return this.fallbackChain;
-    if (this.defaultProviderName) return [this.defaultProviderName];
+    if (this.defaultProviderName) {
+      return [{ provider: this.defaultProviderName }];
+    }
     throw new ProviderError('No default provider or fallback chain configured', {
       code: 'unknown',
       retryable: false,
     });
+  }
+
+  /** Apply registry-level backoff defaults to string-only chain entries. */
+  private applyLegacyBackoffDefaults(step: FallbackChainEntry): FallbackChainEntry {
+    if (step.backoff) return step;
+    const { baseDelayMs, maxDelayMs } = this.fallbackBackoff;
+    if (baseDelayMs === undefined && maxDelayMs === undefined) return step;
+    return {
+      ...step,
+      backoff: {
+        base: baseDelayMs,
+        max: maxDelayMs,
+        jitter: (this.fallbackBackoff.maxJitterMs ?? 250) > 0,
+      },
+    };
   }
 
   private recordSuccess(name: string): void {
@@ -454,23 +531,6 @@ export class ProviderRegistry implements CompletionProvider {
       requestCount: current.requestCount + 1,
     });
   }
-}
-
-/** Coerce an unknown rejection reason to an `Error` for throwing. */
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
-}
-
-/** Throw when every provider in the fallback chain has been exhausted. */
-function throwChainExhausted(lastError: unknown): never {
-  throw toError(lastError ?? new Error('No providers available in fallback chain'));
-}
-
-/** Whether a failure should trigger the next provider in a fallback chain. */
-export function shouldTryFallback(error: unknown): boolean {
-  if (!ProviderError.isProviderError(error)) return false;
-  if (error.code === 'auth' || error.code === 'context_length') return false;
-  return error.retryable;
 }
 
 /** Estimate USD cost from token usage and rates. */
@@ -511,4 +571,15 @@ function compareCandidates(
   }
 
   return a.name.localeCompare(b.name);
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fallbackReasonFromError(error?: Error): string {
+  if (!error) return 'fallback';
+  if (CircuitOpenError.isCircuitOpenError(error)) return 'circuit_open';
+  if (ProviderError.isProviderError(error)) return error.code;
+  return 'error';
 }

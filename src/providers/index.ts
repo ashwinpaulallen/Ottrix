@@ -45,13 +45,44 @@ export type {
   CreateOllamaProviderConfig,
 } from './ollama.js';
 
-export { ProviderError } from './errors.js';
-export type { ProviderErrorCode, ProviderErrorOptions } from './errors.js';
+export { ProviderError, AggregateProviderError } from './errors.js';
+export type {
+  ProviderErrorCode,
+  ProviderErrorOptions,
+  AggregateProviderAttempt,
+} from './errors.js';
+
+export {
+  CircuitBreaker,
+  CircuitOpenError,
+} from './circuit-breaker.js';
+export type {
+  CircuitBreakerOptions,
+  CircuitBreakerStats,
+  CircuitState,
+} from './circuit-breaker.js';
+
+export {
+  FallbackExecutor,
+  classifyProviderError,
+  computeProviderBackoffMs,
+  normalizeFallbackChain,
+} from './fallback-executor.js';
+export type {
+  FallbackChainEntry,
+  FallbackChainInput,
+  FallbackChainBackoffConfig,
+  FallbackExecutionEvent,
+  ErrorDisposition,
+} from './fallback-executor.js';
 
 export {
   ProviderRegistry,
   shouldTryFallback,
   estimateCost,
+  computeFallbackBackoffMs,
+  isProviderCircuitOpen,
+  isProviderRequestBlocked,
 } from './registry.js';
 export type {
   CostTier,
@@ -61,4 +92,7 @@ export type {
   ProviderRegistrationOptions,
   ProviderUsageTotals,
   RegistryCostSummary,
+  ProviderRegistryOptions,
+  FallbackBackoffOptions,
+  ProviderFallbackEvent,
 } from './registry.js';
