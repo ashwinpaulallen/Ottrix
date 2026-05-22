@@ -1,10 +1,17 @@
 import { Agent } from '../agent/agent.js';
-import { FunctionTool } from '../tools/function-tool.js';
 import type { ToolRegistry } from '../tools/registry.js';
-import { runAgentStep } from './runner.js';
+import {
+  buildWorkerRosterLines,
+  DELEGATE_TOOL_NAME,
+  delegateLimitMessage,
+  registerDelegateTool,
+  requireToolRegistry,
+  unknownWorkerMessage,
+  workerFailureMessage,
+  type DelegateToolInput,
+} from './delegation.js';
+import { runAgentStep, WorkflowTimeoutError } from './runner.js';
 import type { WorkflowConfig, WorkflowResult, WorkflowStep } from './types.js';
-
-const DELEGATE_TOOL_NAME = 'delegate';
 
 /** A worker agent or nested hierarchical workflow. */
 export type HierarchicalWorker = Agent | HierarchicalWorkflow;
@@ -51,13 +58,11 @@ export class HierarchicalWorkflow {
     this.maxDelegations = options.maxDelegations ?? 10;
     this.config = options.config;
 
-    const registry = options.toolRegistry ?? options.manager.getToolRegistry();
-    if (!registry) {
-      throw new Error(
-        'HierarchicalWorkflow requires a ToolRegistry on the manager (config.toolRegistry)',
-      );
-    }
-    this.toolRegistry = registry;
+    this.toolRegistry = requireToolRegistry(
+      options.toolRegistry,
+      options.manager.getToolRegistry(),
+      'HierarchicalWorkflow',
+    );
     this.registerDelegateTool();
   }
 
@@ -74,12 +79,9 @@ export class HierarchicalWorkflow {
     this.delegationCount = 0;
     this.delegationSteps.length = 0;
 
-    const workerList = Object.keys(this.workers)
-      .map((name) => {
-        const description = this.workerDescriptions[name];
-        return description ? `- ${name}: ${description}` : `- ${name}`;
-      })
-      .join('\n');
+    const workerList = buildWorkerRosterLines(Object.keys(this.workers), this.workerDescriptions).join(
+      '\n',
+    );
 
     const managerInput =
       `${input}\n\n` +
@@ -108,62 +110,49 @@ export class HierarchicalWorkflow {
   }
 
   private registerDelegateTool(): void {
-    const delegateTool = new FunctionTool({
-      name: DELEGATE_TOOL_NAME,
-      description: 'Delegate a subtask to a specialist worker agent and return its response.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          worker: {
-            type: 'string',
-            description: 'Name of the worker agent',
-          },
-          task: {
-            type: 'string',
-            description: 'Task description for the worker',
-          },
-        },
-        required: ['worker', 'task'],
-      },
-      execute: async (raw) => this.executeDelegation(raw),
-    });
-
-    this.toolRegistry.register(delegateTool, { onDuplicate: 'overwrite' });
+    registerDelegateTool(
+      this.toolRegistry,
+      Object.keys(this.workers),
+      (delegateInput) => this.executeDelegation(delegateInput),
+    );
   }
 
-  private async executeDelegation(raw: Record<string, unknown>): Promise<string> {
+  private async executeDelegation(input: DelegateToolInput): Promise<string> {
     if (this.delegationCount >= this.maxDelegations) {
-      throw new Error(`Maximum delegations (${this.maxDelegations}) exceeded`);
+      return delegateLimitMessage(this.maxDelegations);
     }
 
-    const workerName = typeof raw.worker === 'string' ? raw.worker : '';
-    const task = typeof raw.task === 'string' ? raw.task : '';
-
-    if (!workerName || !task) {
-      throw new Error('delegate requires "worker" and "task" string fields');
-    }
-
-    const worker = this.workers[workerName];
+    const worker = this.workers[input.worker];
     if (!worker) {
-      throw new Error(`Unknown worker "${workerName}"`);
+      return unknownWorkerMessage(input.worker, Object.keys(this.workers));
     }
 
     this.delegationCount += 1;
 
-    if (worker instanceof HierarchicalWorkflow) {
-      const nested = await worker.run(task);
-      this.delegationSteps.push(...nested.steps);
-      return nested.finalResult.response;
+    try {
+      if (worker instanceof HierarchicalWorkflow) {
+        const nested = await worker.run(input.task);
+        this.delegationSteps.push(...nested.steps);
+        return nested.finalResult.response;
+      }
+
+      const step = await runAgentStep({
+        agent: worker,
+        agentName: input.worker,
+        input: input.task,
+        config: this.config,
+      });
+
+      this.delegationSteps.push(step);
+      return step.result.response;
+    } catch (error) {
+      const message =
+        error instanceof WorkflowTimeoutError
+          ? `${input.worker} timed out`
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      return workerFailureMessage(input.worker, message);
     }
-
-    const step = await runAgentStep({
-      agent: worker,
-      agentName: workerName,
-      input: task,
-      config: this.config,
-    });
-
-    this.delegationSteps.push(step);
-    return step.result.response;
   }
 }

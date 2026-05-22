@@ -67,6 +67,55 @@ export interface WorkflowHierarchicalDef {
   maxDelegations?: number;
 }
 
+/** Supervisor workflow configuration. */
+export interface WorkflowSupervisorDef {
+  /** Supervisor agent name. */
+  supervisor: string;
+  /** Worker agent names. */
+  workers: string[];
+  /** Optional worker descriptions injected into the supervisor system prompt. */
+  workerDescriptions?: Record<string, string>;
+  /** Maximum delegate tool invocations. */
+  maxRounds?: number;
+  /** Per-worker timeout in milliseconds. */
+  workerTimeout?: number;
+  /** Maximum nested supervisor depth. */
+  maxNestedDepth?: number;
+  /** Whether the supervisor synthesizes worker outputs. @defaultValue true */
+  synthesizeResults?: boolean;
+}
+
+/** DAG workflow step referencing a defined agent. */
+export interface WorkflowDagStepDef {
+  /** Unique step ID within the DAG. */
+  id: string;
+  /** Agent name defined in `agents`. */
+  agent: string;
+  /** Optional display name override. */
+  name?: string;
+  /** IDs of steps that must complete before this step. */
+  dependencies?: string[];
+  /** Pause for human input before this step runs. */
+  suspend?: boolean;
+  /** Retry count after the first failure. */
+  retries?: number;
+  /** Step timeout in milliseconds. */
+  timeout?: number;
+  /**
+   * Input template for dependency outputs. Supports `{{input}}` and `{{depId}}`
+   * placeholders for each dependency step ID.
+   */
+  inputTemplate?: string;
+}
+
+/** DAG workflow configuration. */
+export interface WorkflowDagDef {
+  /** DAG steps referencing agents. */
+  steps: WorkflowDagStepDef[];
+  /** Maximum concurrent step executions. */
+  maxConcurrency?: number;
+}
+
 /** Workflow topology configuration. */
 export type WorkflowTopologyDef =
   | {
@@ -82,7 +131,13 @@ export type WorkflowTopologyDef =
     }
   | ({
       type: 'hierarchical';
-    } & WorkflowHierarchicalDef);
+    } & WorkflowHierarchicalDef)
+  | ({
+      type: 'supervisor';
+    } & WorkflowSupervisorDef)
+  | ({
+      type: 'dag';
+    } & WorkflowDagDef);
 
 /** Declarative multi-agent workflow configuration (YAML/JSON). */
 export interface WorkflowDefinition {
@@ -104,7 +159,7 @@ export interface WorkflowDefinition {
 export interface WorkflowStructureDescription {
   name: string;
   description: string;
-  type: 'sequential' | 'parallel' | 'router' | 'hierarchical' | 'parallel-then';
+  type: 'sequential' | 'parallel' | 'router' | 'hierarchical' | 'supervisor' | 'dag' | 'parallel-then';
   agentNames: string[];
   sequential?: WorkflowStepDef[];
   parallel?: {
@@ -114,4 +169,6 @@ export interface WorkflowStructureDescription {
   };
   router?: WorkflowRouterDef;
   hierarchical?: WorkflowHierarchicalDef;
+  supervisor?: WorkflowSupervisorDef;
+  dag?: WorkflowDagDef;
 }

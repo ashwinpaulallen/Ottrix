@@ -127,4 +127,89 @@ describe('HierarchicalWorkflow', () => {
         }),
     ).toThrow(/ToolRegistry/);
   });
+
+  it('returns tool error when max delegations exceeded', async () => {
+    const registry = new ToolRegistry();
+
+    const workerProvider = new MockCompletionProvider().enqueue(
+      textCompletion('Worker output.'),
+    );
+    const worker = new Agent({
+      name: 'researcher',
+      provider: workerProvider,
+    });
+
+    const managerProvider = new MockCompletionProvider()
+      .enqueue(
+        toolUseCompletion([
+          {
+            id: 'tu_1',
+            name: 'delegate',
+            input: { worker: 'researcher', task: 'First task' },
+          },
+        ]),
+      )
+      .enqueue(
+        toolUseCompletion([
+          {
+            id: 'tu_2',
+            name: 'delegate',
+            input: { worker: 'researcher', task: 'Second task' },
+          },
+        ]),
+      )
+      .enqueue(textCompletion('Final answer after delegation limit.'));
+
+    const manager = new Agent({
+      name: 'manager',
+      provider: managerProvider,
+      toolRegistry: registry,
+    });
+
+    const workflow = new HierarchicalWorkflow({
+      manager,
+      workers: { researcher: worker },
+      toolRegistry: registry,
+      maxDelegations: 1,
+    });
+
+    const output = await workflow.run('Keep delegating');
+
+    expect(output.steps.filter((step) => step.agentName === 'researcher')).toHaveLength(1);
+    expect(workerProvider.completeCalls).toBe(1);
+    expect(output.finalResult.response).toContain('Final answer after delegation limit');
+  });
+
+  it('returns tool error for unknown worker', async () => {
+    const registry = new ToolRegistry();
+
+    const managerProvider = new MockCompletionProvider()
+      .enqueue(
+        toolUseCompletion([
+          {
+            id: 'tu_1',
+            name: 'delegate',
+            input: { worker: 'ghost', task: 'Do work' },
+          },
+        ]),
+      )
+      .enqueue(textCompletion('Recovered after unknown worker.'));
+
+    const manager = new Agent({
+      name: 'manager',
+      provider: managerProvider,
+      toolRegistry: registry,
+    });
+
+    const workflow = new HierarchicalWorkflow({
+      manager,
+      workers: { researcher: createTextAgent('researcher', 'Worker output.') },
+      toolRegistry: registry,
+    });
+
+    const output = await workflow.run('Try delegating');
+
+    expect(output.steps.some((step) => step.agentName === 'ghost')).toBe(false);
+    expect(output.finalResult.response).toContain('Recovered after unknown worker');
+  });
 });

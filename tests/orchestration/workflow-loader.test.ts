@@ -3,11 +3,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { ProviderRegistry } from '../../src/providers/registry.js';
 import { HierarchicalWorkflow } from '../../src/orchestration/hierarchical.js';
+import { DAGWorkflow } from '../../src/orchestration/dag.js';
 import { ParallelWorkflow } from '../../src/orchestration/parallel.js';
 import { RouterWorkflow } from '../../src/orchestration/router.js';
 import { SequentialWorkflow } from '../../src/orchestration/sequential.js';
 import {
   LoadedWorkflow,
+  LoaderDAGWorkflow,
+  LoaderSupervisorWorkflow,
   ParallelThenWorkflow,
   WorkflowLoader,
   normalizeWorkflowDefinition,
@@ -108,6 +111,25 @@ describe('validateWorkflowDefinition', () => {
     });
 
     expect(() => validateWorkflowDefinition(def)).toThrow(/duplicate agent "a"/);
+  });
+
+  it('rejects DAG workflows with duplicate step ids', () => {
+    const def = normalizeWorkflowDefinition({
+      name: 'dag-dup',
+      description: 'x',
+      agents: {
+        a: { provider: 'openai', systemPrompt: 'hi' },
+      },
+      workflow: {
+        type: 'dag',
+        steps: [
+          { id: 'step', agent: 'a' },
+          { id: 'step', agent: 'a' },
+        ],
+      },
+    });
+
+    expect(() => validateWorkflowDefinition(def)).toThrow(/duplicate step id "step"/);
   });
 });
 
@@ -225,5 +247,52 @@ describe('WorkflowLoader.loadFromObject', () => {
 
     expect(jsonLoaded.describe().name).toBe('research-and-write');
     expect(jsonLoaded.workflow).toBeInstanceOf(SequentialWorkflow);
+  });
+
+  it('builds a supervisor workflow with resolved agents', () => {
+    const loader = createLoader();
+    const loaded = loader.loadFromObject({
+      name: 'supervisor-pipeline',
+      description: 'supervisor test',
+      agents: {
+        manager: { provider: 'openai', systemPrompt: 'manage' },
+        worker: { provider: 'openai', systemPrompt: 'work' },
+      },
+      workflow: {
+        type: 'supervisor',
+        supervisor: 'manager',
+        workers: ['worker'],
+        workerDescriptions: { worker: 'Handles subtasks' },
+      },
+    });
+
+    expect(loaded.workflow).toBeInstanceOf(LoaderSupervisorWorkflow);
+    expect(loaded.supervisorEngine).toBeDefined();
+    expect(loaded.describe().supervisor?.workers).toEqual(['worker']);
+    expect(loaded.agents.manager?.getToolRegistry()).toBeDefined();
+  });
+
+  it('builds a DAG workflow with resolved agents', () => {
+    const loader = createLoader();
+    const loaded = loader.loadFromObject({
+      name: 'dag-pipeline',
+      description: 'dag test',
+      agents: {
+        draft: { provider: 'openai', systemPrompt: 'draft' },
+        review: { provider: 'openai', systemPrompt: 'review' },
+      },
+      workflow: {
+        type: 'dag',
+        maxConcurrency: 2,
+        steps: [
+          { id: 'draft', agent: 'draft' },
+          { id: 'review', agent: 'review', dependencies: ['draft'] },
+        ],
+      },
+    });
+
+    expect(loaded.workflow).toBeInstanceOf(LoaderDAGWorkflow);
+    expect(loaded.dagEngine).toBeInstanceOf(DAGWorkflow);
+    expect(loaded.describe().dag?.steps.map((step) => step.id)).toEqual(['draft', 'review']);
   });
 });

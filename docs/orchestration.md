@@ -127,9 +127,35 @@ Schema: `{ worker: string, task: string }` (both required).
 
 ### Delegation execution
 
-- Unknown worker / missing fields / max delegations → **Error**
+- Unknown worker, max delegations exceeded, or worker failure → **tool result string** returned to the manager (same resilience model as {@link SupervisorWorkflow})
 - Worker is nested `HierarchicalWorkflow` → `worker.run(task)`
 - Else `runAgentStep` on worker agent
+
+---
+
+## `SupervisorWorkflow`
+
+**File:** `src/orchestration/supervisor.ts`
+
+Supervisor delegates to specialist workers via the shared `delegate` tool. Delegation limits, unknown workers, and worker failures return tool errors rather than throwing.
+
+| Option | Default |
+|--------|---------|
+| `maxDelegationRounds` | `10` |
+| `workerTimeout` | `60_000` ms |
+| `maxNestedDepth` | `3` |
+
+### `onSupervisorThinking`
+
+Fires **during** the supervisor run loop when a thinking step is recorded — wired through the supervisor agent's `onStep` hook via `createSupervisorThinkingOnStep`. {@link createSupervisor} attaches this automatically; when constructing {@link SupervisorWorkflow} manually, pass the same hook on the supervisor {@link Agent}.
+
+---
+
+## `DAGWorkflow`
+
+**File:** `src/orchestration/dag.ts`
+
+Directed acyclic graph of steps with optional suspend/resume, retries, and concurrency limits. Use {@link DAGBuilder} or YAML `type: dag` via {@link WorkflowLoader}.
 
 ---
 
@@ -173,17 +199,22 @@ Returns `LoadedWorkflow` with `workflow`, `definition`, `describe()`.
 | `parallel` | `agents[]`; optional `then` synthesis block |
 | `router` | `router.type`: `rules` or `llm` |
 | `hierarchical` | `manager` + `workers` map |
+| `supervisor` | `supervisor` + `workers`; optional `workerDescriptions`, `maxRounds`, `workerTimeout`, `maxNestedDepth`, `synthesizeResults` |
+| `dag` | `steps[]` with `id`, `agent`, optional `dependencies`, `suspend`, `retries`, `timeout`, `inputTemplate`; optional `maxConcurrency` |
+
+`LoadedWorkflow.resumeDag(state, input)` resumes a suspended DAG loaded from a definition. Use `dagEngine` / `supervisorEngine` to access the underlying engines.
+
+### Template rendering
+
+`{{input}}` → original workflow input  
+`{{previous}}` → previous step response (sequential / parallel-then)  
+`{{depId}}` → dependency step output in DAG `inputTemplate` (by step ID)
 
 ### Router (`createRouterFn`)
 
 **Rules:** first matching rule (regex with `/pattern/flags` or case-insensitive substring); else `fallback`; **Error** if no match and no fallback.
 
 **LLM:** prompts `llmAgent` to return agent key; trim response; fallback on unknown key; **Error** if `llmAgent` missing.
-
-### Template rendering
-
-`{{input}}` → original workflow input  
-`{{previous}}` → previous step response
 
 ### Agent resolution
 

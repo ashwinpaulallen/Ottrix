@@ -2,32 +2,42 @@ import { readFile } from 'node:fs/promises';
 import { Agent } from '../agent/agent.js';
 import type { ProviderRegistry } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
-import type { WorkflowConfig, WorkflowResult } from './types.js';
+import { agentStep, DAGWorkflow } from './dag.js';
+import { validateDagSteps } from './dag-graph.js';
+import type { DAGResult, DAGStep, ResumeInput, SuspendedWorkflowState } from './dag-types.js';
+import type { AgentResult } from '../types/agent.js';
 import { HierarchicalWorkflow } from './hierarchical.js';
 import { ParallelWorkflow } from './parallel.js';
 import { RouterWorkflow, type WorkflowRouterFn } from './router.js';
 import { SequentialWorkflow, type SequentialWorkflowStep } from './sequential.js';
+import { SupervisorWorkflow, type SupervisorWorkflowResult } from './supervisor.js';
 import type {
   RouterRule,
   WorkflowAgentDefinition,
+  WorkflowDagDef,
+  WorkflowDagStepDef,
   WorkflowDefinition,
   WorkflowHierarchicalDef,
   WorkflowParallelDef,
   WorkflowRouterDef,
   WorkflowStepDef,
   WorkflowStructureDescription,
+  WorkflowSupervisorDef,
   WorkflowTopologyDef,
 } from './workflow-definition.js';
 import { mergeTokenUsage, runAgentStep } from './runner.js';
+import type { WorkflowConfig, WorkflowResult, WorkflowStep } from './types.js';
 import { parseWorkflowFile } from './yaml-parse.js';
 
-/** Built workflow instance (runnable). */
+/** Built workflow instance (runnable via {@link WorkflowResult}). */
 export type BuiltWorkflow =
   | SequentialWorkflow
   | ParallelWorkflow
   | RouterWorkflow
   | HierarchicalWorkflow
-  | ParallelThenWorkflow;
+  | ParallelThenWorkflow
+  | LoaderSupervisorWorkflow
+  | LoaderDAGWorkflow;
 
 /**
  * Parallel execution followed by an optional synthesis step (sequential wrapper).
@@ -87,6 +97,52 @@ export class ParallelThenWorkflow {
   }
 }
 
+/** Loader wrapper exposing {@link WorkflowResult} for {@link SupervisorWorkflow}. */
+export class LoaderSupervisorWorkflow {
+  private readonly inner: SupervisorWorkflow;
+
+  constructor(inner: SupervisorWorkflow) {
+    this.inner = inner;
+  }
+
+  /** Underlying supervisor workflow engine. */
+  get engine(): SupervisorWorkflow {
+    return this.inner;
+  }
+
+  async run(input: string): Promise<WorkflowResult> {
+    const result = await this.inner.run(input);
+    return supervisorResultToWorkflowResult(result);
+  }
+}
+
+/** Loader wrapper exposing {@link WorkflowResult} and DAG suspend/resume for {@link DAGWorkflow}. */
+export class LoaderDAGWorkflow {
+  private readonly inner: DAGWorkflow;
+
+  constructor(inner: DAGWorkflow) {
+    this.inner = inner;
+  }
+
+  /** Underlying DAG workflow engine. */
+  get engine(): DAGWorkflow {
+    return this.inner;
+  }
+
+  async run(input: string): Promise<WorkflowResult> {
+    const result = await this.inner.run(input);
+    return dagResultToWorkflowResult(result);
+  }
+
+  resume(state: SuspendedWorkflowState, input: ResumeInput): Promise<DAGResult> {
+    return this.inner.resume(state, input);
+  }
+
+  cancel(): void {
+    this.inner.cancel();
+  }
+}
+
 /** Options for {@link WorkflowLoader}. */
 export interface WorkflowLoaderOptions {
   /** Registry used to resolve `agents.*.provider` names. */
@@ -113,6 +169,24 @@ export class LoadedWorkflow {
   /** Serializable structure for inspection and tests. */
   describe(): WorkflowStructureDescription {
     return describeWorkflow(this.definition);
+  }
+
+  /** Resume a suspended DAG loaded from a definition. */
+  resumeDag(state: SuspendedWorkflowState, input: ResumeInput): Promise<DAGResult> {
+    if (!(this.workflow instanceof LoaderDAGWorkflow)) {
+      throw new Error('Loaded workflow is not a DAG workflow');
+    }
+    return this.workflow.resume(state, input);
+  }
+
+  /** Access the underlying DAG engine when the loaded workflow is a DAG. */
+  get dagEngine(): DAGWorkflow | undefined {
+    return this.workflow instanceof LoaderDAGWorkflow ? this.workflow.engine : undefined;
+  }
+
+  /** Access the underlying supervisor engine when loaded as a supervisor workflow. */
+  get supervisorEngine(): SupervisorWorkflow | undefined {
+    return this.workflow instanceof LoaderSupervisorWorkflow ? this.workflow.engine : undefined;
   }
 }
 
@@ -158,12 +232,16 @@ export class WorkflowLoader {
       definition.workflow.type === 'hierarchical'
         ? definition.workflow.manager
         : undefined;
+    const supervisorName =
+      definition.workflow.type === 'supervisor'
+        ? definition.workflow.supervisor
+        : undefined;
 
     for (const [name, agentDef] of Object.entries(definition.agents)) {
       const provider = this.providers.get(agentDef.provider);
       let toolRegistry = this.buildAgentToolRegistry(agentDef.tools);
 
-      if (hierarchicalManager === name && !toolRegistry) {
+      if ((hierarchicalManager === name || supervisorName === name) && !toolRegistry) {
         toolRegistry = new ToolRegistry();
       }
 
@@ -225,6 +303,10 @@ export class WorkflowLoader {
         return this.buildRouter(topology.router, agents, config);
       case 'hierarchical':
         return this.buildHierarchical(topology, agents, config);
+      case 'supervisor':
+        return this.buildSupervisor(topology, agents, definition, config);
+      case 'dag':
+        return this.buildDag(topology, agents, config);
       default:
         throw new Error('Unsupported workflow type');
     }
@@ -387,6 +469,97 @@ export class WorkflowLoader {
       config,
     });
   }
+
+  private buildSupervisor(
+    topology: WorkflowSupervisorDef & { type: 'supervisor' },
+    agents: Record<string, Agent>,
+    definition: WorkflowDefinition,
+    config?: WorkflowConfig,
+  ): LoaderSupervisorWorkflow {
+    const supervisorDef = definition.agents[topology.supervisor];
+    if (!supervisorDef) {
+      throw new Error(`Supervisor workflow: unknown supervisor "${topology.supervisor}"`);
+    }
+
+    const provider = this.providers.get(supervisorDef.provider);
+    const registry = agents[topology.supervisor]?.getToolRegistry();
+    if (!registry) {
+      throw new Error(
+        `Supervisor workflow supervisor "${topology.supervisor}" requires a ToolRegistry`,
+      );
+    }
+
+    const workers = new Map<string, Agent>();
+    for (const workerName of topology.workers) {
+      if (workerName === topology.supervisor) {
+        throw new Error(`Supervisor workflow: worker "${workerName}" cannot be the supervisor`);
+      }
+      workers.set(workerName, agents[workerName]!);
+    }
+
+    const workerDescriptions = new Map<string, string>(
+      Object.entries(topology.workerDescriptions ?? {}),
+    );
+    for (const workerName of topology.workers) {
+      if (!workerDescriptions.has(workerName)) {
+        const line = definition.agents[workerName]?.systemPrompt
+          .split('\n')
+          .find((value) => value.trim().length > 0);
+        workerDescriptions.set(workerName, line?.trim() ?? workerName);
+      }
+    }
+
+    const workerPrompt = SupervisorWorkflow.buildWorkerSystemPrompt(workers, workerDescriptions);
+    const synthesisInstruction =
+      topology.synthesizeResults === false
+        ? ''
+        : '\n\nAfter receiving results from workers via the delegate tool, synthesize them into a final comprehensive answer for the user.';
+    const systemPrompt =
+      [supervisorDef.systemPrompt, workerPrompt].filter(Boolean).join('\n\n') + synthesisInstruction;
+
+    const supervisor = new Agent({
+      name: topology.supervisor,
+      provider,
+      systemPrompt,
+      defaultModel: supervisorDef.model,
+      maxSteps: supervisorDef.maxSteps,
+      toolRegistry: registry,
+    });
+
+    const inner = new SupervisorWorkflow({
+      supervisor,
+      workers,
+      workerDescriptions,
+      toolRegistry: registry,
+      maxDelegationRounds: topology.maxRounds,
+      workerTimeout: topology.workerTimeout,
+      maxNestedDepth: topology.maxNestedDepth,
+    });
+
+    return new LoaderSupervisorWorkflow(inner);
+  }
+
+  private buildDag(
+    topology: WorkflowDagDef & { type: 'dag' },
+    agents: Record<string, Agent>,
+    config?: WorkflowConfig,
+  ): LoaderDAGWorkflow {
+    const dagSteps = topology.steps.map((stepDef) => {
+      const agent = agents[stepDef.agent];
+      if (!agent) {
+        throw new Error(`DAG step "${stepDef.id}" references unknown agent "${stepDef.agent}"`);
+      }
+
+      return buildDagStepFromDef(stepDef, agent, config);
+    });
+
+    const inner = new DAGWorkflow({
+      steps: dagSteps,
+      maxConcurrency: topology.maxConcurrency,
+    });
+
+    return new LoaderDAGWorkflow(inner);
+  }
 }
 
 /** Validate a {@link WorkflowDefinition} and throw on structural errors. */
@@ -474,6 +647,48 @@ export function validateWorkflowDefinition(definition: WorkflowDefinition): void
       }
       break;
     }
+    case 'supervisor': {
+      ensureAgent(topology.supervisor, 'Supervisor');
+      if (!topology.workers || topology.workers.length === 0) {
+        throw new Error('Supervisor workflow requires at least one worker');
+      }
+      for (const worker of topology.workers) {
+        ensureAgent(worker, 'Supervisor worker');
+      }
+      if (topology.workers.includes(topology.supervisor)) {
+        throw new Error('Supervisor workflow: supervisor cannot also be a worker');
+      }
+      break;
+    }
+    case 'dag': {
+      if (!topology.steps || topology.steps.length === 0) {
+        throw new Error('DAG workflow requires at least one step');
+      }
+      const stepIds = new Set<string>();
+      for (const step of topology.steps) {
+        ensureAgent(step.agent, `DAG step "${step.id}"`);
+        if (stepIds.has(step.id)) {
+          throw new Error(`DAG workflow: duplicate step id "${step.id}"`);
+        }
+        stepIds.add(step.id);
+      }
+      for (const step of topology.steps) {
+        for (const depId of step.dependencies ?? []) {
+          if (!stepIds.has(depId)) {
+            throw new Error(`DAG step "${step.id}": unknown dependency "${depId}"`);
+          }
+        }
+      }
+      validateDagSteps(
+        topology.steps.map((step) => ({
+          id: step.id,
+          name: step.name ?? step.agent,
+          dependencies: step.dependencies,
+          execute: async () => undefined,
+        })),
+      );
+      break;
+    }
     default:
       throw new Error('Unknown workflow type');
   }
@@ -510,12 +725,37 @@ export function describeWorkflow(definition: WorkflowDefinition): WorkflowStruct
     return { ...base, router: topology.router };
   }
 
+  if (topology.type === 'hierarchical') {
+    return {
+      ...base,
+      hierarchical: {
+        manager: topology.manager,
+        workers: topology.workers,
+        maxDelegations: topology.maxDelegations,
+      },
+    };
+  }
+
+  if (topology.type === 'supervisor') {
+    return {
+      ...base,
+      supervisor: {
+        supervisor: topology.supervisor,
+        workers: topology.workers,
+        workerDescriptions: topology.workerDescriptions,
+        maxRounds: topology.maxRounds,
+        workerTimeout: topology.workerTimeout,
+        maxNestedDepth: topology.maxNestedDepth,
+        synthesizeResults: topology.synthesizeResults,
+      },
+    };
+  }
+
   return {
     ...base,
-    hierarchical: {
-      manager: topology.manager,
-      workers: topology.workers,
-      maxDelegations: topology.maxDelegations,
+    dag: {
+      steps: topology.steps,
+      maxConcurrency: topology.maxConcurrency,
     },
   };
 }
@@ -602,6 +842,27 @@ function normalizeTopology(raw: unknown): WorkflowTopologyDef {
         workers: stringArrayField(record, 'workers'),
         maxDelegations:
           typeof record.maxDelegations === 'number' ? record.maxDelegations : undefined,
+      };
+    case 'supervisor':
+      return {
+        type: 'supervisor',
+        supervisor: stringField(record, 'supervisor'),
+        workers: stringArrayField(record, 'workers'),
+        workerDescriptions: normalizeWorkerDescriptions(record.workerDescriptions),
+        maxRounds: typeof record.maxRounds === 'number' ? record.maxRounds : undefined,
+        workerTimeout:
+          typeof record.workerTimeout === 'number' ? record.workerTimeout : undefined,
+        maxNestedDepth:
+          typeof record.maxNestedDepth === 'number' ? record.maxNestedDepth : undefined,
+        synthesizeResults:
+          typeof record.synthesizeResults === 'boolean' ? record.synthesizeResults : undefined,
+      };
+    case 'dag':
+      return {
+        type: 'dag',
+        steps: normalizeDagSteps(record.steps),
+        maxConcurrency:
+          typeof record.maxConcurrency === 'number' ? record.maxConcurrency : undefined,
       };
     default:
       throw new Error(`Unsupported workflow type "${type}"`);
@@ -750,4 +1011,165 @@ function detectSequentialCycles(steps: WorkflowStepDef[]): void {
     }
     seen.add(step.agent);
   }
+}
+
+function normalizeWorkerDescriptions(
+  raw: unknown,
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const descriptions: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') {
+      descriptions[key] = value;
+    }
+  }
+  return Object.keys(descriptions).length > 0 ? descriptions : undefined;
+}
+
+function normalizeDagSteps(raw: unknown): WorkflowDagStepDef[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error('DAG workflow requires a non-empty steps array');
+  }
+
+  return raw.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error(`workflow.steps[${index}] must be an object`);
+    }
+    const record = item as Record<string, unknown>;
+    const dependenciesRaw = record.dependencies;
+    const dependencies =
+      dependenciesRaw === undefined
+        ? undefined
+        : Array.isArray(dependenciesRaw)
+          ? dependenciesRaw.map((dep) => String(dep))
+          : (() => {
+              throw new Error(`workflow.steps[${index}].dependencies must be an array`);
+            })();
+
+    return {
+      id: stringField(record, 'id'),
+      agent: stringField(record, 'agent'),
+      name: optionalString(record.name),
+      dependencies,
+      suspend: typeof record.suspend === 'boolean' ? record.suspend : undefined,
+      retries: typeof record.retries === 'number' ? record.retries : undefined,
+      timeout: typeof record.timeout === 'number' ? record.timeout : undefined,
+      inputTemplate: optionalString(record.inputTemplate),
+    };
+  });
+}
+
+function buildDagStepFromDef(
+  stepDef: WorkflowDagStepDef,
+  agent: Agent,
+  config?: WorkflowConfig,
+): DAGStep {
+  const step = agentStep(agent, {
+    id: stepDef.id,
+    name: stepDef.name ?? stepDef.agent,
+    dependencies: stepDef.dependencies,
+    suspend: stepDef.suspend,
+    retries: stepDef.retries,
+    timeout: stepDef.timeout ?? config?.timeout,
+    inputMapper: buildDagInputMapper(stepDef),
+  });
+
+  if (!stepDef.dependencies?.length && stepDef.inputTemplate) {
+    return {
+      ...step,
+      execute: async (_input, context) => {
+        const rendered = renderDepTemplate(stepDef.inputTemplate!, {}, context.workflowInput);
+        return agent.run(rendered);
+      },
+    };
+  }
+
+  return step as DAGStep;
+}
+
+function buildDagInputMapper(
+  stepDef: WorkflowDagStepDef,
+): ((depOutputs: Record<string, unknown>) => string) | undefined {
+  if (!stepDef.inputTemplate || !stepDef.dependencies?.length) {
+    return undefined;
+  }
+
+  return (depOutputs): string => renderDepTemplate(stepDef.inputTemplate!, depOutputs);
+}
+
+function renderDepTemplate(
+  template: string,
+  depOutputs: Record<string, unknown>,
+  workflowInput?: unknown,
+): string {
+  let result = template.replace(/\{\{\s*input\s*\}\}/g, String(workflowInput ?? ''));
+  for (const [depId, output] of Object.entries(depOutputs)) {
+    result = result.replace(
+      new RegExp(`\\{\\{\\s*${escapeRegExp(depId)}\\s*\\}\\}`, 'g'),
+      formatDepOutput(output),
+    );
+  }
+  return result;
+}
+
+function formatDepOutput(output: unknown): string {
+  if (typeof output === 'object' && output !== null && 'response' in output) {
+    return String((output as AgentResult).response);
+  }
+  if (typeof output === 'string') {
+    return output;
+  }
+  return JSON.stringify(output);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function supervisorResultToWorkflowResult(result: SupervisorWorkflowResult): WorkflowResult {
+  const steps: WorkflowStep[] = result.delegations.map((delegation) => ({
+    agentName: delegation.worker,
+    input: delegation.context ? `${delegation.context}\n\n${delegation.task}` : delegation.task,
+    result: delegation.result,
+    duration: delegation.duration,
+    error: delegation.error ? new Error(delegation.error) : undefined,
+  }));
+
+  return {
+    finalResult: result.finalResult,
+    steps,
+    duration: result.duration,
+  };
+}
+
+function dagResultToWorkflowResult(result: DAGResult): WorkflowResult {
+  const steps: WorkflowStep[] = Object.entries(result.outputs).map(([stepId, output]) => ({
+    agentName: stepId,
+    input: '',
+    result: output as AgentResult,
+    duration: result.stepDurations[stepId] ?? 0,
+  }));
+
+  const finalOutput = result.finalOutput;
+  const finalResult: AgentResult =
+    typeof finalOutput === 'object' &&
+    finalOutput !== null &&
+    'response' in finalOutput
+      ? (finalOutput as AgentResult)
+      : {
+          response: String(finalOutput ?? ''),
+          steps: [],
+          totalTokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          metadata: { stopReason: 'completed', dagStatus: result.status },
+        };
+
+  return {
+    finalResult,
+    steps,
+    duration: result.duration,
+    error: result.status === 'failed' ? new Error('DAG workflow failed') : undefined,
+  };
 }
