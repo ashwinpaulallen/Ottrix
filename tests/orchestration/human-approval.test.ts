@@ -87,7 +87,9 @@ describe('humanApproval gate', () => {
         execute: async (input: { gate: { status: string; payload: unknown } }) =>
           `built:${JSON.stringify(input.gate.payload)}`,
         dependencies: ['gate'],
-        inputMapper: (deps) => ({ gate: deps.gate }),
+        inputMapper: (deps) => ({
+          gate: deps.gate as { status: string; payload: unknown },
+        }),
         condition: (deps) => (deps.gate as { status: string }).status === 'approved',
       })
       .build({ approvalStore: store });
@@ -170,7 +172,9 @@ describe('humanApproval gate', () => {
         execute: async (input: { gate: { status: string; payload: { doc: string } } }) =>
           input.gate.payload.doc,
         dependencies: ['gate'],
-        inputMapper: (deps) => ({ gate: deps.gate }),
+        inputMapper: (deps) => ({
+          gate: deps.gate as { status: string; payload: { doc: string } },
+        }),
         condition: (deps) => (deps.gate as { status: string }).status === 'approved',
       })
       .build({ approvalStore: store });
@@ -343,7 +347,7 @@ describe('WebhookDispatcher', () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 200 }));
     const dispatcher = new WebhookDispatcher({
       url: 'https://example.com/approvals',
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
     const request = {

@@ -425,9 +425,11 @@ describe('AuditEmitter lifecycle integration', () => {
 
     const workflow = new DAGBuilder()
       .addStep('draft', {
+        name: 'Draft',
         execute: async (input: string) => `Draft: ${input}`,
       })
       .addStep('review', {
+        name: 'Review',
         suspend: true,
         execute: async (input) => input,
         dependencies: ['draft'],

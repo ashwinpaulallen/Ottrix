@@ -34,6 +34,10 @@ function createTestSpan(overrides: Partial<SpanData> = {}): SpanData {
   };
 }
 
+function toFetchImpl(mock: ReturnType<typeof vi.fn>): typeof fetch {
+  return mock as unknown as typeof fetch;
+}
+
 describe('OtelExporter', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -49,7 +53,7 @@ describe('OtelExporter', () => {
     it('translates ottrix spans to correct OTLP JSON format', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -99,7 +103,7 @@ describe('OtelExporter', () => {
     it('maps span names to OTLP conventions', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const spanNames = [
@@ -123,7 +127,7 @@ describe('OtelExporter', () => {
     it('converts trace and span IDs to correct hex format', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -147,7 +151,7 @@ describe('OtelExporter', () => {
     it('applies GenAI semantic conventions for LLM spans', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -188,7 +192,7 @@ describe('OtelExporter', () => {
     it('maps provider names to GenAI system values', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const providers = [
@@ -222,7 +226,7 @@ describe('OtelExporter', () => {
     it('applies ottrix-specific attributes', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -257,7 +261,7 @@ describe('OtelExporter', () => {
     it('includes RunContext attributes in spans', async () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -279,7 +283,7 @@ describe('OtelExporter', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
         serviceName: 'my-agent',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const resource = exporter.buildResource({
@@ -299,7 +303,7 @@ describe('OtelExporter', () => {
     it('includes langfuse.trace_id when set', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       exporter.setLangfuseTraceId('langfuse-trace-abc123');
@@ -322,7 +326,7 @@ describe('OtelExporter', () => {
         endpoint: 'http://localhost:4318',
         batchSize: 3,
         flushIntervalMs: 60_000,
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace1 = createTestTrace({ spans: [createTestSpan({ name: 'span1' })] });
@@ -350,7 +354,7 @@ describe('OtelExporter', () => {
         endpoint: 'http://localhost:4318',
         batchSize: 100,
         flushIntervalMs: 1_000,
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({ spans: [createTestSpan()] });
@@ -370,7 +374,7 @@ describe('OtelExporter', () => {
         endpoint: 'http://localhost:4318',
         batchSize: 100,
         flushIntervalMs: 60_000,
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({ spans: [createTestSpan()] });
@@ -403,7 +407,7 @@ describe('OtelExporter', () => {
         batchSize: 1,
         maxRetries: 3,
         retryBaseDelayMs: 100,
-        fetchImpl: mockFetch,
+        fetchImpl: toFetchImpl(mockFetch),
       });
 
       const exportPromise = exporter.export(createTestTrace({ spans: [createTestSpan()] }));
@@ -424,7 +428,7 @@ describe('OtelExporter', () => {
         endpoint: 'http://localhost:4318',
         batchSize: 1,
         maxRetries: 3,
-        fetchImpl: mockFetch,
+        fetchImpl: toFetchImpl(mockFetch),
       });
 
       await exporter.export(createTestTrace({ spans: [createTestSpan()] }));
@@ -451,7 +455,7 @@ describe('OtelExporter', () => {
         batchSize: 1,
         maxRetries: 3,
         retryBaseDelayMs: 100,
-        fetchImpl: mockFetch,
+        fetchImpl: toFetchImpl(mockFetch),
       });
 
       const exportPromise = exporter.export(createTestTrace({ spans: [createTestSpan()] }));
@@ -469,7 +473,7 @@ describe('OtelExporter', () => {
     it('maintains correct parent-child relationships for multiple spans', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -515,7 +519,7 @@ describe('OtelExporter', () => {
         resourceAttributes: {
           'deployment.environment': 'production',
         },
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const spans: OtlpSpan[] = [
@@ -559,7 +563,7 @@ describe('OtelExporter', () => {
           Authorization: 'Bearer token',
         },
         batchSize: 1,
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       await exporter.export(createTestTrace({ spans: [createTestSpan()] }));
@@ -589,7 +593,7 @@ describe('OtelExporter', () => {
 
       const exporter = createOtelExporter('honeycomb', {
         apiKey: 'hc-api-key',
-        fetchImpl: mockFetch,
+        fetchImpl: toFetchImpl(mockFetch),
         batchSize: 1,
       });
 
@@ -609,7 +613,7 @@ describe('OtelExporter', () => {
 
       const exporter = createOtelExporter('datadog', {
         apiKey: 'dd-api-key',
-        fetchImpl: mockFetch,
+        fetchImpl: toFetchImpl(mockFetch),
         batchSize: 1,
       });
 
@@ -630,7 +634,7 @@ describe('OtelExporter', () => {
     it('sets error status code for error spans', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
@@ -656,7 +660,7 @@ describe('OtelExporter', () => {
     it('correctly converts various attribute types to OTLP format', () => {
       const exporter = new OtelExporter({
         endpoint: 'http://localhost:4318',
-        fetchImpl: fetchMock,
+        fetchImpl: toFetchImpl(fetchMock),
       });
 
       const trace = createTestTrace({
