@@ -110,6 +110,27 @@ export function parseJsonRpcMessage(text: string): JsonRpcMessage {
   throw new MCPProtocolError('Invalid JSON-RPC message: unrecognized shape', -32600);
 }
 
+/**
+ * Parse a client-originated JSON-RPC request or notification (server read path).
+ */
+export function parseInboundJsonRpcMessage(text: string): JsonRpcRequest | JsonRpcNotification {
+  const parsed: unknown = JSON.parse(text);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new MCPProtocolError('Invalid JSON-RPC message: not an object', -32700);
+  }
+  const record = parsed as Record<string, unknown>;
+  if (record.jsonrpc !== '2.0') {
+    throw new MCPProtocolError('Invalid JSON-RPC message: missing jsonrpc 2.0', -32600);
+  }
+  if ('method' in record && record.id !== undefined) {
+    return parsed as JsonRpcRequest;
+  }
+  if ('method' in record && !('id' in record && record.id !== undefined)) {
+    return parsed as JsonRpcNotification;
+  }
+  throw new MCPProtocolError('Invalid JSON-RPC message: unrecognized shape', -32600);
+}
+
 /** Throw if the JSON-RPC response contains an error. */
 export function assertJsonRpcSuccess<T>(response: JsonRpcResponse): T {
   if (response.error) {

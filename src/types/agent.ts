@@ -89,6 +89,11 @@ export interface AgentConfig<
   defaultModel?: TModel;
   /** Optional memory backend for retrieval-augmented turns. */
   memory?: MemoryProvider;
+  /**
+   * Optional observational memory for automatic user fact extraction and
+   * system-prompt personalization.
+   */
+  observationalMemory?: import('../memory/observational.js').ObservationalMemory;
   /** Safety, budget, and validation policies. */
   guardrails?: GuardrailConfig;
   /**

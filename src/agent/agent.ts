@@ -356,8 +356,21 @@ export class Agent {
       metadata,
     };
 
+    this.scheduleObservationalExtraction(messages);
     this.syncRecorder(telemetry, result, spanStart);
     return result;
+  }
+
+  private scheduleObservationalExtraction(messages: ChatMessage[]): void {
+    const memory = this.config.observationalMemory;
+    if (!memory) {
+      return;
+    }
+    memory.notifyRunCompleted();
+    if (!memory.shouldAutoExtract()) {
+      return;
+    }
+    void memory.extractFromMessages(messages).catch(() => undefined);
   }
 
   private syncRecorder(
@@ -524,6 +537,7 @@ export class Agent {
             stopReason = 'aborted';
             warning = exec.error?.message;
             const aborted = this.buildStreamResult(finalResponse, stopReason, warning, usages);
+            this.scheduleObservationalExtraction(messages);
             this.syncRecorder(this.telemetry, aborted, spanStart);
             yield {
               type: 'done',
@@ -562,6 +576,7 @@ export class Agent {
     }
 
     const result = this.buildStreamResult(finalResponse, stopReason, warning, usages);
+    this.scheduleObservationalExtraction(messages);
     this.syncRecorder(this.telemetry, result, spanStart);
 
     yield {
@@ -598,8 +613,12 @@ export class Agent {
     let plan: Plan | undefined;
     let planValidation: PlanValidationResult | undefined;
 
-    if (this.config.systemPrompt) {
-      messages.push({ role: 'system', content: this.config.systemPrompt });
+    let systemPrompt = this.config.systemPrompt;
+    if (this.config.observationalMemory) {
+      systemPrompt = await this.config.observationalMemory.injectIntoContext(systemPrompt ?? '');
+    }
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
     }
 
     let userContent = input;
@@ -925,7 +944,12 @@ export class Agent {
     const tools = this.toolRegistry.list();
     const hasTools = tools.length > 0;
 
-    let systemPrompt = this.config.systemPrompt;
+    let effectiveMessages = messages;
+    const systemIndex = messages.findIndex((message) => message.role === 'system');
+    let systemPrompt =
+      systemIndex >= 0
+        ? extractTextFromContent(messages[systemIndex]!.content)
+        : this.config.systemPrompt;
     let responseFormat: CompletionParams['responseFormat'] = 'text';
 
     if (structuredOutput) {
@@ -941,8 +965,17 @@ export class Agent {
       }
     }
 
+    if (systemIndex >= 0) {
+      effectiveMessages = messages.map((message, index) =>
+        index === systemIndex
+          ? { role: 'system' as const, content: systemPrompt ?? '' }
+          : message,
+      );
+      systemPrompt = undefined;
+    }
+
     return {
-      messages,
+      messages: effectiveMessages,
       tools: hasTools ? tools : undefined,
       systemPrompt,
       model: this.config.defaultModel,

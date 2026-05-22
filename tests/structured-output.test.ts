@@ -192,11 +192,21 @@ describe('Agent structured output', () => {
 
     await agent.run('Go', { outputSchema: personSchema });
 
-    expect(provider.lastCompleteParams?.systemPrompt).toContain('Base system prompt.');
-    expect(provider.lastCompleteParams?.systemPrompt).toContain(
-      'you MUST respond with a JSON object matching this schema',
+    const systemMessage = provider.lastCompleteParams?.messages.find(
+      (message) => message.role === 'system',
     );
-    expect(provider.lastCompleteParams?.systemPrompt).toContain('"name"');
+    const systemText =
+      typeof systemMessage?.content === 'string'
+        ? systemMessage.content
+        : systemMessage?.content
+            ?.filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('') ?? '';
+
+    expect(systemText).toContain('Base system prompt.');
+    expect(systemText).toContain('you MUST respond with a JSON object matching this schema');
+    expect(systemText).toContain('"name"');
+    expect(provider.lastCompleteParams?.systemPrompt).toBeUndefined();
   });
 
   it('uses config-level outputSchema when run options omit it', async () => {

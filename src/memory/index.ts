@@ -47,3 +47,16 @@ export {
 } from './semantic.js';
 
 export { assertBatchEmbeddings, assertValidVector } from './utils.js';
+
+export {
+  InMemoryObservationStore,
+  ObservationalMemory,
+  keywordOverlap,
+  type ExtractionInterval,
+  type Observation,
+  type ObservationCategory,
+  type ObservationFilter,
+  type ObservationSource,
+  type ObservationStore,
+  type ObservationalMemoryOptions,
+} from './observational.js';

@@ -4,6 +4,7 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/*/index.ts',
+    'src/cli/serve.ts',
     'src/providers/index.ts',
     'src/providers/registry.ts',
     'src/providers/anthropic.ts',

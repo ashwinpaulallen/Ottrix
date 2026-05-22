@@ -25,6 +25,7 @@ export {
   isJsonRpcNotification,
   isJsonRpcResponse,
   normalizeToolCallResult,
+  parseInboundJsonRpcMessage,
   parseJsonRpcMessage,
   resolveTransportResult,
   type CreateMCPToolOptions,

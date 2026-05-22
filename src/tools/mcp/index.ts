@@ -31,6 +31,7 @@ export {
   isJsonRpcNotification,
   isJsonRpcResponse,
   normalizeToolCallResult,
+  parseInboundJsonRpcMessage,
   parseJsonRpcMessage,
   parseMessageLine,
   serializeMessage,

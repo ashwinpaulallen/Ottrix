@@ -168,6 +168,9 @@ export {
   MCPTool,
   MCPRegistry,
   createMCPTool,
+  MCPServer,
+  serveMCP,
+  ASK_AGENT_TOOL_NAME,
 } from './tools/index.js';
 
 export type {
@@ -182,6 +185,8 @@ export {
   WorkingMemory,
   SemanticMemory,
   EpisodicMemory,
+  ObservationalMemory,
+  InMemoryObservationStore,
   InMemoryVectorStore,
   NoOpEmbeddingProvider,
   FetchEmbeddingProvider,
