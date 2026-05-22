@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
+import { getRunContext, type RunContext } from '../context/run-context.js';
 import type { MetricsCollector } from './metrics.js';
 import { logExporterError } from './exporters/shared.js';
 import { buildTraceData } from './exporters/trace-builder.js';
@@ -180,11 +181,12 @@ export class Telemetry {
   /** Start a new span (child of the active span when present). */
   startSpan(name: string, attributes?: Record<string, AttributeValue>): Span {
     const parent = this.activeSpan;
+    const runAttributes = runContextToSpanAttributes(getRunContext());
     return new Span({
       name,
       traceId: parent?.traceId ?? randomUUID(),
       parentSpanId: parent?.spanId,
-      attributes: attributes ?? {},
+      attributes: { ...runAttributes, ...attributes },
       telemetry: this,
     });
   }
@@ -563,6 +565,33 @@ export class Gauge {
   get(): number {
     return this.value;
   }
+}
+
+/**
+ * Map well-known {@link RunContext} fields to OpenTelemetry-style dotted attribute
+ * keys (matching the convention used by `agent.run`, `tool.execute`, etc. spans).
+ * Unknown extension fields are passed through unchanged.
+ */
+const RUN_CONTEXT_ATTRIBUTE_KEYS: Record<string, string> = {
+  runId: 'run.id',
+  stepId: 'run.step_id',
+  agentName: 'agent.name',
+  requestId: 'run.request_id',
+};
+
+function runContextToSpanAttributes(ctx: RunContext | undefined): Record<string, AttributeValue> {
+  if (!ctx) {
+    return {};
+  }
+  const attributes: Record<string, AttributeValue> = {};
+  for (const [key, value] of Object.entries(ctx)) {
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+      continue;
+    }
+    const attrKey = RUN_CONTEXT_ATTRIBUTE_KEYS[key] ?? key;
+    attributes[attrKey] = value;
+  }
+  return attributes;
 }
 
 function metricKey(name: string, attributes?: Record<string, AttributeValue>): string {

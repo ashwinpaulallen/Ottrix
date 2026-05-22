@@ -282,7 +282,66 @@ Distinct from **`HumanApprovalGuardrail`** (guardrail middleware) — registry a
 
 ---
 
-## MCP server (`MCPServer`, `serveMCP`)
+## Tool safety envelope
+
+**File:** `src/tools/tool-safety.ts`
+
+Tools carry safety metadata on `ToolMetadata` (via `createTool`, `FunctionTool`, or MCP import):
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `sideEffect` | `'none'` | `'none'` · `'read'` · `'destructive'` |
+| `idempotent` | `false` | Safe to retry without duplicate side effects |
+| `requiresApproval` | `false` | Pause for `ApprovalHandler` before execute |
+| `requiresSandbox` | `false` | Destructive tools require sandbox availability |
+| `audit` | — | Field filter for tool-level audit handler |
+| `version` | — | Tool version string in descriptors |
+
+### Enforcement in `ToolRegistry.execute()`
+
+1. **Policy check** for destructive tools (`policy.check`)
+2. **Sandbox gate** — blocks when `requiresSandbox` and no sandbox configured (`tool.deny`, `policy.deny`)
+3. **Approval gate** — `approval.request` / `approval.decide` via registry handlers
+4. **Idempotency** — deduplicates retries when `idempotent: true` (see below)
+5. Emits **`AuditEmitter`** lifecycle events when global audit is registered
+
+### MCP auto-classification
+
+MCP tools matching destructive name patterns (`delete`, `drop`, `deploy`, etc.) receive inferred safety metadata via `MCPToolProvider`.
+
+### Descriptors
+
+`ToolRegistry.toolDescriptors()` returns full safety metadata for inspection and policy engines.
+
+**Helpers:** `buildToolDescriptor`, `normalizeToolMetadata`, `buildSafetyBlockedResult`, `applyAuditFilter`
+
+---
+
+## Idempotent tool execution
+
+**File:** `src/tools/idempotency.ts`
+
+When a tool is marked `idempotent: true`, `ToolRegistry` deduplicates concurrent and retried executions via an `IdempotencyStore`.
+
+```ts
+import { ToolRegistry, InMemoryIdempotencyStore } from 'ottrix/tools';
+
+const registry = new ToolRegistry({ idempotencyStore: new InMemoryIdempotencyStore() });
+```
+
+| Status | Behavior |
+|--------|----------|
+| `done` | Returns cached `ToolResult` |
+| `in_progress` | Waits for in-flight execution or returns in-progress result |
+| New key | Executes tool and stores result |
+
+**Key computation:** `computeIdempotencyKey(toolName, input, customKeyFn?)` — SHA-256 of canonical input by default.
+
+Custom per-tool store via `ZodTool.idempotencyStore` and optional `idempotencyKey` function.
+
+---
+
+## Subpath `ottrix/tools`
 
 **Files:** `src/tools/mcp-server.ts`, `src/tools/serve.ts`, `src/tools/mcp-transports/*`
 
@@ -315,6 +374,6 @@ await serveMCP({
 
 ## Subpath `ottrix/tools`
 
-Exports tools, registry errors, MCP **client** provider/registry, transports, JSON-RPC types, Zod tools, approval handlers.
+Exports tools, registry errors, MCP **client** provider/registry, transports, JSON-RPC types, Zod tools, approval handlers, **idempotency store**, and **tool safety** helpers.
 
 **Subpath `ottrix/mcp-server`:** `MCPServer`, `serveMCP`, `ASK_AGENT_TOOL_NAME` only.

@@ -7,7 +7,7 @@ export interface GuardrailCheckResult {
   /** Whether the run should stop. */
   shouldStop: boolean;
   /** Machine-readable stop reason when `shouldStop` is true. */
-  stopReason?: 'max_steps' | 'token_budget' | 'guardrail';
+  stopReason?: 'max_steps' | 'token_budget' | 'cost_budget' | 'guardrail';
   /** Human-readable explanation. */
   message?: string;
 }
@@ -72,7 +72,7 @@ export function checkRunGuardrails(options: {
   ) {
     return {
       shouldStop: true,
-      stopReason: 'guardrail',
+      stopReason: 'cost_budget',
       message: `Cost budget ($${costBudget}) exceeded (estimated $${estimatedCostUsd.toFixed(4)})`,
     };
   }

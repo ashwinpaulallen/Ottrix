@@ -45,8 +45,9 @@ Use **Ottrix** when you need a **small, explicit TypeScript library** to run LLM
 | **MCP** | Connect to external MCP servers **and** host your own via `serveMCP` / `ottrix-serve` |
 | **Multi-agent workflows** | Sequential, parallel, router, hierarchical, **supervisor**, and **DAG** (with suspend/resume) |
 | **Memory** | Working, semantic (RAG), episodic, and **observational** (LLM fact extraction) |
-| **Guardrails** | PII, budgets, content filters, human approval, **prompt injection protection (on by default)** |
-| **Observability** | Spans, metrics, run replay, and exporters for **Langfuse**, **Braintrust**, and webhooks |
+| **Guardrails** | PII, **multi-scope budgets (USD)**, content filters, human approval, **AuditEmitter**, prompt injection (default) |
+| **Observability** | Spans, metrics, run replay, exporters for **OTEL**, Langfuse, Braintrust, webhooks |
+| **NestJS** | **`@ottrix/nestjs`** — DI module, guards, interceptors, SSE, health checks |
 | **Evals** | Run datasets against agents with pluggable scorers and CSV/Markdown reports |
 | **Provider resilience** | Fallback chains and per-provider circuit breakers |
 | **Zero vendor SDKs** | Built-in providers use HTTP APIs only — smaller installs, full control |
@@ -247,6 +248,63 @@ getTelemetry().setExporter(
   }),
 );
 ```
+
+### OpenTelemetry export
+
+```ts
+import { getTelemetry } from 'ottrix';
+import { createOtelExporter } from 'ottrix/exporters/otel';
+
+getTelemetry().addExporter(
+  createOtelExporter('jaeger', { serviceName: 'my-agent' }),
+  // endpoint defaults to http://localhost:4318
+);
+```
+
+### Run context
+
+```ts
+import { createAgent, runWith } from 'ottrix';
+
+const agent = createAgent({ provider: 'anthropic', name: 'researcher' });
+
+await runWith({ runId: 'req-42', orgId: 'acme-corp' }, () =>
+  agent.run('Summarize Q1 earnings'),
+);
+```
+
+### Audit trail
+
+```ts
+import { AuditEmitter, FileSink, HmacSigner, useAudit } from 'ottrix';
+
+useAudit(new AuditEmitter({
+  sink: new FileSink({ path: './audit.jsonl' }),
+  signer: new HmacSigner({ secret: process.env.AUDIT_SECRET! }),
+  redact: ['args.token', 'args.password'],
+}));
+
+// All agent/tool/guardrail/workflow lifecycle events are captured automatically
+```
+
+### NestJS integration
+
+```ts
+import { Module } from '@nestjs/common';
+import { OttrixModule } from '@ottrix/nestjs';
+
+@Module({
+  imports: [
+    OttrixModule.forRoot({
+      providers: { anthropic: { apiKey: process.env.ANTHROPIC_API_KEY! } },
+      telemetry: { exporter: 'otel', otel: { endpoint: 'http://localhost:4318' } },
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+See [docs/nestjs.md](docs/nestjs.md).
 
 ### Prompt injection guardrails
 
@@ -476,9 +534,11 @@ Implementation-accurate guides under [`docs/`](docs/README.md):
 | Providers | [docs/providers.md](docs/providers.md) | Anthropic, OpenAI, Ollama, fallback chain, circuit breaker |
 | Tools | [docs/tools.md](docs/tools.md) | `FunctionTool`, `createTool`, MCP client/server, tool approval |
 | Memory | [docs/memory.md](docs/memory.md) | Working, semantic, episodic, observational memory |
-| Guardrails | [docs/guardrails.md](docs/guardrails.md) | Middleware, PII, budgets, prompt injection |
-| Observability | [docs/observability.md](docs/observability.md) | Telemetry, trace exporters, retention, replay |
-| Orchestration | [docs/orchestration.md](docs/orchestration.md) | Workflows, supervisor, DAG, YAML loader |
+| Guardrails | [docs/guardrails.md](docs/guardrails.md) | Middleware, multi-scope budgets, audit emitter, prompt injection |
+| Observability | [docs/observability.md](docs/observability.md) | Telemetry, OTEL exporter, trace exporters, replay |
+| Orchestration | [docs/orchestration.md](docs/orchestration.md) | Workflows, state stores, approval gates, DAG |
+| Run context | [docs/context.md](docs/context.md) | AsyncLocalStorage propagation, `runWith` |
+| NestJS | [docs/nestjs.md](docs/nestjs.md) | `@ottrix/nestjs` adapter |
 | Evals | [docs/evals.md](docs/evals.md) | `evaluate()`, scorers, reports |
 | Configuration | [docs/configuration.md](docs/configuration.md) | `loadConfig`, env vars, `createAgent` |
 | Overview | [docs/overview.md](docs/overview.md) | Package layout, subpath exports |
@@ -515,7 +575,7 @@ Common environment variables:
 | `OTTRIX_MAX_STEPS` | Max ReAct iterations (default `10`) |
 | `OTTRIX_CONFIG_PATH` | Path to config JSON/YAML |
 | `OTTRIX_TELEMETRY_ENABLED` | `true` / `false` |
-| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook` |
+| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook`, `otel` |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `OPENAI_API_KEY` | OpenAI (or compatible) API key |
 | `OLLAMA_BASE_URL` | Ollama server (default `http://localhost:11434`) |
@@ -541,7 +601,9 @@ Tree-shakeable subpath imports:
 | `ottrix/guardrails` | Middleware and validators |
 | `ottrix/observability` | Logger, telemetry, replay |
 | `ottrix/evals` | `evaluate()`, scorers, `EvalReporter` |
-| `ottrix/exporters/langfuse` | Langfuse trace exporter (also Braintrust, webhook) |
+| `ottrix/exporters/langfuse` | Langfuse trace exporter (also Braintrust, webhook, **otel**) |
+| `ottrix/exporters/otel` | Native OTLP/HTTP OpenTelemetry exporter |
+| `@ottrix/nestjs` | NestJS DI module, guards, interceptors (monorepo workspace) |
 | `ottrix/types` | TypeScript types only |
 
 **ESM-first** (`"type": "module"`) with CommonJS builds (`.cjs`) for `require()`.

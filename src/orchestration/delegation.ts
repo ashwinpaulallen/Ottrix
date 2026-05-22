@@ -89,7 +89,7 @@ export function registerDelegateTool(
       options?.description ??
       'Delegate a subtask to a specialist worker agent and return its response.',
     inputSchema: createDelegateInputSchema(workerNames, options),
-    execute: async (raw) => {
+    execute: async (raw: Record<string, unknown>) => {
       const parsed = parseDelegateInput(raw);
       if (!parsed.ok) {
         return parsed.message;

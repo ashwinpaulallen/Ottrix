@@ -28,6 +28,7 @@ export type AgentStopReason =
   | 'completed'
   | 'max_steps'
   | 'token_budget'
+  | 'cost_budget'
   | 'guardrail'
   | 'tool_blocked'
   | 'error'

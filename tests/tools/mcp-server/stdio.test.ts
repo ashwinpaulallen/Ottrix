@@ -61,7 +61,7 @@ function createEchoRegistry(): ToolRegistry {
         properties: { message: { type: 'string' } },
         required: ['message'],
       },
-      execute: async (input) => ({ echoed: input.message }),
+      execute: async (input: Record<string, unknown>) => ({ echoed: input.message }),
     }),
   );
   return registry;

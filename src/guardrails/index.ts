@@ -13,12 +13,28 @@ export { GuardrailMiddleware, completionText } from './middleware.js';
 
 export {
   BudgetGuardrail,
+  configureBudgets,
+  getConfiguredBudgets,
+  setDefaultBudgetStore,
   estimateCostUsd,
+  periodBucket,
+  type BudgetScope,
+  type BudgetCap,
+  type BudgetConfig,
+  type BudgetBreachAction,
+  type BudgetPeriod,
   type BudgetGuardrailOptions,
-  type BudgetSlice,
-  type RemainingBudget,
   type TokenCostRates,
+  type RemainingBudget,
+  type BudgetSlice,
+  type ScopeBudgetStatus,
 } from './budget.js';
+
+export {
+  InMemoryBudgetStore,
+  type BudgetUsageStore,
+  type CurrentUsage,
+} from './budget-store.js';
 
 export {
   PiiDetector,
@@ -38,10 +54,29 @@ export {
 
 export {
   AuditLogger,
+  AuditEmitter,
+  ConsoleSink,
+  InMemorySink,
+  FileSink,
+  HmacSigner,
+  useAudit,
+  getAuditEmitter,
+  resetAudit,
+  emitAuditEvent,
   type AuditLogEntry,
   type AuditLogHandler,
   type AuditLoggerOptions,
   type AuditLogType,
+  type AuditEvent,
+  type AuditEventType,
+  type AuditActor,
+  type AuditSink,
+  type AuditSigner,
+  type AuditEmitterConfig,
+  type PostgresSink,
+  type WebhookSink,
+  type FileSinkOptions,
+  type HmacSignerOptions,
 } from './audit.js';
 
 export { createGuardrails, type CreateGuardrailsConfig, type CreateGuardrailsResult } from './factory.js';

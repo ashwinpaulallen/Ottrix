@@ -55,7 +55,7 @@ The **Agent** runs a ReAct-style loop: call the LLM, execute tool calls, append 
 
 ### Stop reasons (`AgentStopReason`)
 
-`completed` · `max_steps` · `token_budget` · `guardrail` · `tool_blocked` · `error` · `aborted`
+`completed` · `max_steps` · `token_budget` · **`cost_budget`** · `guardrail` · `tool_blocked` · `error` · `aborted`
 
 ### Errors thrown
 

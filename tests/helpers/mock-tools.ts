@@ -12,7 +12,7 @@ export const echoTool = new FunctionTool({
     properties: { message: { type: 'string' } },
     required: ['message'],
   },
-  execute: async (input) => {
+  execute: async (input: Record<string, unknown>) => {
     const message = typeof input.message === 'string' ? input.message : '';
     return { echoed: message };
   },

@@ -104,7 +104,7 @@ describe('ZodTool', () => {
       name: 'echo',
       description: 'Echo',
       input: z.object({ message: z.string() }),
-      execute: async ({ message }) => message,
+      execute: async ({ message }: { message: string }) => message,
     });
 
     const definition = tool.toDefinition();
@@ -123,7 +123,7 @@ describe('createTool factory', () => {
         a: z.number(),
         b: z.number(),
       }),
-      execute: async ({ a, b }) => ({ sum: a + b }),
+      execute: async ({ a, b }: { a: number; b: number }) => ({ sum: a + b }),
     });
 
     registry.register(tool);
@@ -145,7 +145,7 @@ describe('backward compatibility', () => {
         properties: { value: { type: 'number' } },
         required: ['value'],
       },
-      execute: async (input) => Number(input.value) * 2,
+      execute: async (input: Record<string, unknown>) => Number(input.value) * 2,
     });
 
     const result = await tool.execute({ value: 10 });
@@ -160,7 +160,7 @@ describe('backward compatibility', () => {
       name: 'zod_echo',
       description: 'Zod echo',
       input: z.object({ text: z.string() }),
-      execute: async ({ text }) => text,
+      execute: async ({ text }: { text: string }) => text,
     });
 
     registry.register(zodTool).register(calculatorTool);

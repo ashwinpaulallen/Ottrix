@@ -1,7 +1,7 @@
 import { extractTextFromContent } from '../agent/messages.js';
 import type { ContentBlock } from '../types/messages.js';
 import type { CompletionResult } from '../types/provider.js';
-import type { AuditLogger } from './audit.js';
+import { emitAuditEvent, type AuditLogger } from './audit.js';
 import type { BudgetGuardrail } from './budget.js';
 import type {
   GuardrailBlockCode,
@@ -97,6 +97,7 @@ export class GuardrailMiddleware {
     let proceed = true;
     let reason: string | undefined;
     let code: GuardrailBlockCode | undefined;
+    let suspended = false;
 
     for (const handler of this.handlers) {
       const decision = await invoke(handler, context);
@@ -110,6 +111,7 @@ export class GuardrailMiddleware {
       proceed = outcome.proceed;
       reason = outcome.reason ?? reason;
       code = outcome.code ?? code;
+      suspended = suspended || outcome.suspended === true;
 
       context = applyLlmModifications(context, decision);
 
@@ -118,7 +120,7 @@ export class GuardrailMiddleware {
       }
     }
 
-    return { proceed, reason, code, flags, context };
+    return { proceed, reason, code, suspended, flags, context };
   }
 
   private async runToolPipeline(
@@ -133,6 +135,7 @@ export class GuardrailMiddleware {
     let proceed = true;
     let reason: string | undefined;
     let code: GuardrailBlockCode | undefined;
+    let suspended = false;
 
     for (const handler of this.handlers) {
       const decision = await invoke(handler, context);
@@ -146,6 +149,7 @@ export class GuardrailMiddleware {
       proceed = outcome.proceed;
       reason = outcome.reason ?? reason;
       code = outcome.code ?? code;
+      suspended = suspended || outcome.suspended === true;
 
       if (decision.toolInput) {
         context = { ...context, input: decision.toolInput };
@@ -159,7 +163,7 @@ export class GuardrailMiddleware {
       }
     }
 
-    return { proceed, reason, code, flags, context };
+    return { proceed, reason, code, suspended, flags, context };
   }
 
   private async logDecision(
@@ -175,13 +179,36 @@ export class GuardrailMiddleware {
     if (audit) {
       await audit.logDecision(agentName, handlerName, decision);
     }
+
+    if (handlerName === 'budget') {
+      return;
+    }
+
+    emitAuditEvent({
+      type: 'guardrail.check',
+      actor: { type: 'system', id: handlerName, name: handlerName },
+      action: decision.action,
+      resource: `guardrail:${handlerName}`,
+      outcome:
+        decision.action === 'block' || decision.action === 'suspend'
+          ? 'denied'
+          : decision.action === 'flag' || decision.action === 'modify'
+            ? 'skipped'
+            : 'success',
+      payload: {
+        reason: decision.reason,
+        flags: decision.flags,
+        code: decision.code,
+        agentName,
+      },
+    });
   }
 }
 
 function applyDecision(
   decision: GuardrailDecision,
   flags: string[],
-): { proceed: boolean; reason?: string; code?: GuardrailBlockCode } {
+): { proceed: boolean; reason?: string; code?: GuardrailBlockCode; suspended?: boolean } {
   if (decision.flags) {
     flags.push(...decision.flags);
   }
@@ -191,6 +218,15 @@ function applyDecision(
       proceed: false,
       reason: decision.reason ?? 'Blocked by guardrail',
       code: decision.code ?? 'guardrail',
+    };
+  }
+
+  if (decision.action === 'suspend') {
+    return {
+      proceed: false,
+      reason: decision.reason ?? 'Suspended by guardrail',
+      code: decision.code ?? 'guardrail',
+      suspended: true,
     };
   }
 

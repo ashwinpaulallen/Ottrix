@@ -49,7 +49,7 @@ export {
   type StdioMCPTransportOptions,
 } from './stdio-transport.js';
 
-export { MCPClient } from './client.js';
+export { MCPClient, type MCPImportToolsOptions } from './client.js';
 
 export {
   MCPTool,
@@ -58,6 +58,8 @@ export {
   type CreateMCPToolOptions,
   type MCPToolConfig,
 } from './mcp-tool.js';
+
+export { defaultMcpToolClassifier, classifyMcpToolMetadata } from '../tool-safety.js';
 
 export { MCPToolProvider } from './provider.js';
 

@@ -3,7 +3,8 @@ import { extractTextFromContent } from '../agent/messages.js';
 import type { ChatMessage } from '../types/messages.js';
 import type { CompletionProvider } from '../types/provider.js';
 import { stringifyUnknown } from '../utils/stringify.js';
-import type { AuditLogger } from './audit.js';
+import type { AuditLogger } from './audit-logger.js';
+import { emitAuditEvent } from './audit.js';
 import { completionText } from './middleware.js';
 import type {
   GuardrailDecision,
@@ -490,10 +491,6 @@ export class PromptInjectionGuardrail implements GuardrailHandler, StatefulGuard
     detection: InjectionDetection,
     phase: 'input' | 'output' | 'tool_output',
   ): Promise<void> {
-    if (!this.auditLogger) {
-      return;
-    }
-
     const action = !detection.detected
       ? 'allow'
       : this.mode === 'block'
@@ -502,17 +499,36 @@ export class PromptInjectionGuardrail implements GuardrailHandler, StatefulGuard
           ? 'flag'
           : 'sanitize';
 
-    await this.auditLogger.logInjectionScan({
-      agentName: this.agentName,
-      phase,
-      inputHash: hashContent(content),
-      detected: detection.detected,
-      severity: detection.severity,
-      category: detection.category,
-      action,
-      matchedPatterns: detection.matchedPatterns,
-      confidence: detection.confidence,
-    });
+    if (this.auditLogger) {
+      await this.auditLogger.logInjectionScan({
+        agentName: this.agentName,
+        phase,
+        inputHash: hashContent(content),
+        detected: detection.detected,
+        severity: detection.severity,
+        category: detection.category,
+        action,
+        matchedPatterns: detection.matchedPatterns,
+        confidence: detection.confidence,
+      });
+    }
+
+    if (detection.detected) {
+      emitAuditEvent({
+        type: 'guardrail.trip',
+        actor: { type: 'system', id: 'prompt-injection', name: 'prompt-injection' },
+        action,
+        resource: `agent:${this.agentName}`,
+        outcome: action === 'block' ? 'denied' : 'skipped',
+        payload: {
+          phase,
+          severity: detection.severity,
+          category: detection.category,
+          matchedPatterns: detection.matchedPatterns,
+          confidence: detection.confidence,
+        },
+      });
+    }
   }
 }
 

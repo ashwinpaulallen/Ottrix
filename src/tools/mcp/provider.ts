@@ -1,5 +1,6 @@
 import { MCPClient } from './client.js';
 import { createMCPTool, type CreateMCPToolOptions, type MCPTool } from './mcp-tool.js';
+import { classifyMcpToolMetadata } from '../tool-safety.js';
 import type { BaseTool } from '../tool.js';
 import type {
   MCPClientInfo,
@@ -32,6 +33,7 @@ export class MCPToolProvider {
   private readonly requestTimeoutMs?: number;
   private readonly injectedTransport?: import('./transport.js').MCPTransport;
   private readonly toolDefaults?: Omit<CreateMCPToolOptions, 'namespace'>;
+  private readonly classify?: (tool: MCPToolDefinition) => Partial<import('../../types/tools.js').ToolMetadata>;
 
   private client?: MCPClient;
   private tools: MCPTool[] = [];
@@ -57,6 +59,7 @@ export class MCPToolProvider {
     this.requestTimeoutMs = options.requestTimeoutMs;
     this.injectedTransport = options.transport;
     this.toolDefaults = options.toolDefaults;
+    this.classify = options.classify;
 
     if (options.reconnect === false) {
       this.reconnect = { ...DEFAULT_RECONNECT, enabled: false };
@@ -208,10 +211,15 @@ export class MCPToolProvider {
 
     return definitions.map((def) => {
       const prev = previous.get(def.name);
+      const classifiedMetadata = classifyMcpToolMetadata(def, this.classify);
       return createMCPTool(def, this.client!, {
         ...this.toolDefaults,
         namespace: this.namespace,
-        metadata: prev?.metadata ?? this.toolDefaults?.metadata,
+        metadata: {
+          ...classifiedMetadata,
+          ...this.toolDefaults?.metadata,
+          ...prev?.metadata,
+        },
         requiresApproval: prev?.requiresApproval ?? this.toolDefaults?.requiresApproval,
         approvalHandler: prev?.approvalHandler ?? this.toolDefaults?.approvalHandler,
       });

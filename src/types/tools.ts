@@ -64,10 +64,65 @@ export interface ToolMetadata {
   latency?: 'fast' | 'medium' | 'slow';
   /** Whether credentials or user session are required. */
   requiresAuth?: boolean;
-  /** Whether repeated calls with the same input are safe. */
+  /** Side-effect classification for policy enforcement. @defaultValue 'none' */
+  sideEffect?: 'none' | 'read' | 'write' | 'destructive';
+  /** Whether repeated calls with the same input are safe. @defaultValue false */
   idempotent?: boolean;
-  /** When true, execution requires human approval via an {@link ApprovalHandler}. */
-  requiresApproval?: boolean;
+  /** When truthy, execution requires human approval via an {@link ApprovalHandler}. @defaultValue false */
+  requiresApproval?: boolean | ApprovalRequirement;
+  /** When true, execution requires an available sandbox. @defaultValue false */
+  requiresSandbox?: boolean;
+  /** Controls which input fields are logged for audit. */
+  audit?: AuditConfig;
+  /** Semantic version of the tool definition. */
+  version?: string;
+}
+
+/** Policy metadata describing who must approve a gated tool. */
+export interface ApprovalRequirement {
+  /** Required role for the approver. */
+  role?: string;
+  /** Number of approvals needed. @defaultValue 1 */
+  multi?: number;
+  /** Input fields that constitute the approval scope. */
+  scopes?: string[];
+}
+
+/** Controls which input fields appear in tool audit logs. */
+export interface AuditConfig {
+  /** Input fields to include in the audit log (all others omitted). */
+  include?: string[];
+  /** Input fields to redact from the audit log. */
+  exclude?: string[];
+}
+
+/** Safety envelope returned by {@link import('../tools/registry.js').ToolRegistry.toolDescriptors}. */
+export interface ToolDescriptorSafety {
+  sideEffect: string;
+  idempotent: boolean;
+  requiresApproval: boolean | ApprovalRequirement;
+  requiresSandbox: boolean;
+}
+
+/** Complete tool descriptor for UIs, policy engines, and documentation. */
+export interface ToolDescriptor {
+  name: string;
+  description: string;
+  inputSchema: JSONSchema;
+  outputSchema?: JSONSchema;
+  safety: ToolDescriptorSafety;
+  version?: string;
+}
+
+/** Emitted after a tool executes when {@link AuditConfig} is configured. */
+export interface ToolAuditEvent {
+  timestamp: string;
+  toolName: string;
+  agentName?: string;
+  success: boolean;
+  input: Record<string, unknown>;
+  output?: unknown;
+  error?: string;
 }
 
 /** Context passed to an approval handler before a gated tool runs. */
@@ -107,6 +162,8 @@ export interface ToolExecuteOptions {
   stepNumber?: number;
   /** Extra context shown to the approval handler. */
   context?: string;
+  /** Skip destructive-tool safety middleware (internal framework use). @defaultValue false */
+  skipSafetyChecks?: boolean;
 }
 
 /**

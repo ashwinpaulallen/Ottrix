@@ -145,7 +145,7 @@ describe('Agent structured output', () => {
         properties: { text: { type: 'string' } },
         required: ['text'],
       },
-      execute: async (input) => (typeof input.text === 'string' ? input.text : ''),
+      execute: async (input: Record<string, unknown>) => (typeof input.text === 'string' ? input.text : ''),
     });
 
     const payload = { name: 'Tool User', age: 30, email: 'tool@example.com' };

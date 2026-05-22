@@ -22,6 +22,23 @@ export { BraintrustExporter, type BraintrustExporterOptions } from './braintrust
 export { WebhookExporter, type WebhookExporterOptions } from './webhook.js';
 export { TraceConsoleExporter, InMemoryTraceExporter } from './console.js';
 export { MultiExporter } from './multi.js';
+export {
+  OtelExporter,
+  createOtelExporter,
+  OTLP_PROTOCOL_VERSION,
+  GEN_AI_ATTRIBUTES,
+  OTTRIX_ATTRIBUTES,
+  type OtelExporterOptions,
+  type OtlpSpan,
+  type OtlpKeyValue,
+  type OtlpAnyValue,
+  type OtlpEvent,
+  type OtlpStatus,
+  type OtlpResource,
+  type OtlpScopeSpans,
+  type OtlpResourceSpans,
+  type OtlpExportTraceServiceRequest,
+} from './otel.js';
 
 /** Create a {@link TraceExporter} from Ottrix telemetry configuration. */
 export function createTraceExporterFromConfig(

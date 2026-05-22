@@ -5,7 +5,10 @@ import {
   isJsonRpcNotification,
   normalizeToolCallResult,
 } from './json-rpc.js';
-import { normalizeMcpInputSchema } from './mcp-tool.js';
+import { createMCPTool, normalizeMcpInputSchema } from './mcp-tool.js';
+import { classifyMcpToolMetadata } from '../tool-safety.js';
+import type { BaseTool } from '../tool.js';
+import type { ToolMetadata } from '../../types/tools.js';
 import { SseMCPTransport, resolveTransportResult } from './sse-transport.js';
 import { StdioMCPTransport } from './stdio-transport.js';
 import type { MCPTransport } from './transport.js';
@@ -169,6 +172,36 @@ export class MCPClient {
     return normalizeToolCallResult(result);
   }
 
+  /**
+   * Import MCP tools as {@link BaseTool} instances with safety metadata applied.
+   *
+   * @param options - Optional namespace, classify hook, and tool defaults.
+   */
+  async importTools(options: MCPImportToolsOptions = {}): Promise<BaseTool[]> {
+    await this.ensureConnected();
+    const definitions = await this.listTools();
+    const {
+      classify,
+      namespace,
+      metadata: metadataOverride,
+      timeoutMs,
+      requiresApproval,
+      approvalHandler,
+      events,
+    } = options;
+
+    return definitions.map((definition) =>
+      createMCPTool(definition, this, {
+        namespace,
+        metadata: normalizeToolMetadataForImport(definition, classify, metadataOverride),
+        timeoutMs,
+        requiresApproval,
+        approvalHandler,
+        events,
+      }),
+    );
+  }
+
   /** Disconnect from the server. */
   async disconnect(): Promise<void> {
     this.initialized = false;
@@ -268,4 +301,34 @@ export class MCPClient {
       await this.connect();
     }
   }
+}
+
+/** Options for {@link MCPClient.importTools}. */
+export interface MCPImportToolsOptions {
+  /** Namespace prefix for imported tool names. */
+  namespace?: string;
+  /**
+   * Classify MCP tools with safety metadata. When omitted, the built-in pattern
+   * matcher is used (`delete|drop|deploy` → destructive + approval, etc.).
+   */
+  classify?: (tool: MCPToolDefinition) => Partial<ToolMetadata>;
+  /** Metadata merged on top of classified values for every imported tool. */
+  metadata?: Partial<ToolMetadata>;
+  /** Override tool execution timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Require human approval before execution. */
+  requiresApproval?: boolean;
+  /** Per-tool approval handler override. */
+  approvalHandler?: import('../../types/tools.js').ApprovalHandler;
+  /** Lifecycle event hooks. */
+  events?: import('../tool.js').ToolExecutionEvents;
+}
+
+function normalizeToolMetadataForImport(
+  tool: MCPToolDefinition,
+  classify?: (tool: MCPToolDefinition) => Partial<ToolMetadata>,
+  override?: Partial<ToolMetadata>,
+): ToolMetadata {
+  const classified = classifyMcpToolMetadata(tool, classify);
+  return override ? { ...classified, ...override } : classified;
 }

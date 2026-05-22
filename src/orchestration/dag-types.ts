@@ -8,6 +8,8 @@ export interface StepContext {
   attempt: number;
   /** Aborted when the step times out or the workflow is cancelled. */
   signal: AbortSignal;
+  /** Active {@link RunContext} from AsyncLocalStorage, when available. */
+  runContext?: import('../context/run-context.js').RunContext;
 }
 
 /**
@@ -38,6 +40,8 @@ export interface DAGStep<TInput = unknown, TOutput = unknown> {
    * {@link DAGWorkflow.resume} with human-provided output.
    */
   suspend?: boolean;
+  /** Human approval gate configuration when this step is created via {@link humanApproval}. */
+  approvalGate?: import('./human-approval.js').ApprovalGateConfig;
 }
 
 /** Configuration for {@link DAGWorkflow}. */
@@ -52,6 +56,16 @@ export interface DAGWorkflowConfig {
   onStepComplete?: (stepId: string, output: unknown, duration: number) => void;
   /** Called when a step fails after all retries. */
   onStepError?: (stepId: string, error: Error) => void;
+  /** Optional store for auto-persisting suspended workflow state. */
+  stateStore?: import('./state-store.js').WorkflowStateStore;
+  /** Default metadata applied when persisting suspended state. */
+  saveMeta?: import('./state-store.js').SaveMeta;
+  /** Lock TTL in milliseconds for suspend/resume coordination. @defaultValue 60000 */
+  lockTtlMs?: number;
+  /** Store for human approval gate audit trails. */
+  approvalStore?: import('./human-approval.js').ApprovalStore;
+  /** Secret used when approval gates sign decisions as JWTs. */
+  approvalSignerSecret?: string;
 }
 
 /** Serializable snapshot of a paused workflow. Safe for JSON.stringify / JSON.parse. */
