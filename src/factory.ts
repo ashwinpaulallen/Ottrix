@@ -221,7 +221,7 @@ function applyConfigDefaults(agentic: AgenticConfig): void {
 
   if (agentic.logLevel !== 'silent') {
     setGlobalLogLevel(agentic.logLevel);
-    setLogger(new Logger({ component: 'agentic-fabric', level: agentic.logLevel }));
+    setLogger(new Logger({ component: 'agent-kit', level: agentic.logLevel }));
   }
 
   configureTraceExportFromConfig(agentic.telemetry);

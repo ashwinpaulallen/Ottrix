@@ -95,8 +95,8 @@ function summarizeValues(values: number[]): MetricStats {
 
   const sorted = [...values].sort((a, b) => a - b);
   const mean = values.reduce((sum, value) => sum + value, 0) / count;
-  const min = sorted[0]!;
-  const max = sorted[count - 1]!;
+  const min = sorted[0];
+  const max = sorted[count - 1];
 
   return {
     mean,
@@ -114,16 +114,16 @@ function percentile(sorted: number[], quantile: number): number {
     return 0;
   }
   if (sorted.length === 1) {
-    return sorted[0]!;
+    return sorted[0];
   }
 
   const index = (sorted.length - 1) * quantile;
   const lower = Math.floor(index);
   const upper = Math.ceil(index);
   if (lower === upper) {
-    return sorted[lower]!;
+    return sorted[lower];
   }
 
   const weight = index - lower;
-  return sorted[lower]! * (1 - weight) + sorted[upper]! * weight;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
 }

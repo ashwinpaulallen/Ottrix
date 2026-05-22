@@ -250,8 +250,8 @@ createAgent({ guardrails: false });
 
 ---
 
-## Subpath `agentic-fabric/guardrails`
+## Subpath `agent-kit/guardrails`
 
 Exports middleware, `createGuardrails`, budget, validators, human approval, audit, **`PromptInjectionGuardrail`**, injection types, and guardrail context types.
 
-Root `agentic-fabric` exports `createGuardrails`, `GuardrailMiddleware`, `PromptInjectionGuardrail`, and related types.
+Root `agent-kit` exports `createGuardrails`, `GuardrailMiddleware`, `PromptInjectionGuardrail`, and related types.

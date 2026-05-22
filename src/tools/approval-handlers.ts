@@ -42,7 +42,7 @@ export function createCliApprovalHandler(): ApprovalHandler {
  * Always approves tool calls (useful for tests and local development).
  */
 export function createAutoApproveHandler(): ApprovalHandler {
-  return async () => ({ approved: true });
+  return () => Promise.resolve({ approved: true });
 }
 
 /**

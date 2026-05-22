@@ -36,8 +36,8 @@ function createMockProvider(
         }),
       ),
     stream: async function* () {
-      yield { type: 'text_delta', data: { text: name } };
-      yield { type: 'done', data: { stopReason: 'stop' } };
+      yield { type: 'text_delta' as const, data: { text: name } };
+      yield { type: 'done' as const, data: { stopReason: 'stop' } };
     },
     countTokens: vi.fn(async () => 1),
   };
@@ -334,12 +334,14 @@ describe('ProviderRegistry circuit breaker integration', () => {
 
     expect(failing.isCircuitOpen()).toBe(true);
 
-    const backupComplete = vi.fn(async () => ({
-      content: [{ type: 'text' as const, text: 'backup' }],
-      model: 'backup-model',
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      stopReason: 'stop',
-    }));
+    const backupComplete = vi.fn(async () =>
+      ensureCompletionLatency({
+        content: [{ type: 'text' as const, text: 'backup' }],
+        model: 'backup-model',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        stopReason: 'stop',
+      }),
+    );
 
     const onProviderFallback = vi.fn();
     const registry = new ProviderRegistry({

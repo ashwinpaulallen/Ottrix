@@ -333,10 +333,10 @@ Returns `WorkflowStructureDescription` with topology-specific fields; parallel+t
 
 ## Exports
 
-### `agentic-fabric/orchestration`
+### `agent-kit/orchestration`
 
 Workflow classes, `WorkflowLoader`, `LoadedWorkflow`, `ParallelThenWorkflow`, runner utilities, definition types, YAML helpers, `WorkflowTimeoutError`.
 
-### Root `agentic-fabric`
+### Root `agent-kit`
 
 `SequentialWorkflow`, `ParallelWorkflow`, `ParallelThenWorkflow`, `RouterWorkflow`, `HierarchicalWorkflow`, `SupervisorWorkflow`, `createSupervisor`, `DAGWorkflow`, `DAGBuilder`, `agentStep`, `functionStep`, workflow errors, `InMemoryStateStore`, `WorkflowLoader`, `LoadedWorkflow`.

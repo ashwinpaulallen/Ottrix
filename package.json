@@ -1,12 +1,12 @@
 {
-  "name": "agentic-fabric",
-  "version": "2.0.0",
+  "name": "agent-kit",
+  "version": "1.0.0",
   "description": "TypeScript LLM agent framework: ReAct loop, tool calling, MCP, multi-agent workflows, memory, guardrails. Anthropic Claude, OpenAI, Ollama via fetch — vendor-neutral, zero SDK deps.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "bin": {
-    "agentic-serve": "./dist/cli/serve.js"
+    "agent-kit-serve": "./dist/cli/serve.js"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -102,6 +102,8 @@
   "keywords": [
     "ai",
     "agent",
+    "agent-kit",
+    "agentic-fabric",
     "llm",
     "framework",
     "multi-agent",
@@ -114,11 +116,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ashwinpaulallen/agent-fabric.git"
+    "url": "git+https://github.com/ashwinpaulallen/agent-kit.git"
   },
-  "homepage": "https://github.com/ashwinpaulallen/agent-fabric#readme",
+  "homepage": "https://github.com/ashwinpaulallen/agent-kit#readme",
   "bugs": {
-    "url": "https://github.com/ashwinpaulallen/agent-fabric/issues"
+    "url": "https://github.com/ashwinpaulallen/agent-kit/issues"
   },
   "publishConfig": {
     "access": "public"

@@ -266,7 +266,7 @@ describe('MCPServer stdio transport', () => {
       run: vi.fn(async (): Promise<AgentResult<AgentRunMetadata>> => ({
         response: 'agent says hi',
         steps: [],
-        totalTokens: { input: 1, output: 1, total: 2 },
+        totalTokens: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
         metadata: { stopReason: 'completed' },
       })),
     };

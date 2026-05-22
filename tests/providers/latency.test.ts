@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type {
-  CompletionParams,
   CompletionResult,
   StreamChunk,
 } from '../../src/types/provider.js';

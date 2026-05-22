@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DAGBuilder, DAGWorkflow, WorkflowResumeError, functionStep } from '../../src/orchestration/dag.js';
+import { DAGBuilder, WorkflowResumeError } from '../../src/orchestration/dag.js';
+import type { SuspendedWorkflowState } from '../../src/orchestration/dag-types.js';
 import { InMemoryStateStore } from '../../src/orchestration/state-store.js';
 
 function buildReviewWorkflow() {
@@ -106,7 +107,7 @@ describe('DAGWorkflow suspend/resume', () => {
     const suspended = await workflow.run('Serializable task', { workflowId: 'wf-json' });
 
     const serialized = JSON.stringify(suspended.suspendedState);
-    const restoredState = JSON.parse(serialized);
+    const restoredState = JSON.parse(serialized) as SuspendedWorkflowState;
 
     const finalResult = await workflow.resume(restoredState, {
       workflowId: 'wf-json',

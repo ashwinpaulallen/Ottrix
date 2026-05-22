@@ -8,7 +8,7 @@ export type ServeMCPConfig = MCPServerOptions;
  *
  * @example
  * ```ts
- * import { serveMCP, ToolRegistry, FunctionTool } from 'agentic-fabric';
+ * import { serveMCP, ToolRegistry, FunctionTool } from 'agent-kit';
  *
  * const registry = new ToolRegistry();
  * registry.register(myTool);

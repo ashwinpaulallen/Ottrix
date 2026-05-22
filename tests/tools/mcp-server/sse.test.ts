@@ -38,7 +38,7 @@ function createRegistry(): ToolRegistry {
         properties: { a: { type: 'number' }, b: { type: 'number' } },
         required: ['a', 'b'],
       },
-      execute: async (input) => input.a + input.b,
+      execute: async (input) => Number(input.a) + Number(input.b),
     }),
   );
   return registry;

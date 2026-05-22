@@ -5,7 +5,7 @@ import type {
   CompletionResult,
   StreamChunk,
   TokenUsage,
-} from 'agentic-fabric';
+} from 'agent-kit';
 
 const USAGE: TokenUsage = { inputTokens: 8, outputTokens: 12, totalTokens: 20 };
 

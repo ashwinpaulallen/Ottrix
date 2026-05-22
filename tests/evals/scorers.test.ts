@@ -70,8 +70,9 @@ describe('RelevanceScorer', () => {
 
     expect(provider.completeCalls).toBe(1);
     const prompt = provider.lastCompleteParams?.messages[0]?.content;
-    expect(String(prompt)).toContain('What is RLHF?');
-    expect(String(prompt)).toContain('RLHF aligns models with human preferences.');
+    const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+    expect(promptText).toContain('What is RLHF?');
+    expect(promptText).toContain('RLHF aligns models with human preferences.');
     expect(result.score).toBeCloseTo(0.85);
     expect(result.reason).toBe('Mostly relevant');
   });

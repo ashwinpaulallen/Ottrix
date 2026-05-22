@@ -10,7 +10,7 @@ import { createChatAgent } from './agent.js';
 const rl = readline.createInterface({ input, output });
 const agent = createChatAgent();
 
-console.log('agentic-fabric chatbot (type "exit" to quit)\n');
+console.log('agent-kit chatbot (type "exit" to quit)\n');
 
 while (true) {
   const line = (await rl.question('You: ')).trim();

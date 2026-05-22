@@ -211,16 +211,16 @@ export function aggregateScores(scores: number[]): AggregateScore {
   const mean = normalized.reduce((sum, value) => sum + value, 0) / count;
   const median =
     count % 2 === 0
-      ? (sorted[count / 2 - 1]! + sorted[count / 2]!) / 2
-      : sorted[Math.floor(count / 2)]!;
-  const min = sorted[0]!;
-  const max = sorted[count - 1]!;
+      ? (sorted[count / 2 - 1] + sorted[count / 2]) / 2
+      : sorted[Math.floor(count / 2)];
+  const min = sorted[0];
+  const max = sorted[count - 1];
   const variance = normalized.reduce((sum, value) => sum + (value - mean) ** 2, 0) / count;
   const stdDev = Math.sqrt(variance);
 
   for (const value of normalized) {
     const bucket = Math.min(9, Math.floor(value * 10));
-    histogram[bucket]! += 1;
+    histogram[bucket] += 1;
   }
 
   return { mean, median, min, max, stdDev, count, histogram };

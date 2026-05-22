@@ -5,7 +5,7 @@
  *   - Stdio: spawn an MCP server process (e.g. npx @modelcontextprotocol/server-filesystem)
  *   - SSE: connect to an HTTP+SSE endpoint exposed by the server
  */
-import { Agent, MCPToolProvider, ToolRegistry } from 'agentic-fabric';
+import { Agent, MCPToolProvider, ToolRegistry } from 'agent-kit';
 import { DemoProvider, demoToolUse } from '../shared/demo-provider.js';
 import { DemoMcpTransport } from './demo-mcp-transport.js';
 

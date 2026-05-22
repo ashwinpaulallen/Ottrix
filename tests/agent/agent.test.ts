@@ -198,13 +198,33 @@ describe('Agent.run', () => {
     const agent = new Agent({
       name: 'test',
       provider,
-      onStep: (step) => steps.push(step),
+      onStep: (step) => {
+        steps.push(step);
+      },
     });
 
     await agent.run('Hello');
 
     expect(steps.length).toBeGreaterThanOrEqual(2);
     expect(steps.every((s) => s.timestamp > 0)).toBe(true);
+  });
+
+  it('awaits async onStep callbacks before completing the run', async () => {
+    const provider = new MockCompletionProvider().enqueue(textCompletion('Hi', lightUsage));
+    let callbackFinished = false;
+
+    const agent = new Agent({
+      name: 'test',
+      provider,
+      onStep: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        callbackFinished = true;
+      },
+    });
+
+    await agent.run('Hello');
+
+    expect(callbackFinished).toBe(true);
   });
 
   it('onToolCall can block a tool execution', async () => {

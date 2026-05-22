@@ -228,18 +228,19 @@ export class MCPServer {
     }
   }
 
-  private async handleNotification(
+  private handleNotification(
     notification: JsonRpcNotification,
     session: MCPServerSession,
   ): Promise<void> {
     if (notification.method === 'notifications/initialized') {
       session.initialized = true;
-      return;
+      return Promise.resolve();
     }
     this.emitError(
       new MCPProtocolError(`Unknown notification: ${notification.method}`, -32601),
       session,
     );
+    return Promise.resolve();
   }
 
   private handleInitialize(request: JsonRpcRequest): JsonRpcResponse {

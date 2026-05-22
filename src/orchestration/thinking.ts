@@ -40,7 +40,9 @@ export function createSupervisorThinkingOnStep(
   }
 
   return async (step) => {
-    await existingOnStep?.(step);
+    if (existingOnStep) {
+      await existingOnStep(step);
+    }
     if (step.type !== 'thinking' || !onSupervisorThinking) {
       return;
     }

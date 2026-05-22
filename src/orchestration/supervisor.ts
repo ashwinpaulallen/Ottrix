@@ -118,7 +118,7 @@ export class SupervisorWorkflow {
   constructor(options: SupervisorWorkflowOptions) {
     this.supervisor = options.supervisor;
     this.workers = options.workers;
-    this.workerDescriptions = options.workerDescriptions ?? new Map();
+    this.workerDescriptions = options.workerDescriptions ?? new Map<string, string>();
     this.maxDelegationRounds = options.maxDelegationRounds ?? DEFAULT_MAX_DELEGATION_ROUNDS;
     this.workerTimeout = options.workerTimeout ?? DEFAULT_WORKER_TIMEOUT_MS;
     this.maxNestedDepth = options.maxNestedDepth ?? DEFAULT_MAX_NESTED_DEPTH;

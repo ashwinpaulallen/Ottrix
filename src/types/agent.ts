@@ -105,8 +105,8 @@ export interface AgentConfig<
   maxSteps?: number;
   /** Cumulative token budget across the entire run. */
   maxTokenBudget?: number;
-  /** Callback invoked after each recorded {@link AgentStep}. */
-  onStep?: (step: AgentStep) => void;
+  /** Callback invoked after each recorded {@link AgentStep}. May return a Promise to defer the next loop iteration. */
+  onStep?: (step: AgentStep) => void | Promise<void>;
   /**
    * Called before a tool executes. Return `false` to block the call.
    */

@@ -2,7 +2,7 @@
  * Research agent with mocked web search + note-taking tools.
  * Demonstrates the ReAct loop across multiple tool calls (no API keys).
  */
-import { Agent, FunctionTool, ToolRegistry } from 'agentic-fabric';
+import { Agent, FunctionTool, ToolRegistry } from 'agent-kit';
 import { DemoProvider, demoToolUse } from '../shared/demo-provider.js';
 
 // --- Mock tools (stand in for real web search / notes APIs) ---

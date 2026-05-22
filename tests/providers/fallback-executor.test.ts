@@ -1,12 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type {
-  CompletionParams,
   CompletionProvider,
   CompletionResult,
 } from '../../src/types/provider.js';
 import { ensureCompletionLatency } from '../../src/providers/latency.js';
 import { BaseProvider, type BaseProviderConfig } from '../../src/providers/base.js';
-import { CircuitOpenError } from '../../src/providers/circuit-breaker.js';
 import {
   AggregateProviderError,
   ProviderError,

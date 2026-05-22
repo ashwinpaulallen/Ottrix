@@ -1,5 +1,5 @@
 {
-  "name": "agentic-fabric-example-mcp-integration",
+  "name": "agent-kit-example-mcp-integration",
   "private": true,
   "type": "module",
   "description": "MCP tool discovery and agent integration",
@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "agentic-fabric": "file:../.."
+    "agent-kit": "file:../.."
   },
   "devDependencies": {
     "tsx": "^4.19.4",

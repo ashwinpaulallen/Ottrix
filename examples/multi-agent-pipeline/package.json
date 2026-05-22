@@ -1,5 +1,5 @@
 {
-  "name": "agentic-fabric-example-multi-agent-pipeline",
+  "name": "agent-kit-example-multi-agent-pipeline",
   "private": true,
   "type": "module",
   "description": "SequentialWorkflow with three agents",
@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "agentic-fabric": "file:../.."
+    "agent-kit": "file:../.."
   },
   "devDependencies": {
     "tsx": "^4.19.4",

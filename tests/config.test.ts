@@ -15,6 +15,18 @@ import {
 import { resetAgenticEnvCache } from '../src/env.js';
 
 describe('readConfigFromEnv', () => {
+  it('parses AGENT_KIT_* variables with legacy AGENTIC_* fallback', () => {
+    const partial = readConfigFromEnv({
+      AGENT_KIT_PROVIDER: 'openai',
+      AGENT_KIT_MODEL: 'gpt-4o-mini',
+      AGENT_KIT_MAX_STEPS: '12',
+    });
+
+    expect(partial.defaultProvider).toBe('openai');
+    expect(partial.defaultModel).toBe('gpt-4o-mini');
+    expect(partial.maxSteps).toBe(12);
+  });
+
   it('parses AGENTIC_* variables and provider API keys', () => {
     const partial = readConfigFromEnv({
       AGENTIC_PROVIDER: 'openai',
@@ -133,6 +145,14 @@ telemetry:
     expect(config.defaultProvider).toBe('ollama');
     expect(config.maxSteps).toBe(7);
     expect(config.telemetry).toEqual({ enabled: true, exporter: 'none' });
+  });
+
+  it('discovers .agentkitrc.json before legacy .agenticrc files', () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'agent-kit-config-'));
+    writeFileSync(join(tempDir, '.agenticrc.json'), JSON.stringify({ maxSteps: 3 }));
+    writeFileSync(join(tempDir, '.agentkitrc.json'), JSON.stringify({ maxSteps: 7 }));
+
+    expect(discoverConfigFile(tempDir)).toBe(join(tempDir, '.agentkitrc.json'));
   });
 
   it('discovers .agenticrc.json before yaml', () => {

@@ -140,7 +140,7 @@ function translateTraceToBraintrustEvents(trace: TraceData): Record<string, unkn
       attributes: trace.attributes,
       metrics,
     },
-    tags: ['agentic-fabric'],
+    tags: ['agent-kit'],
     metrics,
   };
 

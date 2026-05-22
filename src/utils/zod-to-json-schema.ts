@@ -75,7 +75,7 @@ interface Zod4Def {
 }
 
 function getZod4Def(schema: ZodTypeAny): Zod4Def {
-  return schema._def as unknown as Zod4Def;
+  return schema._def;
 }
 
 function unwrapZodNode(current: ZodTypeAny, next: ZodTypeAny | undefined): ZodTypeAny {
@@ -188,7 +188,7 @@ function convertInnerSchema(schema: ZodTypeAny): JSONSchema {
     case 'boolean':
     case 'enum':
     case 'literal':
-      return normalizeJsonSchema(schema.toJSONSchema() as Record<string, unknown>);
+      return normalizeJsonSchema(schema.toJSONSchema());
     case 'date':
       return { type: 'string', format: 'date-time' };
     case 'array':
@@ -281,7 +281,7 @@ function normalizeJsonSchema(raw: Record<string, unknown>): JSONSchema {
   }
 
   if (Array.isArray(raw.enum)) {
-    result.enum = [...raw.enum];
+    result.enum = [...(raw.enum as Array<string | number | boolean | null>)];
   }
 
   if (raw.const !== undefined && result.enum === undefined) {

@@ -21,7 +21,7 @@ import type {
 import { MCP_PROTOCOL_VERSION } from './types.js';
 
 const DEFAULT_CLIENT_INFO: MCPClientInfo = {
-  name: 'agentic-fabric',
+  name: 'agent-kit',
   version: '1.0.0',
 };
 

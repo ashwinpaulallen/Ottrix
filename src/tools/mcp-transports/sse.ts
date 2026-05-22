@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { randomUUID } from 'node:crypto';
 
 import { parseInboundJsonRpcMessage } from '../mcp/json-rpc.js';
-import type { JsonRpcRequest, JsonRpcResponse } from '../mcp/types.js';
+import type { JsonRpcResponse } from '../mcp/types.js';
 import type {
   MCPServerMessageHandler,
   MCPServerSession,
@@ -235,7 +235,7 @@ export class McpSseServerTransport implements MCPServerTransport {
 
     if ('method' in message) {
       await handler(
-        message as JsonRpcRequest | import('../mcp/types.js').JsonRpcNotification,
+        message,
         (response) => this.sendToClient(sessionId, response),
         client.session,
       );
@@ -262,7 +262,7 @@ export class McpSseServerTransport implements MCPServerTransport {
 async function readRequestBody(req: IncomingMessage, maxBytes: number): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
+  for await (const chunk of req as AsyncIterable<Buffer | string>) {
     const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
     size += buffer.length;
     if (size > maxBytes) {

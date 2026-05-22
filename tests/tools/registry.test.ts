@@ -85,7 +85,7 @@ describe('ToolRegistry', () => {
     expect(result.success).toBe(true);
     expect(result.output).toEqual({
       path: 'readme.txt',
-      content: 'Welcome to agentic-fabric.',
+      content: 'Welcome to agent-kit.',
     });
   });
 

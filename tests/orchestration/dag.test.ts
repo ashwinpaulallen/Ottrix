@@ -97,11 +97,12 @@ describe('DAGWorkflow', () => {
           'd',
           'D',
           async (input) => {
+            const deps = input as { b: string; c: string };
             const t = track('d');
             t.start();
-            expect(input).toEqual({ b: 'B-out', c: 'C-out' });
+            expect(deps).toEqual({ b: 'B-out', c: 'C-out' });
             t.end();
-            return { b: input.b, c: input.c };
+            return { b: deps.b, c: deps.c };
           },
           { dependencies: ['b', 'c'] },
         ),
@@ -373,8 +374,8 @@ describe('DAGWorkflow', () => {
         functionStep('prep', 'Prep', async () => 'question'),
         {
           ...agentStep(agent, { id: 'agent', dependencies: ['prep'] }),
-          inputMapper: (deps) => String(deps.prep),
-        },
+          inputMapper: (deps: Record<string, unknown>) => String(deps.prep),
+        } as import('../../src/orchestration/dag-types.js').DAGStep,
       ],
     });
 

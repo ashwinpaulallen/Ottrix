@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url';
 
 import { loadConfig } from '../config.js';
-import { AGENTIC_FABRIC_VERSION } from '../index.js';
+import { AGENT_KIT_VERSION } from '../index.js';
 import {
   applyTelemetryRetention,
   configureTraceExportFromConfig,
@@ -31,8 +31,8 @@ interface McpServeConfigFile {
 
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
-    name: 'agentic-fabric',
-    version: AGENTIC_FABRIC_VERSION,
+    name: 'agent-kit',
+    version: AGENT_KIT_VERSION,
     transport: 'stdio',
     port: 3001,
     host: '127.0.0.1',
@@ -82,14 +82,14 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 function printHelp(): void {
-  process.stdout.write(`agentic-serve — expose agentic-fabric tools over MCP
+  process.stdout.write(`agent-kit-serve — expose agent-kit tools over MCP
 
 Usage:
-  agentic-serve [options]
+  agent-kit-serve [options]
 
 Options:
   -c, --config <file>     JS/TS config module with optional setup(registry)
-      --name <name>       MCP server name (default: agentic-fabric)
+      --name <name>       MCP server name (default: agent-kit)
       --version <ver>     MCP server version (default: package version)
       --transport <mode>  stdio | sse (default: stdio)
       --port <number>     SSE port (default: 3001)
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   });
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-    process.stderr.write(`agentic-serve: received ${signal}, shutting down\n`);
+    process.stderr.write(`agent-kit-serve: received ${signal}, shutting down\n`);
     await server.stop();
     await shutdownObservability();
     process.exit(0);
@@ -156,14 +156,14 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   if (server.getBaseUrl()) {
-    process.stderr.write(`agentic-serve: listening on ${server.getBaseUrl()}\n`);
+    process.stderr.write(`agent-kit-serve: listening on ${server.getBaseUrl()}\n`);
   } else {
-    process.stderr.write('agentic-serve: listening on stdio\n');
+    process.stderr.write('agent-kit-serve: listening on stdio\n');
   }
 }
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`agentic-serve: ${message}\n`);
+  process.stderr.write(`agent-kit-serve: ${message}\n`);
   process.exit(1);
 });

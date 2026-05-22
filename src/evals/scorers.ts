@@ -34,14 +34,17 @@ export class ExactMatchScorer implements Scorer {
 
   constructor(private readonly trim = false) {}
 
-  async score(_input: string, output: string, expected?: string): Promise<ScoreResult> {
+  score(_input: string, output: string, expected?: string): Promise<ScoreResult> {
     if (expected === undefined) {
-      return { score: 0, reason: 'No expected output provided' };
+      return Promise.resolve({ score: 0, reason: 'No expected output provided' });
     }
     const actual = this.trim ? output.trim() : output;
     const reference = this.trim ? expected.trim() : expected;
     const match = actual === reference;
-    return { score: match ? 1 : 0, reason: match ? 'Exact match' : 'Output differs from expected' };
+    return Promise.resolve({
+      score: match ? 1 : 0,
+      reason: match ? 'Exact match' : 'Output differs from expected',
+    });
   }
 }
 
@@ -55,20 +58,20 @@ export class ContainsScorer implements Scorer {
     this.name = `contains(${this.keywords.join(',')})`;
   }
 
-  async score(_input: string, output: string): Promise<ScoreResult> {
+  score(_input: string, output: string): Promise<ScoreResult> {
     if (this.keywords.length === 0) {
-      return { score: 0, reason: 'No keywords configured' };
+      return Promise.resolve({ score: 0, reason: 'No keywords configured' });
     }
 
     const haystack = output.toLowerCase();
     const found = this.keywords.filter((keyword) => haystack.includes(keyword.toLowerCase()));
     const score = clampScore(found.length / this.keywords.length);
 
-    return {
+    return Promise.resolve({
       score,
       reason: `Matched ${found.length}/${this.keywords.length} keywords`,
       metadata: { found, missing: this.keywords.filter((keyword) => !found.includes(keyword)) },
-    };
+    });
   }
 }
 
@@ -76,15 +79,15 @@ export class ContainsScorer implements Scorer {
 export class JsonValidityScorer implements Scorer {
   readonly name = 'json_validity';
 
-  async score(_input: string, output: string): Promise<ScoreResult> {
+  score(_input: string, output: string): Promise<ScoreResult> {
     try {
       JSON.parse(extractJsonCandidate(output));
-      return { score: 1, reason: 'Valid JSON' };
+      return Promise.resolve({ score: 1, reason: 'Valid JSON' });
     } catch (error) {
-      return {
+      return Promise.resolve({
         score: 0,
         reason: error instanceof Error ? error.message : 'Invalid JSON',
-      };
+      });
     }
   }
 }
@@ -97,23 +100,23 @@ export class SchemaMatchScorer implements Scorer {
     this.name = `schema_match(${schema.description ?? 'schema'})`;
   }
 
-  async score(_input: string, output: string): Promise<ScoreResult> {
+  score(_input: string, output: string): Promise<ScoreResult> {
     try {
-      const parsed = JSON.parse(extractJsonCandidate(output));
+      const parsed: unknown = JSON.parse(extractJsonCandidate(output));
       const result = this.schema.safeParse(parsed);
       if (result.success) {
-        return { score: 1, reason: 'Schema validation passed' };
+        return Promise.resolve({ score: 1, reason: 'Schema validation passed' });
       }
-      return {
+      return Promise.resolve({
         score: 0,
         reason: result.error.message,
         metadata: { issues: result.error.issues },
-      };
+      });
     } catch (error) {
-      return {
+      return Promise.resolve({
         score: 0,
         reason: error instanceof Error ? error.message : 'Failed to parse JSON',
-      };
+      });
     }
   }
 }
@@ -134,22 +137,22 @@ export class LengthScorer implements Scorer {
     this.name = `length(${min ?? '∞'}-${max ?? '∞'})`;
   }
 
-  async score(_input: string, output: string): Promise<ScoreResult> {
+  score(_input: string, output: string): Promise<ScoreResult> {
     const length = output.length;
     const min = this.min ?? 0;
     const max = this.max ?? Number.POSITIVE_INFINITY;
 
     if (length >= min && length <= max) {
-      return { score: 1, reason: `Length ${length} within [${min}, ${max}]` };
+      return Promise.resolve({ score: 1, reason: `Length ${length} within [${min}, ${max}]` });
     }
 
     if (length < min) {
       const score = min === 0 ? 0 : clampScore(length / min);
-      return { score, reason: `Length ${length} below minimum ${min}` };
+      return Promise.resolve({ score, reason: `Length ${length} below minimum ${min}` });
     }
 
     const score = clampScore(max / length);
-    return { score, reason: `Length ${length} above maximum ${max}` };
+    return Promise.resolve({ score, reason: `Length ${length} above maximum ${max}` });
   }
 }
 
@@ -164,7 +167,7 @@ export class LatencyScorer implements Scorer {
     this.name = `latency(${maxMs}ms)`;
   }
 
-  async score(
+  score(
     _input: string,
     _output: string,
     _expected?: string,
@@ -172,11 +175,11 @@ export class LatencyScorer implements Scorer {
   ): Promise<ScoreResult> {
     const durationMs = typeof metadata?.durationMs === 'number' ? metadata.durationMs : 0;
     const score = clampScore(1 - durationMs / this.maxMs);
-    return {
+    return Promise.resolve({
       score,
       reason: `Duration ${durationMs}ms vs max ${this.maxMs}ms`,
       metadata: { durationMs },
-    };
+    });
   }
 }
 
@@ -190,12 +193,12 @@ export class RegexScorer implements Scorer {
     this.name = `regex(${pattern.source})`;
   }
 
-  async score(_input: string, output: string): Promise<ScoreResult> {
+  score(_input: string, output: string): Promise<ScoreResult> {
     const match = this.pattern.test(output);
-    return {
+    return Promise.resolve({
       score: match ? 1 : 0,
       reason: match ? 'Pattern matched' : 'Pattern did not match',
-    };
+    });
   }
 }
 
@@ -214,7 +217,7 @@ export class TokenUsageScorer implements Scorer {
       maxTotalTokens !== undefined ? `token_usage(${maxTotalTokens})` : 'token_usage';
   }
 
-  async score(
+  score(
     _input: string,
     _output: string,
     _expected?: string,
@@ -224,19 +227,19 @@ export class TokenUsageScorer implements Scorer {
     const totalTokens = tokenUsage?.totalTokens ?? 0;
 
     if (this.maxTotalTokens === undefined) {
-      return {
+      return Promise.resolve({
         score: 1,
         reason: 'Token usage recorded',
         metadata: { tokenUsage, totalTokens },
-      };
+      });
     }
 
     const score = clampScore(1 - totalTokens / this.maxTotalTokens);
-    return {
+    return Promise.resolve({
       score,
       reason: `${totalTokens} tokens vs max ${this.maxTotalTokens}`,
       metadata: { tokenUsage, totalTokens },
-    };
+    });
   }
 }
 
@@ -254,7 +257,7 @@ export class CostScorer implements Scorer {
     this.name = `cost(${maxCostUsd})`;
   }
 
-  async score(
+  score(
     _input: string,
     _output: string,
     _expected?: string,
@@ -265,7 +268,7 @@ export class CostScorer implements Scorer {
     const rates = this.costPerTokenByProvider[provider] ?? this.costPerTokenByProvider.default;
 
     if (!tokenUsage || !rates) {
-      return { score: 0, reason: 'Missing token usage or provider cost rates' };
+      return Promise.resolve({ score: 0, reason: 'Missing token usage or provider cost rates' });
     }
 
     const costUsd =
@@ -273,11 +276,11 @@ export class CostScorer implements Scorer {
       tokenUsage.outputTokens * rates.outputPerToken;
     const score = clampScore(1 - costUsd / this.maxCostUsd);
 
-    return {
+    return Promise.resolve({
       score,
       reason: `Estimated cost $${costUsd.toFixed(6)}`,
       metadata: { costUsd, provider, tokenUsage },
-    };
+    });
   }
 }
 
@@ -287,7 +290,7 @@ export class RelevanceScorer implements Scorer {
 
   constructor(private readonly provider: CompletionProvider) {}
 
-  async score(input: string, output: string): Promise<ScoreResult> {
+  score(input: string, output: string): Promise<ScoreResult> {
     return gradeWithModel(
       this.provider,
       `Rate 0-1 how relevant this response is to the query.\n` +
@@ -304,9 +307,9 @@ export class CorrectnessScorer implements Scorer {
 
   constructor(private readonly provider: CompletionProvider) {}
 
-  async score(input: string, output: string, expected?: string): Promise<ScoreResult> {
+  score(input: string, output: string, expected?: string): Promise<ScoreResult> {
     if (!expected) {
-      return { score: 0, reason: 'No expected output provided' };
+      return Promise.resolve({ score: 0, reason: 'No expected output provided' });
     }
 
     return gradeWithModel(
@@ -326,7 +329,7 @@ export class HelpfulnessScorer implements Scorer {
 
   constructor(private readonly provider: CompletionProvider) {}
 
-  async score(input: string, output: string): Promise<ScoreResult> {
+  score(input: string, output: string): Promise<ScoreResult> {
     return gradeWithModel(
       this.provider,
       `Rate 0-1 how helpful this response is.\n` +
@@ -348,7 +351,7 @@ export class ToneScorer implements Scorer {
     this.name = `tone(${targetTone})`;
   }
 
-  async score(input: string, output: string): Promise<ScoreResult> {
+  score(input: string, output: string): Promise<ScoreResult> {
     return gradeWithModel(
       this.provider,
       `Rate 0-1 how well this response matches the target tone "${this.targetTone}".\n` +

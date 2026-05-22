@@ -7,7 +7,7 @@ Run agents against labeled datasets and score outputs with pluggable scorers. Pr
 ## Quick start
 
 ```ts
-import { evaluate, ExactMatchScorer, ContainsScorer } from 'agentic-fabric/evals';
+import { evaluate, ExactMatchScorer, ContainsScorer } from 'agent-kit/evals';
 
 const report = await evaluate({
   agent,
@@ -18,8 +18,8 @@ const report = await evaluate({
 console.log(report.aggregates.exact_match?.mean);
 ```
 
-Subpath: `agentic-fabric/evals`  
-Also exported from root `agentic-fabric`.
+Subpath: `agent-kit/evals`  
+Also exported from root `agent-kit`.
 
 ---
 
@@ -125,10 +125,10 @@ CSV/Markdown escaping handles commas, quotes, and newlines in cell content.
 
 ## Exports
 
-### `agentic-fabric/evals`
+### `agent-kit/evals`
 
 `evaluate`, `EvalRunner`, `EvalReporter`, all scorers, types, aggregation helpers.
 
-### Root `agentic-fabric`
+### Root `agent-kit`
 
 Same symbols for convenience imports.

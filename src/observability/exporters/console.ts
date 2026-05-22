@@ -4,7 +4,7 @@ import type { TraceData, TraceExporter } from './types.js';
 export class TraceConsoleExporter implements TraceExporter {
   readonly name = 'console';
 
-  async export(trace: TraceData): Promise<void> {
+  export(trace: TraceData): Promise<void> {
     const duration = trace.endTime - trace.startTime;
     console.info(
       `[trace] ${trace.name} id=${trace.traceId.slice(0, 8)} ` +
@@ -18,11 +18,16 @@ export class TraceConsoleExporter implements TraceExporter {
         `  [span] ${span.name} id=${span.spanId.slice(0, 8)}${parent} duration=${spanDuration}ms`,
       );
     }
+    return Promise.resolve();
   }
 
-  async flush(): Promise<void> {}
+  flush(): Promise<void> {
+    return Promise.resolve();
+  }
 
-  async shutdown(): Promise<void> {}
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /** Stores exported traces in memory (for tests). */
@@ -30,13 +35,18 @@ export class InMemoryTraceExporter implements TraceExporter {
   readonly name = 'memory';
   readonly traces: TraceData[] = [];
 
-  async export(trace: TraceData): Promise<void> {
+  export(trace: TraceData): Promise<void> {
     this.traces.push(trace);
+    return Promise.resolve();
   }
 
-  async flush(): Promise<void> {}
+  flush(): Promise<void> {
+    return Promise.resolve();
+  }
 
-  async shutdown(): Promise<void> {}
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
 
   clear(): void {
     this.traces.length = 0;

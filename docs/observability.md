@@ -10,7 +10,7 @@ Source: `src/observability/`
 |----------|----------|
 | `getTelemetry()` | Lazy `new Telemetry()` if unset |
 | `setTelemetry(t)` | Replace global instance |
-| `getLogger()` | Lazy `new Logger({ component: 'agentic-fabric' })` |
+| `getLogger()` | Lazy `new Logger({ component: 'agent-kit' })` |
 | `setLogger(l)` | Replace global instance |
 | `shutdownObservability()` | Flush trace exporters and reset globals (used by CLI shutdown) |
 
@@ -109,7 +109,7 @@ When a root span ends, `buildTraceData` assembles `TraceData` (spans, input/outp
 ### Configuration wiring
 
 ```ts
-import { configureTraceExportFromConfig, loadConfig } from 'agentic-fabric';
+import { configureTraceExportFromConfig, loadConfig } from 'agent-kit';
 
 const { config } = loadConfig();
 configureTraceExportFromConfig(config.telemetry);
@@ -118,7 +118,7 @@ configureTraceExportFromConfig(config.telemetry);
 Or manually:
 
 ```ts
-import { getTelemetry, LangfuseExporter } from 'agentic-fabric';
+import { getTelemetry, LangfuseExporter } from 'agent-kit';
 
 getTelemetry().setExporter(new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -129,9 +129,9 @@ getTelemetry().setExporter(new LangfuseExporter({
 ### Subpath imports
 
 ```ts
-import { LangfuseExporter } from 'agentic-fabric/exporters/langfuse';
-import { BraintrustExporter } from 'agentic-fabric/exporters/braintrust';
-import { WebhookExporter } from 'agentic-fabric/exporters/webhook';
+import { LangfuseExporter } from 'agent-kit/exporters/langfuse';
+import { BraintrustExporter } from 'agent-kit/exporters/braintrust';
+import { WebhookExporter } from 'agent-kit/exporters/webhook';
 ```
 
 **Helpers:** `buildTraceData`, `createTraceExporterFromConfig`, `configureTraceExportFromConfig`
@@ -184,10 +184,10 @@ Records agent runs for debugging and replay. See prior API: `startRun`, `recordM
 
 ## Subpath exports
 
-### `agentic-fabric/observability`
+### `agent-kit/observability`
 
 Logger, Telemetry, RunRecorder, trace exporters, instrumentation, global getters/setters, retention helpers.
 
-### Root `agentic-fabric`
+### Root `agent-kit`
 
 Commonly used symbols including `LangfuseExporter`, `BraintrustExporter`, `WebhookExporter`, `MultiExporter`, `configureTraceExportFromConfig`.

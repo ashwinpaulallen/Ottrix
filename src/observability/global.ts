@@ -38,7 +38,7 @@ export function setTelemetry(telemetry: Telemetry): void {
 /** Shared root logger (created lazily when unset). */
 export function getLogger(): Logger {
   if (!globalLogger) {
-    globalLogger = new Logger({ component: 'agentic-fabric' });
+    globalLogger = new Logger({ component: 'agent-kit' });
   }
   return globalLogger;
 }

@@ -1,5 +1,5 @@
 {
-  "name": "agentic-fabric-example-research-agent",
+  "name": "agent-kit-example-research-agent",
   "private": true,
   "type": "module",
   "description": "ReAct agent with mocked research tools",
@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "agentic-fabric": "file:../.."
+    "agent-kit": "file:../.."
   },
   "devDependencies": {
     "tsx": "^4.19.4",

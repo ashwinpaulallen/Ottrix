@@ -16,21 +16,23 @@ export interface WorkflowStateStore {
 export class InMemoryStateStore implements WorkflowStateStore {
   private readonly states = new Map<string, SuspendedWorkflowState>();
 
-  async save(state: SuspendedWorkflowState): Promise<void> {
+  save(state: SuspendedWorkflowState): Promise<void> {
     this.states.set(state.workflowId, cloneState(state));
+    return Promise.resolve();
   }
 
-  async load(workflowId: string): Promise<SuspendedWorkflowState | null> {
+  load(workflowId: string): Promise<SuspendedWorkflowState | null> {
     const state = this.states.get(workflowId);
-    return state ? cloneState(state) : null;
+    return Promise.resolve(state ? cloneState(state) : null);
   }
 
-  async delete(workflowId: string): Promise<void> {
+  delete(workflowId: string): Promise<void> {
     this.states.delete(workflowId);
+    return Promise.resolve();
   }
 
-  async list(): Promise<SuspendedWorkflowState[]> {
-    return [...this.states.values()].map(cloneState);
+  list(): Promise<SuspendedWorkflowState[]> {
+    return Promise.resolve([...this.states.values()].map(cloneState));
   }
 }
 

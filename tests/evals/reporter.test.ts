@@ -56,8 +56,8 @@ describe('EvalReporter', () => {
     const reporter = new EvalReporter();
     const json = reporter.toJson(sampleReport());
 
-    expect(() => JSON.parse(json)).not.toThrow();
-    expect(JSON.parse(json).name).toBe('sample-eval');
+    const parsed = JSON.parse(json) as { name: string };
+    expect(parsed.name).toBe('sample-eval');
   });
 
   it('toMarkdown escapes table-breaking characters', () => {

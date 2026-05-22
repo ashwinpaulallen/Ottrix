@@ -155,7 +155,7 @@ Errors: HTTP failures, stream closed before endpoint, not connected.
 
 | Default | Value |
 |---------|-------|
-| `clientInfo` | `{ name: 'agentic-fabric', version: '1.0.0' }` |
+| `clientInfo` | `{ name: 'agent-kit', version: '1.0.0' }` |
 | `requestTimeoutMs` | `30_000` |
 
 | Method | Behavior |
@@ -221,7 +221,7 @@ Injected `transport` option bypasses stdio/SSE factory (used in examples).
 
 ## Schema validation
 
-`validateSchema` exported from `agentic-fabric/tools` (implemented in `src/utils/schema-validator.ts`).
+`validateSchema` exported from `agent-kit/tools` (implemented in `src/utils/schema-validator.ts`).
 
 ---
 
@@ -232,7 +232,7 @@ Injected `transport` option bypasses stdio/SSE factory (used in examples).
 Define tools with Zod input/output schemas. JSON Schema for the LLM is generated via `zodToJsonSchema`.
 
 ```ts
-import { createTool } from 'agentic-fabric';
+import { createTool } from 'agent-kit';
 import { z } from 'zod';
 
 const weather = createTool({
@@ -289,7 +289,7 @@ Distinct from **`HumanApprovalGuardrail`** (guardrail middleware) — registry a
 Expose a `ToolRegistry` (and optionally an `Agent` via `ask_agent` meta-tool) to external MCP clients.
 
 ```ts
-import { serveMCP, ToolRegistry } from 'agentic-fabric/mcp-server';
+import { serveMCP, ToolRegistry } from 'agent-kit/mcp-server';
 
 await serveMCP({
   name: 'my-tools',
@@ -305,16 +305,16 @@ await serveMCP({
 | `stdio` | Newline-delimited JSON-RPC on stdin/stdout |
 | `sse` | HTTP+SSE; default port **3001**, host **127.0.0.1** |
 
-**CLI:** `npx agentic-serve --transport stdio` (see `src/cli/serve.ts`)
+**CLI:** `npx agent-kit-serve --transport stdio` (see `src/cli/serve.ts`)
 
-**Subpath:** `agentic-fabric/mcp-server` — lightweight import without full tools barrel.
+**Subpath:** `agent-kit/mcp-server` — lightweight import without full tools barrel.
 
 **Errors:** `MCPProtocolError`, `ConfigurationError` for invalid server config.
 
 ---
 
-## Subpath `agentic-fabric/tools`
+## Subpath `agent-kit/tools`
 
 Exports tools, registry errors, MCP **client** provider/registry, transports, JSON-RPC types, Zod tools, approval handlers.
 
-**Subpath `agentic-fabric/mcp-server`:** `MCPServer`, `serveMCP`, `ASK_AGENT_TOOL_NAME` only.
+**Subpath `agent-kit/mcp-server`:** `MCPServer`, `serveMCP`, `ASK_AGENT_TOOL_NAME` only.

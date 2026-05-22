@@ -1,5 +1,5 @@
 {
-  "name": "agentic-fabric-example-simple-chatbot",
+  "name": "agent-kit-example-simple-chatbot",
   "private": true,
   "type": "module",
   "description": "CLI chatbot with streaming responses",
@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "agentic-fabric": "file:../.."
+    "agent-kit": "file:../.."
   },
   "devDependencies": {
     "tsx": "^4.19.4",

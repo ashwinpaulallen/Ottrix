@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "name": "agentic-fabric",
+  "name": "agent-kit",
   "entryPoints": [
     "src/index.ts",
     "src/agent/index.ts",

@@ -20,6 +20,30 @@ import {
 
 const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
+interface FetchCallInit extends RequestInit {
+  body?: RequestInit['body'];
+}
+
+interface LangfuseBatchEvent {
+  type: string;
+  body: Record<string, unknown>;
+}
+
+interface LangfuseIngestionBody {
+  batch: LangfuseBatchEvent[];
+}
+
+interface WebhookPayloadItem {
+  traceId: string;
+}
+
+function parseJsonBody(body: RequestInit['body']): unknown {
+  if (typeof body !== 'string') {
+    throw new Error('Expected fetch body to be a JSON string');
+  }
+  return JSON.parse(body);
+}
+
 function sampleTrace(overrides: Partial<TraceData> = {}): TraceData {
   const start = Date.now() - 100;
   return {
@@ -79,33 +103,33 @@ describe('LangfuseExporter', () => {
     await exporter.shutdown();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0]!;
+    const [url, init] = fetchMock.mock.calls[0] as [string, FetchCallInit];
     expect(url).toBe('https://langfuse.test/api/public/ingestion');
     expect(init.method).toBe('POST');
-    expect(init.headers.Authorization).toBe(`Basic ${Buffer.from('pk:sk').toString('base64')}`);
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      `Basic ${Buffer.from('pk:sk').toString('base64')}`,
+    );
 
-    const body = JSON.parse(String(init.body));
+    const body = parseJsonBody(init.body) as LangfuseIngestionBody;
     expect(body.batch).toHaveLength(3);
 
-    const traceEvent = body.batch.find((event: { type: string }) => event.type === 'trace-create');
-    expect(traceEvent.body.id).toBe('trace-1');
-    expect(traceEvent.body.input).toBe('hello');
-    expect(traceEvent.body.output).toBe('world');
+    const traceEvent = body.batch.find((event) => event.type === 'trace-create');
+    expect(traceEvent?.body.id).toBe('trace-1');
+    expect(traceEvent?.body.input).toBe('hello');
+    expect(traceEvent?.body.output).toBe('world');
 
-    const generation = body.batch.find(
-      (event: { type: string }) => event.type === 'generation-create',
-    );
-    expect(generation.body.traceId).toBe('trace-1');
-    expect(generation.body.model).toBe('mock-model');
-    expect(generation.body.usage).toEqual({
+    const generation = body.batch.find((event) => event.type === 'generation-create');
+    expect(generation?.body.traceId).toBe('trace-1');
+    expect(generation?.body.model).toBe('mock-model');
+    expect(generation?.body.usage).toEqual({
       promptTokens: 10,
       completionTokens: 5,
       totalTokens: 15,
     });
-    expect(generation.body.metadata.ttft_ms).toBe(12);
+    expect((generation?.body.metadata as { ttft_ms: number }).ttft_ms).toBe(12);
 
-    const spanEvent = body.batch.find((event: { type: string }) => event.type === 'span-create');
-    expect(spanEvent.body.name).toBe('tool.execute');
+    const spanEvent = body.batch.find((event) => event.type === 'span-create');
+    expect(spanEvent?.body.name).toBe('tool.execute');
   });
 
   it('flushes buffered traces on interval', async () => {
@@ -154,11 +178,11 @@ describe('WebhookExporter', () => {
     await exporter.export(sampleTrace({ traceId: 'b' }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    const [, init] = fetchMock.mock.calls[0]!;
-    const payload = JSON.parse(String(init.body));
+    const [, init] = fetchMock.mock.calls[0] as [string, FetchCallInit];
+    const payload = parseJsonBody(init.body) as WebhookPayloadItem[];
     expect(payload).toHaveLength(2);
-    expect(payload[0].traceId).toBe('a');
-    expect(payload[1].traceId).toBe('b');
+    expect(payload[0]?.traceId).toBe('a');
+    expect(payload[1]?.traceId).toBe('b');
   });
 
   it('retries with backoff on failure', async () => {

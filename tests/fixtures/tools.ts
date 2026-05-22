@@ -2,7 +2,7 @@ import { FunctionTool } from '../../src/tools/function-tool.js';
 
 /** In-memory file store for the mock file reader tool. */
 const fileStore = new Map<string, string>([
-  ['readme.txt', 'Welcome to agentic-fabric.'],
+  ['readme.txt', 'Welcome to agent-kit.'],
   ['config.json', '{"debug": true}'],
 ]);
 

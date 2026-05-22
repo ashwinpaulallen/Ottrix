@@ -213,7 +213,7 @@ export class Agent {
       usages.push(completion.usage);
       lastModel = completion.model;
 
-      const thinkingStep = this.recordStep(steps, {
+      await this.recordStep(steps, {
         type: 'thinking',
         content: {
           content: completion.content,
@@ -227,7 +227,7 @@ export class Agent {
 
       if (isTextOnlyResponse(completion.content)) {
         finalResponse = await this.validateOutput(extractTextFromContent(completion.content));
-        this.recordStep(steps, {
+        await this.recordStep(steps, {
           type: 'response',
           content: { text: finalResponse },
           tokenUsage: completion.usage,
@@ -297,8 +297,6 @@ export class Agent {
         finalResponse = extractTextFromContent(completion.content) || finalResponse;
         break;
       }
-
-      void thinkingStep;
     }
 
     if (!finalResponse && stopReason === 'completed') {
@@ -879,7 +877,7 @@ export class Agent {
       messages.push(buildAssistantMessage(completion.content));
       currentText = await this.validateOutput(extractTextFromContent(completion.content));
 
-      this.recordStep(steps, {
+      await this.recordStep(steps, {
         type: 'response',
         content: { text: currentText, structuredRetry: true },
         tokenUsage: completion.usage,
@@ -989,7 +987,7 @@ export class Agent {
     const systemIndex = messages.findIndex((message) => message.role === 'system');
     let systemPrompt =
       systemIndex >= 0
-        ? extractTextFromContent(messages[systemIndex]!.content)
+        ? extractTextFromContent(messages[systemIndex].content)
         : this.config.systemPrompt;
     let responseFormat: CompletionParams['responseFormat'] = 'text';
 
@@ -1077,7 +1075,7 @@ export class Agent {
     const resultBlocks: ReturnType<typeof buildToolResultBlock>[] = [];
 
     for (const toolUse of toolUses) {
-      this.recordStep(steps, {
+      await this.recordStep(steps, {
         type: 'tool_call',
         content: { id: toolUse.id, name: toolUse.name, input: toolUse.input },
       });
@@ -1087,7 +1085,7 @@ export class Agent {
         const warning = `Tool "${toolUse.name}" was blocked by onToolCall`;
         const block = buildToolResultBlock(toolUse.id, null, warning);
         resultBlocks.push(block);
-        this.recordStep(steps, {
+        await this.recordStep(steps, {
           type: 'tool_result',
           content: { id: toolUse.id, name: toolUse.name, success: false, error: warning },
         });
@@ -1097,7 +1095,7 @@ export class Agent {
       const guardrailBlock = await this.applyToolGuardrails(toolUse, steps);
       if (guardrailBlock) {
         resultBlocks.push(guardrailBlock.block);
-        this.recordStep(steps, {
+        await this.recordStep(steps, {
           type: 'tool_result',
           content: {
             id: toolUse.id,
@@ -1117,7 +1115,7 @@ export class Agent {
         const reason = getToolApprovalDenialReason(exec.result!);
         const block = buildToolResultBlock(toolUse.id, null, denialMessage);
         resultBlocks.push(block);
-        this.recordStep(steps, {
+        await this.recordStep(steps, {
           type: 'tool_result',
           content: {
             id: toolUse.id,
@@ -1160,7 +1158,7 @@ export class Agent {
       const block = buildToolResultBlock(toolUse.id, toolOutput, toolMessage);
       resultBlocks.push(block);
 
-      this.recordStep(steps, {
+      await this.recordStep(steps, {
         type: 'tool_result',
         content: {
           id: toolUse.id,
@@ -1272,13 +1270,13 @@ export class Agent {
     return result !== false;
   }
 
-  private recordStep(
+  private async recordStep(
     steps: AgentStep[],
     partial: Omit<AgentStep, 'timestamp'>,
-  ): AgentStep {
+  ): Promise<AgentStep> {
     const step: AgentStep = { ...partial, timestamp: Date.now() };
     steps.push(step);
-    this.config.onStep?.(step);
+    await this.config.onStep?.(step);
     return step;
   }
 

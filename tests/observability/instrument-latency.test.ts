@@ -79,8 +79,8 @@ describe('instrumentProvider latency attributes', () => {
       telemetry,
     );
 
-    for await (const _chunk of provider.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
-      // drain stream
+    for await (const chunk of provider.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      void chunk;
     }
 
     const span = exporter.spans.find((entry) => entry.name === 'llm.stream');
@@ -117,8 +117,8 @@ describe('instrumentProvider latency attributes', () => {
       telemetry,
     );
 
-    for await (const _chunk of provider.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
-      // drain stream
+    for await (const chunk of provider.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      void chunk;
     }
 
     const inputTokens = exporter.metrics.filter(

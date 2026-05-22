@@ -1,5 +1,5 @@
 {
-  "name": "agentic-fabric-example-custom-provider",
+  "name": "agent-kit-example-custom-provider",
   "private": true,
   "type": "module",
   "description": "Custom BaseProvider implementation",
@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "agentic-fabric": "file:../.."
+    "agent-kit": "file:../.."
   },
   "devDependencies": {
     "tsx": "^4.19.4",

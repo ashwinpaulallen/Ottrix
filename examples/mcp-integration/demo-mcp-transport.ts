@@ -1,4 +1,4 @@
-import type { JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, MCPToolDefinition, MCPTransport } from 'agentic-fabric/tools';
+import type { JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, MCPToolDefinition, MCPTransport } from 'agent-kit/tools';
 
 /**
  * In-memory MCP transport for examples.

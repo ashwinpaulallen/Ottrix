@@ -1,21 +1,21 @@
-# agentic-fabric
+# agent-kit
 
 **TypeScript framework for building production LLM agents** — ReAct loop, structured output, tool calling, memory, guardrails, observability, evals, multi-agent workflows, and [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) client and server support. Vendor-neutral: Anthropic Claude, OpenAI-compatible APIs, and local Ollama via native `fetch` (no `@anthropic-ai/sdk` or `openai` npm package required).
 
-[![npm version](https://img.shields.io/npm/v/agentic-fabric.svg)](https://www.npmjs.com/package/agentic-fabric)
-[![CI](https://img.shields.io/github/actions/workflow/status/ashwinpaulallen/agent-fabric/test.yml?branch=main&logo=githubactions&label=CI)](https://github.com/ashwinpaulallen/agent-fabric/actions/workflows/test.yml)
+[![npm version](https://img.shields.io/npm/v/agent-kit.svg)](https://www.npmjs.com/package/agent-kit)
+[![CI](https://img.shields.io/github/actions/workflow/status/ashwinpaulallen/agent-kit/test.yml?branch=main&logo=githubactions&label=CI)](https://github.com/ashwinpaulallen/agent-kit/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/node/v/agentic-fabric)](https://www.npmjs.com/package/agentic-fabric)
+[![Node](https://img.shields.io/node/v/agent-kit)](https://www.npmjs.com/package/agent-kit)
 
 > **Keywords:** AI agent · LLM framework · TypeScript · ReAct · tool use · MCP · multi-agent · structured output · evals · Claude · GPT · Ollama · guardrails · observability
 
-**Repository:** [github.com/ashwinpaulallen/agent-fabric](https://github.com/ashwinpaulallen/agent-fabric)
+**Repository:** [github.com/ashwinpaulallen/agent-kit](https://github.com/ashwinpaulallen/agent-kit)
 
 ---
 
 ## Table of contents
 
-- [Why agentic-fabric](#why-agentic-fabric)
+- [Why agent-kit](#why-agent-kit)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick start](#quick-start)
@@ -33,16 +33,16 @@
 
 ---
 
-## Why agentic-fabric
+## Why agent-kit
 
-Use **agentic-fabric** when you need a **small, explicit TypeScript library** to run LLM agents in Node.js — not a heavy platform or Python stack.
+Use **agent-kit** when you need a **small, explicit TypeScript library** to run LLM agents in Node.js — not a heavy platform or Python stack.
 
 | You get | Details |
 |---------|---------|
 | **ReAct agent loop** | Call the model, execute tools, repeat until a final answer or limit |
 | **Structured output** | Validate final responses with Zod schemas and automatic retries |
 | **Tool calling** | JSON Schema (`FunctionTool`) or Zod (`createTool`) with typed I/O |
-| **MCP** | Connect to external MCP servers **and** host your own via `serveMCP` / `agentic-serve` |
+| **MCP** | Connect to external MCP servers **and** host your own via `serveMCP` / `agent-kit-serve` |
 | **Multi-agent workflows** | Sequential, parallel, router, hierarchical, **supervisor**, and **DAG** (with suspend/resume) |
 | **Memory** | Working, semantic (RAG), episodic, and **observational** (LLM fact extraction) |
 | **Guardrails** | PII, budgets, content filters, human approval, **prompt injection protection (on by default)** |
@@ -65,15 +65,15 @@ Ideal for backend services, CLI agents, automation scripts, internal copilots, a
 ## Installation
 
 ```bash
-npm install agentic-fabric
+npm install agent-kit
 ```
 
 ```bash
 # yarn
-yarn add agentic-fabric
+yarn add agent-kit
 
 # pnpm
-pnpm add agentic-fabric
+pnpm add agent-kit
 ```
 
 **Optional peer dependencies:**
@@ -99,7 +99,7 @@ export ANTHROPIC_API_KEY=your-api-key-here
 Minimal agent in under 10 lines:
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 const agent = createAgent({
   provider: 'anthropic',
@@ -116,7 +116,7 @@ Prompt injection protection, PII detection, and step/token budgets are **enabled
 One-liner helper:
 
 ```ts
-import { quickAgent } from 'agentic-fabric';
+import { quickAgent } from 'agent-kit';
 
 const answer = await quickAgent('Summarize TypeScript in one sentence.', {
   provider: 'anthropic',
@@ -132,7 +132,7 @@ console.log(answer);
 ### Structured output (Zod)
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 import { z } from 'zod';
 
 const schema = z.object({ name: z.string(), age: z.number() });
@@ -143,7 +143,7 @@ const { parsedOutput } = await agent.run('Introduce Ada Lovelace', { outputSchem
 ### Zod tools
 
 ```ts
-import { createAgent, createTool } from 'agentic-fabric';
+import { createAgent, createTool } from 'agent-kit';
 import { z } from 'zod';
 
 const weather = createTool({
@@ -159,7 +159,7 @@ const agent = createAgent({ provider: 'anthropic', tools: [weather] });
 ### Provider fallback chain
 
 ```ts
-import { ProviderRegistry, createAnthropicProvider, createOpenAIProvider } from 'agentic-fabric/providers';
+import { ProviderRegistry, createAnthropicProvider, createOpenAIProvider } from 'agent-kit/providers';
 
 const registry = new ProviderRegistry()
   .register('anthropic', createAnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY! }))
@@ -174,19 +174,19 @@ await registry.complete({ messages: [{ role: 'user', content: 'Hello' }] });
 Expose tools (and optionally an agent) to external MCP clients:
 
 ```ts
-import { serveMCP, ToolRegistry } from 'agentic-fabric/mcp-server';
+import { serveMCP, ToolRegistry } from 'agent-kit/mcp-server';
 
 const registry = new ToolRegistry();
 registry.register(myTool);
 await serveMCP({ name: 'my-tools', version: '1.0.0', toolRegistry: registry, transport: 'stdio' });
 ```
 
-CLI: `npx agentic-serve --transport stdio`
+CLI: `npx agent-kit-serve --transport stdio`
 
 ### Supervisor pattern
 
 ```ts
-import { createSupervisor } from 'agentic-fabric';
+import { createSupervisor } from 'agent-kit';
 
 const pipeline = createSupervisor({
   provider,
@@ -202,7 +202,7 @@ await pipeline.run('Write a blog post about RLHF');
 ### DAG workflows with suspend / resume
 
 ```ts
-import { DAGBuilder } from 'agentic-fabric';
+import { DAGBuilder } from 'agent-kit';
 
 const workflow = new DAGBuilder()
   .addStep('draft', { name: 'Draft', execute: async (input) => `Draft: ${input}` })
@@ -224,7 +224,7 @@ const done = await workflow.resume(suspended.suspendedState!, {
 ### Evals
 
 ```ts
-import { evaluate, ExactMatchScorer, ContainsScorer } from 'agentic-fabric/evals';
+import { evaluate, ExactMatchScorer, ContainsScorer } from 'agent-kit/evals';
 
 const report = await evaluate({
   agent,
@@ -237,8 +237,8 @@ console.log(report.aggregates.exact_match?.mean);
 ### Observability (Langfuse)
 
 ```ts
-import { getTelemetry, LangfuseExporter } from 'agentic-fabric';
-// or: import { LangfuseExporter } from 'agentic-fabric/exporters/langfuse';
+import { getTelemetry, LangfuseExporter } from 'agent-kit';
+// or: import { LangfuseExporter } from 'agent-kit/exporters/langfuse';
 
 getTelemetry().setExporter(
   new LangfuseExporter({
@@ -253,7 +253,7 @@ getTelemetry().setExporter(
 Enabled automatically on every `createAgent()` call. Customize or opt out:
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 const agent = createAgent({ provider: 'anthropic' }); // blocks injection by default
 
@@ -271,7 +271,7 @@ const open = createAgent({ guardrails: { promptInjection: false } });
 ### Streaming responses
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 const agent = createAgent({ provider: 'anthropic', apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -286,7 +286,7 @@ for await (const event of agent.stream('Explain quantum entanglement briefly.'))
 ### Agent with tools (function calling)
 
 ```ts
-import { createAgent, FunctionTool } from 'agentic-fabric';
+import { createAgent, FunctionTool } from 'agent-kit';
 
 const weatherTool = new FunctionTool({
   name: 'get_weather',
@@ -313,8 +313,8 @@ console.log(result.response);
 ### Custom agent (full control)
 
 ```ts
-import { Agent, ToolRegistry, FunctionTool } from 'agentic-fabric';
-import { createAnthropicProvider } from 'agentic-fabric/providers';
+import { Agent, ToolRegistry, FunctionTool } from 'agent-kit';
+import { createAnthropicProvider } from 'agent-kit/providers';
 
 const registry = new ToolRegistry();
 registry.register(
@@ -347,8 +347,8 @@ const { response } = await agent.run('Echo the word hello');
 ### Multi-agent pipeline (sequential)
 
 ```ts
-import { Agent, SequentialWorkflow } from 'agentic-fabric';
-import { createAnthropicProvider } from 'agentic-fabric/providers';
+import { Agent, SequentialWorkflow } from 'agent-kit';
+import { createAnthropicProvider } from 'agent-kit/providers';
 
 const provider = createAnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
@@ -370,7 +370,7 @@ console.log(output.finalResult.response);
 ### OpenAI-compatible API
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 const agent = createAgent({
   provider: 'openai',
@@ -387,7 +387,7 @@ ollama serve && ollama pull llama3.1
 ```
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 const agent = createAgent({
   provider: 'ollama',
@@ -399,7 +399,7 @@ const agent = createAgent({
 ### Guardrails and budgets
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 const agent = createAgent({
   provider: 'anthropic',
@@ -416,13 +416,13 @@ const agent = createAgent({
 ### Environment-based configuration
 
 ```ts
-import { loadConfig, createAgent } from 'agentic-fabric';
+import { loadConfig, createAgent } from 'agent-kit';
 
 const { config } = loadConfig();
 const agent = createAgent({ provider: config.defaultProvider, model: config.defaultModel });
 ```
 
-Example `.agenticrc.json`:
+Example `.agentkitrc.json` (legacy `.agenticrc.json` is also supported):
 
 ```json
 {
@@ -460,7 +460,7 @@ Example `.agenticrc.json`:
 ├────────────┴─────────────┴──────────────┴─────────────┴────────────┤
 │  Providers — Anthropic · OpenAI · Ollama · fallback chain · breaker  │
 ├──────────────────────────────────────────────────────────────────────┤
-│  Config — loadConfig() · .agenticrc · AGENTIC_* env vars             │
+│  Config — loadConfig() · .agentkitrc · AGENT_KIT_* env vars             │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -498,7 +498,7 @@ Release history: [CHANGELOG.md](CHANGELOG.md) · Upgrade notes: [MIGRATION.md](M
 Extend any HTTP API with [`BaseProvider`](docs/providers.md):
 
 ```ts
-import { BaseProvider } from 'agentic-fabric/providers';
+import { BaseProvider } from 'agent-kit/providers';
 // Implement _rawComplete, _rawStream, _countTokens
 ```
 
@@ -510,15 +510,15 @@ Common environment variables:
 
 | Variable | Description |
 |----------|-------------|
+| `AGENT_KIT_PROVIDER` / `AGENT_KIT_DEFAULT_PROVIDER` | Default provider (`AGENTIC_*` legacy aliases supported) |
+| `AGENT_KIT_MODEL` / `AGENT_KIT_DEFAULT_MODEL` | Default model id |
+| `AGENT_KIT_MAX_STEPS` | Max ReAct iterations (default `10`) |
+| `AGENT_KIT_CONFIG_PATH` | Path to config JSON/YAML |
+| `AGENT_KIT_TELEMETRY_ENABLED` | `true` / `false` |
+| `AGENT_KIT_TELEMETRY_EXPORTER` | `console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook` |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `OPENAI_API_KEY` | OpenAI (or compatible) API key |
 | `OLLAMA_BASE_URL` | Ollama server (default `http://localhost:11434`) |
-| `AGENTIC_PROVIDER` | Default provider: `anthropic`, `openai`, `ollama` |
-| `AGENTIC_MODEL` | Default model id |
-| `AGENTIC_MAX_STEPS` | Max ReAct iterations (default `10`) |
-| `AGENTIC_CONFIG_PATH` | Path to `.agenticrc` JSON/YAML |
-| `AGENTIC_TELEMETRY_ENABLED` | `true` / `false` |
-| `AGENTIC_TELEMETRY_EXPORTER` | `console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook` |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Langfuse trace export |
 | `BRAINTRUST_API_KEY`, `BRAINTRUST_PROJECT_NAME` | Braintrust trace export |
 
@@ -532,21 +532,21 @@ Tree-shakeable subpath imports:
 
 | Import | Use case |
 |--------|----------|
-| `agentic-fabric` | Main API — `Agent`, `createAgent`, evals, guardrails, orchestration |
-| `agentic-fabric/providers` | Provider classes, registry, fallback chain |
-| `agentic-fabric/tools` | Tools, MCP client, `ToolRegistry` |
-| `agentic-fabric/mcp-server` | `MCPServer`, `serveMCP` (lightweight MCP hosting) |
-| `agentic-fabric/memory` | Memory modules + observational memory |
-| `agentic-fabric/orchestration` | Workflows, supervisor, DAG, `WorkflowLoader` |
-| `agentic-fabric/guardrails` | Middleware and validators |
-| `agentic-fabric/observability` | Logger, telemetry, replay |
-| `agentic-fabric/evals` | `evaluate()`, scorers, `EvalReporter` |
-| `agentic-fabric/exporters/langfuse` | Langfuse trace exporter (also Braintrust, webhook) |
-| `agentic-fabric/types` | TypeScript types only |
+| `agent-kit` | Main API — `Agent`, `createAgent`, evals, guardrails, orchestration |
+| `agent-kit/providers` | Provider classes, registry, fallback chain |
+| `agent-kit/tools` | Tools, MCP client, `ToolRegistry` |
+| `agent-kit/mcp-server` | `MCPServer`, `serveMCP` (lightweight MCP hosting) |
+| `agent-kit/memory` | Memory modules + observational memory |
+| `agent-kit/orchestration` | Workflows, supervisor, DAG, `WorkflowLoader` |
+| `agent-kit/guardrails` | Middleware and validators |
+| `agent-kit/observability` | Logger, telemetry, replay |
+| `agent-kit/evals` | `evaluate()`, scorers, `EvalReporter` |
+| `agent-kit/exporters/langfuse` | Langfuse trace exporter (also Braintrust, webhook) |
+| `agent-kit/types` | TypeScript types only |
 
 **ESM-first** (`"type": "module"`) with CommonJS builds (`.cjs`) for `require()`.
 
-CLI: **`agentic-serve`** — host an MCP server from the command line.
+CLI: **`agent-kit-serve`** — host an MCP server from the command line.
 
 ---
 
@@ -563,8 +563,8 @@ CLI: **`agentic-serve`** — host an MCP server from the command line.
 Run examples locally:
 
 ```bash
-git clone https://github.com/ashwinpaulallen/agent-fabric.git
-cd agent-fabric && npm install && npm run build
+git clone https://github.com/ashwinpaulallen/agent-kit.git
+cd agent-kit && npm install && npm run build
 cd examples/simple-chatbot && npm install && npm start
 ```
 
@@ -586,9 +586,9 @@ npm run docs
 
 ## Comparison
 
-How **agentic-fabric** compares for **TypeScript / Node.js** agent projects:
+How **agent-kit** compares for **TypeScript / Node.js** agent projects:
 
-| | agentic-fabric | LangChain | CrewAI | AutoGen |
+| | agent-kit | LangChain | CrewAI | AutoGen |
 |---|:---:|:---:|:---:|:---:|
 | Primary language | **TypeScript** | Python / JS | Python | Python / .NET |
 | Vendor SDK required | **No** (fetch) | Often | Varies | Varies |
@@ -603,8 +603,8 @@ How **agentic-fabric** compares for **TypeScript / Node.js** agent projects:
 ## Development
 
 ```bash
-git clone https://github.com/ashwinpaulallen/agent-fabric.git
-cd agent-fabric
+git clone https://github.com/ashwinpaulallen/agent-kit.git
+cd agent-kit
 npm install
 npm test
 npm run build

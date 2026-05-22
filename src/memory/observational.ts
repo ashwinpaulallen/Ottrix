@@ -56,28 +56,33 @@ export class InMemoryObservationStore implements ObservationStore {
   private readonly observations = new Map<string, Observation>();
 
   /** @inheritdoc */
-  async save(observation: Observation): Promise<void> {
+  save(observation: Observation): Promise<void> {
     this.observations.set(observation.id, observation);
+    return Promise.resolve();
   }
 
   /** @inheritdoc */
-  async getAll(): Promise<Observation[]> {
-    return [...this.observations.values()];
+  getAll(): Promise<Observation[]> {
+    return Promise.resolve([...this.observations.values()]);
   }
 
   /** @inheritdoc */
-  async getByCategory(category: string): Promise<Observation[]> {
-    return [...this.observations.values()].filter((obs) => obs.category === category);
+  getByCategory(category: string): Promise<Observation[]> {
+    return Promise.resolve(
+      [...this.observations.values()].filter((obs) => obs.category === category),
+    );
   }
 
   /** @inheritdoc */
-  async delete(id: string): Promise<void> {
+  delete(id: string): Promise<void> {
     this.observations.delete(id);
+    return Promise.resolve();
   }
 
   /** @inheritdoc */
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
     this.observations.clear();
+    return Promise.resolve();
   }
 }
 

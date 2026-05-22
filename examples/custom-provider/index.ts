@@ -9,7 +9,7 @@ import {
   type CompletionParams,
   type CompletionResult,
   type StreamChunk,
-} from 'agentic-fabric';
+} from 'agent-kit';
 
 /** Hypothetical vendor API — plug in real HTTP calls inside `_rawComplete` / `_rawStream`. */
 class HypotheticalProvider extends BaseProvider {

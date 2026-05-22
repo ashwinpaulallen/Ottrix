@@ -216,7 +216,7 @@ Per-provider circuit breaker integrated into `ProviderRegistry` fallback executi
 
 **Exports:** `CircuitBreaker`, `CircuitOpenError`, `isProviderCircuitOpen`, `computeProviderBackoffMs`
 
-Also exported from root `agentic-fabric` for advanced custom wiring.
+Also exported from root `agent-kit` for advanced custom wiring.
 
 ---
 
@@ -230,5 +230,5 @@ Registry tracks rolling latency per provider for `selectProvider` sorting (lower
 
 ## Subpath exports
 
-`agentic-fabric/providers` — full barrel  
-`agentic-fabric/providers/anthropic` · `/openai` · `/ollama` · `/base` · `/registry` · `/errors` — individual modules
+`agent-kit/providers` — full barrel  
+`agent-kit/providers/anthropic` · `/openai` · `/ollama` · `/base` · `/registry` · `/errors` — individual modules

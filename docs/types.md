@@ -2,7 +2,7 @@
 
 Source: `src/types/`
 
-The types package is **type-only** at runtime (no implementations in this folder). Import from `agentic-fabric/types` or the root package re-exports.
+The types package is **type-only** at runtime (no implementations in this folder). Import from `agent-kit/types` or the root package re-exports.
 
 ## Messages (`messages.ts`)
 
@@ -90,23 +90,23 @@ Stream chunk `done` data: `{ stopReason: string; usage?: TokenUsage }`.
 
 ## Evals (`src/evals/types.ts`)
 
-Import types from `agentic-fabric/evals` or root package:
+Import types from `agent-kit/evals` or root package:
 
 `EvalDatasetEntry`, `EvalResult`, `ScoreResult`, `EvalReport`, `AggregateScore`, `EvalRunConfig`
 
 ## Guardrails injection types (`src/guardrails/injection.ts`)
 
-Export from `agentic-fabric/guardrails`:
+Export from `agent-kit/guardrails`:
 
 `InjectionDetection`, `InjectionGuardrailMode`, `InjectionSeverity`, `InjectionStrictness`, `PromptInjectionGuardrailOptions`
 
-Runtime guardrail **handlers** and middleware types live in `src/guardrails/types.ts` and export from `agentic-fabric/guardrails`.
+Runtime guardrail **handlers** and middleware types live in `src/guardrails/types.ts` and export from `agent-kit/guardrails`.
 
 ---
 
 ## Root re-exports
 
-`agentic-fabric` also re-exports these type names from the main entry:
+`agent-kit` also re-exports these type names from the main entry:
 
 `ToolDefinition`, `ToolResult`, `ToolExecutor`, `JSONSchema`, `MemoryProvider`, `MemoryEntry`, `GuardrailConfig`, plus all agent and provider types listed in `src/index.ts`.
 
@@ -115,8 +115,8 @@ Runtime guardrail **handlers** and middleware types live in `src/guardrails/type
 ## Version constant
 
 ```ts
-import { AGENTIC_FABRIC_VERSION } from 'agentic-fabric';
-// '2.0.0' — matches package.json
+import { AGENT_KIT_VERSION } from 'agent-kit';
+// '1.0.0' — matches package.json
 ```
 
-`AGENT_FABRIC_VERSION` is a deprecated alias for the same value.
+`AGENTIC_FABRIC_VERSION` and `AGENT_FABRIC_VERSION` are deprecated aliases.

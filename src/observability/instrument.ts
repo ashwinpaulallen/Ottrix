@@ -9,7 +9,7 @@ import type { ToolResult } from '../types/tools.js';
 import { ToolRegistry } from '../tools/registry.js';
 import type { Telemetry } from './telemetry.js';
 
-const INSTRUMENTED = Symbol.for('agentic-fabric.observability.instrumented');
+const INSTRUMENTED = Symbol.for('agent-kit.observability.instrumented');
 
 /** Whether a provider was already wrapped by {@link instrumentProvider}. */
 export function isInstrumentedProvider(provider: CompletionProvider): boolean {

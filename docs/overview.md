@@ -1,7 +1,7 @@
 # Overview
 
-**Package name:** `agentic-fabric`  
-**Version constant:** `AGENTIC_FABRIC_VERSION` → `'2.0.0'` (deprecated alias: `AGENT_FABRIC_VERSION`)  
+**Package name:** `agent-kit`  
+**Version constant:** `AGENT_KIT_VERSION` → `'1.0.0'` (deprecated aliases: `AGENTIC_FABRIC_VERSION`, `AGENT_FABRIC_VERSION`)  
 **Node.js:** `>=20` (20.x, 22.x, 24.x; CI tests 20, 22, and 24)  
 **Module format:** ESM (`"type": "module"`); CommonJS builds ship as `.cjs` alongside `.js`.
 
@@ -18,21 +18,21 @@ Source (`src/`), tests, and examples are not included in the tarball.
 
 | Import path | Built file | Purpose |
 |-------------|------------|---------|
-| `agentic-fabric` | `dist/index.js` | Main public API |
-| `agentic-fabric/types` | `dist/types/index.js` | Shared TypeScript types |
-| `agentic-fabric/providers` | `dist/providers/index.js` | Provider implementations |
-| `agentic-fabric/providers/*` | `dist/providers/*.js` | Individual provider modules |
-| `agentic-fabric/tools` | `dist/tools/index.js` | Tools and MCP client |
-| `agentic-fabric/mcp-server` | `dist/tools/mcp-server.js` | `MCPServer`, `serveMCP` |
-| `agentic-fabric/memory` | `dist/memory/index.js` | Memory modules |
-| `agentic-fabric/orchestration` | `dist/orchestration/index.js` | Multi-agent workflows |
-| `agentic-fabric/guardrails` | `dist/guardrails/index.js` | Guardrail middleware |
-| `agentic-fabric/observability` | `dist/observability/index.js` | Logging, telemetry, replay |
-| `agentic-fabric/agent` | `dist/agent/index.js` | Agent internals |
-| `agentic-fabric/evals` | `dist/evals/index.js` | Evaluation framework |
-| `agentic-fabric/exporters/*` | `dist/observability/exporters/*.js` | Langfuse, Braintrust, webhook exporters |
+| `agent-kit` | `dist/index.js` | Main public API |
+| `agent-kit/types` | `dist/types/index.js` | Shared TypeScript types |
+| `agent-kit/providers` | `dist/providers/index.js` | Provider implementations |
+| `agent-kit/providers/*` | `dist/providers/*.js` | Individual provider modules |
+| `agent-kit/tools` | `dist/tools/index.js` | Tools and MCP client |
+| `agent-kit/mcp-server` | `dist/tools/mcp-server.js` | `MCPServer`, `serveMCP` |
+| `agent-kit/memory` | `dist/memory/index.js` | Memory modules |
+| `agent-kit/orchestration` | `dist/orchestration/index.js` | Multi-agent workflows |
+| `agent-kit/guardrails` | `dist/guardrails/index.js` | Guardrail middleware |
+| `agent-kit/observability` | `dist/observability/index.js` | Logging, telemetry, replay |
+| `agent-kit/agent` | `dist/agent/index.js` | Agent internals |
+| `agent-kit/evals` | `dist/evals/index.js` | Evaluation framework |
+| `agent-kit/exporters/*` | `dist/observability/exporters/*.js` | Langfuse, Braintrust, webhook exporters |
 
-CLI bin: **`agentic-serve`** → `dist/cli/serve.js` (MCP server hosting).
+CLI bin: **`agent-kit-serve`** → `dist/cli/serve.js` (MCP server hosting).
 
 ## Architectural layers
 
@@ -67,7 +67,7 @@ Built-in LLM providers do **not** require vendor SDK packages. They call HTTP AP
 | Zod tools | `createTool`, `ZodTool`, `isZodTool` |
 | Tool approval (HITL) | `ApprovalHandler`, `requiresApproval` metadata, registry approval handlers |
 | Provider resilience | `setFallbackChain`, `CircuitBreaker`, `CircuitOpenError` |
-| MCP server | `MCPServer`, `serveMCP`, `agentic-serve` CLI |
+| MCP server | `MCPServer`, `serveMCP`, `agent-kit-serve` CLI |
 | Observational memory | `ObservationalMemory`, `InMemoryObservationStore` |
 | Supervisor | `SupervisorWorkflow`, `createSupervisor` |
 | DAG workflows | `DAGWorkflow`, `DAGBuilder`, suspend/resume, `InMemoryStateStore` |

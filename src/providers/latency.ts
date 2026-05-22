@@ -25,9 +25,11 @@ export function unknownCompletionLatency(): CompletionLatency {
 }
 
 /** Ensure a {@link CompletionResult} includes latency metrics. */
-export function ensureCompletionLatency(result: CompletionResult): CompletionResult {
+export function ensureCompletionLatency(
+  result: Omit<CompletionResult, 'latency'> & { latency?: CompletionLatency },
+): CompletionResult {
   if (result.latency) {
-    return result;
+    return result as CompletionResult;
   }
 
   return {

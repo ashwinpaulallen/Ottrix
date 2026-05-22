@@ -1,4 +1,4 @@
-# agentic-fabric documentation
+# agent-kit documentation
 
 This folder documents **what is implemented** in the current codebase. It is derived from source under `src/` and does not describe planned or external features.
 

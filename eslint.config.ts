@@ -10,7 +10,7 @@ export default tseslint.config(
       'coverage/**',
       'docs/api/**',
       '.tmp-smoke/**',
-      'agentic-fabric-*.tgz',
+      'agent-kit-*.tgz',
     ],
   },
   eslint.configs.recommended,
@@ -23,6 +23,9 @@ export default tseslint.config(
         project: './tsconfig.json',
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
   {

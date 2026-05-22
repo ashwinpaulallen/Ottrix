@@ -162,7 +162,7 @@ Returns zero vectors (similarity search yields score 0 for all).
 
 ---
 
-## Exports (`agentic-fabric/memory`)
+## Exports (`agent-kit/memory`)
 
 `WorkingMemory`, `SemanticMemory`, `EpisodicMemory`, `ObservationalMemory`, `InMemoryObservationStore`, `InMemoryVectorStore`, `NoOpEmbeddingProvider`, `FetchEmbeddingProvider`, type `MemorySnapshot`.
 

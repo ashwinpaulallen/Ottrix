@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MetricsCollector } from '../../src/observability/metrics.js';
-import { InMemoryExporter, Telemetry } from '../../src/observability/telemetry.js';
+import { Telemetry } from '../../src/observability/telemetry.js';
 
 describe('Telemetry retention', () => {
   it('drops oldest finished spans when maxFinishedSpans is exceeded', () => {

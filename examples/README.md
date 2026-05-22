@@ -1,4 +1,4 @@
-# agentic-fabric examples
+# agent-kit examples
 
 Runnable examples that use **mock/demo providers** by default so no API keys are required.
 

@@ -54,12 +54,12 @@ export class McpStdioServerTransport implements MCPServerTransport {
   }
 
   /** @inheritdoc */
-  async start(
+  start(
     handler: MCPServerMessageHandler,
     options?: { onSessionConnect?: (session: MCPServerSession) => void },
   ): Promise<void> {
     if (this.running) {
-      return;
+      return Promise.resolve();
     }
     this.handler = handler;
     this.onSessionConnect = options?.onSessionConnect;
@@ -80,12 +80,13 @@ export class McpStdioServerTransport implements MCPServerTransport {
         this.signalHandlers.push({ signal, listener });
       }
     }
+    return Promise.resolve();
   }
 
   /** @inheritdoc */
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
     if (!this.running) {
-      return;
+      return Promise.resolve();
     }
     this.running = false;
 
@@ -97,6 +98,7 @@ export class McpStdioServerTransport implements MCPServerTransport {
     }
     this.signalHandlers = [];
     this.onSessionConnect = undefined;
+    return Promise.resolve();
   }
 
   /** @inheritdoc */

@@ -1,4 +1,4 @@
-import { Agent, createAgent } from 'agentic-fabric';
+import { Agent, createAgent } from 'agent-kit';
 import { DemoProvider } from '../shared/demo-provider.js';
 
 /** Real Anthropic when `ANTHROPIC_API_KEY` is set; otherwise deterministic demo provider. */

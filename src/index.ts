@@ -1,8 +1,11 @@
 /** Matches `package.json` version — update both when releasing. */
-export const AGENTIC_FABRIC_VERSION = '2.0.0' as const;
+export const AGENT_KIT_VERSION = '1.0.0' as const;
 
-/** @deprecated Use {@link AGENTIC_FABRIC_VERSION}. */
-export const AGENT_FABRIC_VERSION = AGENTIC_FABRIC_VERSION;
+/** @deprecated Use {@link AGENT_KIT_VERSION}. */
+export const AGENTIC_FABRIC_VERSION = AGENT_KIT_VERSION;
+
+/** @deprecated Use {@link AGENT_KIT_VERSION}. */
+export const AGENT_FABRIC_VERSION = AGENT_KIT_VERSION;
 
 // --- Core types (explicit exports avoid bundler type collisions) ---
 export type {

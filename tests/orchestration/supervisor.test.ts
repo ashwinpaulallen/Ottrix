@@ -3,6 +3,7 @@ import { Agent } from '../../src/agent/agent.js';
 import {
   createSupervisor,
   SupervisorWorkflow,
+  type SupervisorWorkflowOptions,
 } from '../../src/orchestration/supervisor.js';
 import type { CompletionParams, CompletionProvider, CompletionResult } from '../../src/types/provider.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
@@ -34,6 +35,12 @@ class DelayedCompletionProvider implements CompletionProvider {
   async countTokens(): Promise<number> {
     return 10;
   }
+
+  stream(): AsyncIterable<import('../../src/types/provider.js').StreamChunk> {
+    return (async function* () {
+      yield { type: 'done', data: { stopReason: 'stop' } };
+    })();
+  }
 }
 
 function createRegistrySupervisor(
@@ -42,7 +49,7 @@ function createRegistrySupervisor(
   options?: {
     maxDelegationRounds?: number;
     workerTimeout?: number;
-    onDelegation?: Parameters<typeof SupervisorWorkflow>[0]['onDelegation'];
+    onDelegation?: SupervisorWorkflowOptions['onDelegation'];
   },
 ): SupervisorWorkflow {
   const registry = new ToolRegistry();
@@ -153,8 +160,6 @@ describe('SupervisorWorkflow', () => {
 
     let workerCallCount = 0;
     const adaptiveWorkerProvider: CompletionProvider = {
-      completeCalls: 0,
-      lastCompleteParams: undefined,
       async complete(params: CompletionParams) {
         workerCallCount += 1;
         if (workerCallCount === 1) {
@@ -164,6 +169,11 @@ describe('SupervisorWorkflow', () => {
       },
       async countTokens() {
         return 10;
+      },
+      stream() {
+        return (async function* () {
+          yield { type: 'done', data: { stopReason: 'stop' } };
+        })();
       },
     };
 
@@ -453,5 +463,39 @@ describe('createSupervisor', () => {
     runCompleted = true;
 
     expect(thinkingCalls.length).toBeGreaterThan(0);
+  });
+
+  it('awaits async onSupervisorThinking before the supervisor continues', async () => {
+    let thinkingFinished = false;
+    const supervisorProvider = new MockCompletionProvider()
+      .enqueue(
+        toolUseCompletion(
+          [{ id: 'tu_1', name: 'delegate', input: { worker: 'writer', task: 'Draft intro' } }],
+          lightUsage,
+        ),
+      )
+      .enqueue(textCompletion('Published post.', lightUsage));
+
+    const writerProvider = new MockCompletionProvider().enqueue(
+      textCompletion('Intro paragraph.', lightUsage),
+    );
+
+    const pipeline = createSupervisor({
+      provider: supervisorProvider,
+      workers: {
+        writer: {
+          systemPrompt: 'You are a writing expert.',
+          provider: writerProvider,
+        },
+      },
+      onSupervisorThinking: async () => {
+        await delay(25);
+        thinkingFinished = true;
+      },
+    });
+
+    await pipeline.run('Write a blog post');
+
+    expect(thinkingFinished).toBe(true);
   });
 });

@@ -17,7 +17,14 @@ export function toIsoTimestamp(ms: number): string {
 
 /** Safely log exporter failures without throwing. */
 export function logExporterError(exporter: string, message: string, error?: unknown): void {
-  const detail = error instanceof Error ? error.message : error ? String(error) : '';
+  const detail =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : error === undefined || error === null
+          ? ''
+          : JSON.stringify(error);
   console.warn(`[${exporter}] ${message}${detail ? `: ${detail}` : ''}`);
 }
 

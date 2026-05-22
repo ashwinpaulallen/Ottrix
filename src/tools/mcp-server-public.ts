@@ -1,4 +1,4 @@
-/** Public subpath entry for `agentic-fabric/mcp-server`. */
+/** Public subpath entry for `agent-kit/mcp-server`. */
 export {
   MCPServer,
   ASK_AGENT_TOOL_NAME,

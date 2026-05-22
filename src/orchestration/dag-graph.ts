@@ -106,7 +106,7 @@ export function buildFinalOutput(
   outputs: Map<string, unknown>,
 ): unknown {
   if (terminalStepIds.length === 1) {
-    return outputs.get(terminalStepIds[0]!);
+    return outputs.get(terminalStepIds[0]);
   }
 
   const merged: Record<string, unknown> = {};

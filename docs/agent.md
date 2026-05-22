@@ -85,7 +85,7 @@ There is no dedicated `AgentError` class.
 | `guardrailMiddleware` | No | `GuardrailMiddleware` pipeline |
 | `maxSteps` | No | ReAct iteration cap |
 | `maxTokenBudget` | No | Cumulative token cap for run |
-| `onStep` | No | Called after each agent step |
+| `onStep` | No | Called after each agent step; may return `Promise<void>` to pause the run loop until it settles |
 | `onToolCall` | No | Called before tool execution |
 | `onError` | No | `(error, context) => 'retry' \| 'skip' \| 'abort'` |
 | `contextLimitTokens` | No | Context window budget (see ContextManager) |
@@ -226,6 +226,6 @@ Returns `GuardrailCheckResult` with `shouldStop` and `stopReason`. Does not thro
 
 ---
 
-## Subpath `agentic-fabric/agent`
+## Subpath `agent-kit/agent`
 
 Re-exports everything in `src/agent/index.ts` for advanced use (planner, reflector, context, helpers) without pulling the full root barrel.

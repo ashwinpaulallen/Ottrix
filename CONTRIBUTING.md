@@ -1,12 +1,12 @@
-# Contributing to agentic-fabric
+# Contributing to agent-kit
 
-Thank you for contributing to **agentic-fabric** (source repo: [agent-fabric](https://github.com/ashwinpaulallen/agent-fabric)). This guide covers how to extend the framework and submit changes.
+Thank you for contributing to **agent-kit**. This guide covers how to extend the framework and submit changes.
 
 ## Development setup
 
 ```bash
-git clone https://github.com/ashwinpaulallen/agent-fabric.git
-cd agent-fabric
+git clone https://github.com/ashwinpaulallen/agent-kit.git
+cd agent-kit
 npm install
 npm run build
 ```
@@ -120,4 +120,4 @@ The `prepublishOnly` script runs lint, typecheck, tests, build, export verificat
 
 ## Questions
 
-Open a [GitHub issue](https://github.com/ashwinpaulallen/agent-fabric/issues) for design questions or bugs.
+Open a [GitHub issue](https://github.com/ashwinpaulallen/agent-kit/issues) for design questions or bugs.

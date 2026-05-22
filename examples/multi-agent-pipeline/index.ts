@@ -2,7 +2,7 @@
  * Three-agent sequential pipeline: researcher → analyzer → writer.
  * Uses demo providers so no API keys are required.
  */
-import { Agent, SequentialWorkflow } from 'agentic-fabric';
+import { Agent, SequentialWorkflow } from 'agent-kit';
 import { DemoProvider } from '../shared/demo-provider.js';
 
 function stepAgent(name: string, reply: string): Agent {

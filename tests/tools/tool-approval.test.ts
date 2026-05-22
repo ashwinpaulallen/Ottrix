@@ -144,7 +144,7 @@ describe('ToolRegistry approval gates', () => {
         name: 'zod_tool',
         description: 'Zod',
         input: z.object({ x: z.string() }),
-        requiresApproval: true,
+        metadata: { requiresApproval: true },
         execute: async () => 'ok',
       }),
     );
@@ -271,9 +271,8 @@ describe('Agent tool approval', () => {
     const toolResultStep = result.steps.find(
       (s) => s.type === 'tool_result' && s.content && typeof s.content === 'object',
     );
-    expect(toolResultStep?.content).toMatchObject({
-      success: false,
-      error: expect.stringContaining('denied by the approval system'),
-    });
+    const toolResult = toolResultStep?.content as { success?: boolean; error?: string } | undefined;
+    expect(toolResult?.success).toBe(false);
+    expect(toolResult?.error).toContain('denied by the approval system');
   });
 });

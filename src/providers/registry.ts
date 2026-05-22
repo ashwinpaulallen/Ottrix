@@ -10,12 +10,7 @@ import { instrumentProvider } from '../observability/instrument.js';
 import type { Telemetry } from '../observability/telemetry.js';
 import {
   FallbackExecutor,
-  computeFallbackBackoffMs,
-  computeProviderBackoffMs,
-  isProviderCircuitOpen,
   normalizeFallbackChain,
-  shouldTryFallback,
-  classifyProviderError,
   type FallbackChainEntry,
   type FallbackChainInput,
   type FallbackExecutionEvent,

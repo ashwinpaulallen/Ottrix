@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { extractTextFromContent } from '../agent/messages.js';
 import type { ChatMessage } from '../types/messages.js';
 import type { CompletionProvider } from '../types/provider.js';
+import { stringifyUnknown } from '../utils/stringify.js';
 import type { AuditLogger } from './audit.js';
 import { completionText } from './middleware.js';
 import type {
@@ -296,7 +297,7 @@ export class PromptInjectionGuardrail implements GuardrailHandler, StatefulGuard
     const flags: string[] = [];
 
     for (let index = 0; index < messages.length; index += 1) {
-      const message = messages[index]!;
+      const message = messages[index];
       if (message.role !== 'user') {
         continue;
       }
@@ -358,7 +359,7 @@ export class PromptInjectionGuardrail implements GuardrailHandler, StatefulGuard
       return;
     }
 
-    const outputText = stringifyToolOutput(context.output);
+    const outputText = stringifyUnknown(context.output);
     if (!outputText) {
       return;
     }
@@ -729,20 +730,6 @@ function detectToneShift(response: string): InjectionDetection {
 function extractSystemPrompt(messages: ChatMessage[]): string {
   const systemMessage = messages.find((message) => message.role === 'system');
   return systemMessage ? extractTextFromContent(systemMessage.content) : '';
-}
-
-function stringifyToolOutput(output: unknown): string {
-  if (typeof output === 'string') {
-    return output;
-  }
-  if (output === undefined || output === null) {
-    return '';
-  }
-  try {
-    return JSON.stringify(output);
-  } catch {
-    return String(output);
-  }
 }
 
 function mergeDetections(detections: InjectionDetection[]): InjectionDetection {

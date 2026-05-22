@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No changes yet._
 
-## [2.0.0] - 2026-05-19
+## [1.0.0] - 2026-05-19
 
 ### Added
 
@@ -18,7 +18,7 @@ _No changes yet._
 Validate LLM responses against Zod schemas with automatic retries:
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 import { z } from 'zod';
 
 const personSchema = z.object({
@@ -38,7 +38,7 @@ const { parsedOutput } = await agent.run('Introduce Ada Lovelace', {
 Define tools with Zod input/output schemas via `createTool`:
 
 ```ts
-import { createTool } from 'agentic-fabric';
+import { createTool } from 'agent-kit';
 import { z } from 'zod';
 
 const weather = createTool({
@@ -54,7 +54,7 @@ const weather = createTool({
 `ProviderRegistry.setFallbackChain()` with per-provider circuit breakers:
 
 ```ts
-import { ProviderRegistry, createAnthropicProvider, createOpenAIProvider } from 'agentic-fabric/providers';
+import { ProviderRegistry, createAnthropicProvider, createOpenAIProvider } from 'agent-kit/providers';
 
 const registry = new ProviderRegistry()
   .register('anthropic', createAnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY! }))
@@ -69,21 +69,21 @@ const result = await registry.complete({ messages: [{ role: 'user', content: 'Hi
 Expose tools (and optionally an agent) to external MCP clients:
 
 ```ts
-import { serveMCP, ToolRegistry, FunctionTool } from 'agentic-fabric/mcp-server';
+import { serveMCP, ToolRegistry, FunctionTool } from 'agent-kit/mcp-server';
 
 const registry = new ToolRegistry();
 registry.register(myTool);
 await serveMCP({ name: 'my-tools', version: '1.0.0', toolRegistry: registry, transport: 'stdio' });
 ```
 
-CLI: `npx agentic-serve --help`
+CLI: `npx agent-kit-serve --help`
 
 #### Observational memory
 
 LLM-driven fact extraction with deduplication and contradiction handling:
 
 ```ts
-import { ObservationalMemory, InMemoryObservationStore } from 'agentic-fabric/memory';
+import { ObservationalMemory, InMemoryObservationStore } from 'agent-kit/memory';
 
 const memory = new ObservationalMemory({
   provider,
@@ -97,7 +97,7 @@ await memory.observe('User prefers metric units.');
 Delegate tasks to specialized worker agents:
 
 ```ts
-import { createSupervisor } from 'agentic-fabric';
+import { createSupervisor } from 'agent-kit';
 
 const pipeline = createSupervisor({
   provider,
@@ -115,7 +115,7 @@ const result = await pipeline.run('Write a blog post about RLHF');
 Build dependency graphs with parallelism, retries, timeouts, and human-in-the-loop suspend/resume:
 
 ```ts
-import { DAGBuilder } from 'agentic-fabric';
+import { DAGBuilder } from 'agent-kit';
 
 const workflow = new DAGBuilder()
   .addStep('draft', { name: 'Draft', execute: async (input) => `Draft: ${input}` })
@@ -134,7 +134,7 @@ const done = await workflow.resume(suspended.suspendedState!, {
 Run datasets against agents with pluggable scorers:
 
 ```ts
-import { evaluate, ExactMatchScorer, ContainsScorer } from 'agentic-fabric/evals';
+import { evaluate, ExactMatchScorer, ContainsScorer } from 'agent-kit/evals';
 
 const report = await evaluate({
   agent,
@@ -149,7 +149,7 @@ console.log(report.aggregates);
 Export OpenTelemetry-style traces to Langfuse, Braintrust, webhooks, or multiple backends:
 
 ```ts
-import { getTelemetry, LangfuseExporter } from 'agentic-fabric';
+import { getTelemetry, LangfuseExporter } from 'agent-kit';
 
 getTelemetry().setExporter(
   new LangfuseExporter({
@@ -159,14 +159,14 @@ getTelemetry().setExporter(
 );
 ```
 
-Subpath: `import { LangfuseExporter } from 'agentic-fabric/exporters/langfuse'`
+Subpath: `import { LangfuseExporter } from 'agent-kit/exporters/langfuse'`
 
 #### Prompt injection guardrails
 
 Enabled by default on every agent — blocks, flags, or sanitizes injection attempts:
 
 ```ts
-import { createAgent } from 'agentic-fabric';
+import { createAgent } from 'agent-kit';
 
 // Active by default — no extra config required
 const agent = createAgent({ provider: 'anthropic' });
@@ -180,36 +180,18 @@ const open = createAgent({ guardrails: { promptInjection: false } });
 
 ### Changed
 
-- Version bumped to **2.0.0** with expanded main entry exports and new subpaths: `./evals`, `./mcp-server`, `./exporters/*`
+- Package renamed from **`agentic-fabric`** to **`agent-kit`** (`agent-kit-serve` CLI, `AGENT_KIT_*` env vars, `.agentkitrc.*` config files; legacy names still supported)
+- Initial public release **1.0.0** with expanded main entry exports and subpaths: `./evals`, `./mcp-server`, `./exporters/*`
 - `createGuardrails()` includes `PromptInjectionGuardrail` unless `promptInjection: false`
 
 ### Package
 
 - New keywords: `eval`, `dag`, `supervisor`, `structured-output`
-- `agentic-serve` CLI bin for MCP server hosting
-
-## [1.0.0] - 2026-05-19
-
-### Added
-
-- Initial public release as **agentic-fabric** on npm
-- **Agent** — ReAct loop with streaming, planners, reflectors, and step limits
-- **Providers** — Anthropic, OpenAI-compatible, and Ollama via native `fetch` (no vendor SDKs bundled)
-- **Tools** — `FunctionTool`, `BaseTool`, `ToolRegistry`, `ToolNotFoundError`, and MCP client/provider (stdio + SSE)
-- **Memory** — working, semantic (RAG), and episodic memory modules
-- **Guardrails** — middleware for PII, budgets, content filters, human approval, and audit logging
-- **Observability** — structured logging, telemetry spans/metrics, and run replay
-- **Orchestration** — sequential, parallel, router, and hierarchical workflows; YAML/JSON loader
-- **Configuration** — `loadConfig()`, `.agenticrc.*`, and `AGENTIC_*` environment variables
-- **Convenience API** — `createAgent()`, `quickAgent()`
-- Subpath exports: `types`, `providers`, `tools`, `memory`, `orchestration`, `guardrails`, `observability`, `agent`
-- Runnable examples under `examples/`
-- Integration test suite and GitHub Actions CI
+- `agent-kit-serve` CLI bin for MCP server hosting
 
 ### Fixed
 
 - Anthropic/OpenAI missing API key throws `ProviderError` with `code: 'auth'`
 - MCP JSON-RPC parse failures throw `MCPProtocolError` instead of generic `Error`
 
-[2.0.0]: https://github.com/ashwinpaulallen/agent-fabric/releases/tag/v2.0.0
-[1.0.0]: https://github.com/ashwinpaulallen/agent-fabric/releases/tag/v1.0.0
+[1.0.0]: https://github.com/ashwinpaulallen/agent-kit/releases/tag/v1.0.0

@@ -2,13 +2,11 @@ import type { AgenticTelemetryConfig } from '../../config.js';
 import {
   applyTelemetryRetention,
   getTelemetry,
-  shutdownObservability,
 } from '../global.js';
 import { logExporterError } from './shared.js';
 import { BraintrustExporter } from './braintrust.js';
 import { TraceConsoleExporter, InMemoryTraceExporter } from './console.js';
 import { LangfuseExporter } from './langfuse.js';
-import { MultiExporter } from './multi.js';
 import type { TraceExporter } from './types.js';
 import { WebhookExporter } from './webhook.js';
 
@@ -25,7 +23,7 @@ export { WebhookExporter, type WebhookExporterOptions } from './webhook.js';
 export { TraceConsoleExporter, InMemoryTraceExporter } from './console.js';
 export { MultiExporter } from './multi.js';
 
-/** Create a {@link TraceExporter} from agentic-fabric telemetry configuration. */
+/** Create a {@link TraceExporter} from agent-kit telemetry configuration. */
 export function createTraceExporterFromConfig(
   config: AgenticTelemetryConfig,
 ): TraceExporter | undefined {

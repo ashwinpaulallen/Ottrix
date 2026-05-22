@@ -9,7 +9,7 @@ import {
 /** Supported provider names for environment-based configuration. */
 export type AgenticProviderName = 'anthropic' | 'openai' | 'ollama';
 
-/** Resolved environment configuration for agentic-fabric (legacy shape). */
+/** Resolved environment configuration for agent-kit (legacy shape). */
 export interface AgenticEnv {
   /** Default provider from `AGENTIC_PROVIDER` / `AGENTIC_DEFAULT_PROVIDER`. */
   provider?: AgenticProviderName;

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Agent } from '../agent/agent.js';
 import type { ProviderRegistry } from '../providers/registry.js';
 import { ToolRegistry } from '../tools/registry.js';
+import { stringifyUnknown } from '../utils/stringify.js';
 import { agentStep, DAGWorkflow } from './dag.js';
 import { validateDagSteps } from './dag-graph.js';
 import type { DAGResult, DAGStep, ResumeInput, SuspendedWorkflowState } from './dag-types.js';
@@ -304,7 +305,7 @@ export class WorkflowLoader {
       case 'hierarchical':
         return this.buildHierarchical(topology, agents, config);
       case 'supervisor':
-        return this.buildSupervisor(topology, agents, definition, config);
+        return this.buildSupervisor(topology, agents, definition);
       case 'dag':
         return this.buildDag(topology, agents, config);
       default:
@@ -474,7 +475,6 @@ export class WorkflowLoader {
     topology: WorkflowSupervisorDef & { type: 'supervisor' },
     agents: Record<string, Agent>,
     definition: WorkflowDefinition,
-    config?: WorkflowConfig,
   ): LoaderSupervisorWorkflow {
     const supervisorDef = definition.agents[topology.supervisor];
     if (!supervisorDef) {
@@ -494,7 +494,7 @@ export class WorkflowLoader {
       if (workerName === topology.supervisor) {
         throw new Error(`Supervisor workflow: worker "${workerName}" cannot be the supervisor`);
       }
-      workers.set(workerName, agents[workerName]!);
+      workers.set(workerName, agents[workerName]);
     }
 
     const workerDescriptions = new Map<string, string>(
@@ -684,7 +684,7 @@ export function validateWorkflowDefinition(definition: WorkflowDefinition): void
           id: step.id,
           name: step.name ?? step.agent,
           dependencies: step.dependencies,
-          execute: async () => undefined,
+          execute: () => Promise.resolve(undefined),
         })),
       );
       break;
@@ -1105,7 +1105,7 @@ function renderDepTemplate(
   depOutputs: Record<string, unknown>,
   workflowInput?: unknown,
 ): string {
-  let result = template.replace(/\{\{\s*input\s*\}\}/g, String(workflowInput ?? ''));
+  let result = template.replace(/\{\{\s*input\s*\}\}/g, stringifyUnknown(workflowInput));
   for (const [depId, output] of Object.entries(depOutputs)) {
     result = result.replace(
       new RegExp(`\\{\\{\\s*${escapeRegExp(depId)}\\s*\\}\\}`, 'g'),
@@ -1119,10 +1119,7 @@ function formatDepOutput(output: unknown): string {
   if (typeof output === 'object' && output !== null && 'response' in output) {
     return String((output as AgentResult).response);
   }
-  if (typeof output === 'string') {
-    return output;
-  }
-  return JSON.stringify(output);
+  return stringifyUnknown(output);
 }
 
 function escapeRegExp(value: string): string {
@@ -1160,7 +1157,7 @@ function dagResultToWorkflowResult(result: DAGResult): WorkflowResult {
     'response' in finalOutput
       ? (finalOutput as AgentResult)
       : {
-          response: String(finalOutput ?? ''),
+          response: stringifyUnknown(finalOutput),
           steps: [],
           totalTokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
           metadata: { stopReason: 'completed', dagStatus: result.status },
