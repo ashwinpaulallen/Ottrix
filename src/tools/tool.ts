@@ -1,4 +1,10 @@
-import type { JSONSchema, ToolErrorDetails, ToolMetadata, ToolResult } from '../types/tools.js';
+import type {
+  ApprovalHandler,
+  JSONSchema,
+  ToolErrorDetails,
+  ToolMetadata,
+  ToolResult,
+} from '../types/tools.js';
 import { validateSchema } from '../utils/schema-validator.js';
 
 /** Default tool execution timeout in milliseconds. */
@@ -63,6 +69,15 @@ export function extractErrorDetails(error: unknown): ToolErrorDetails {
     };
   }
 
+  if (error instanceof Error && error.name === 'MCPToolError') {
+    const mcp = error as Error & { result?: unknown; content?: unknown };
+    const details: ToolErrorDetails = { name: error.name };
+    if (mcp.result !== undefined || mcp.content !== undefined) {
+      details.data = { result: mcp.result, content: mcp.content };
+    }
+    return details;
+  }
+
   if (!(error instanceof Error)) {
     return { name: typeof error };
   }
@@ -90,6 +105,10 @@ export interface BaseToolConfig {
   inputSchema: JSONSchema;
   /** Optional operational metadata. */
   metadata?: ToolMetadata;
+  /** Require human approval before execution (also set via `metadata.requiresApproval`). */
+  requiresApproval?: boolean;
+  /** Per-tool approval handler (overrides registry global handler). */
+  approvalHandler?: ApprovalHandler;
   /** Execution timeout in milliseconds. @defaultValue 30000 */
   timeoutMs?: number;
   /** Lifecycle event hooks. */
@@ -112,8 +131,14 @@ export abstract class BaseTool {
   /** Optional metadata for routing and policies. */
   readonly metadata?: ToolMetadata;
 
+  /** Whether this tool requires approval before execution. */
+  readonly requiresApproval: boolean;
+
+  /** Optional per-tool approval handler. */
+  readonly approvalHandler?: ApprovalHandler;
+
   private readonly timeoutMs: number;
-  private readonly events: ToolExecutionEvents;
+  protected readonly events: ToolExecutionEvents;
 
   /**
    * @param config - Tool identity, schema, and execution options.
@@ -122,7 +147,14 @@ export abstract class BaseTool {
     this.name = config.name;
     this.description = config.description;
     this.inputSchema = config.inputSchema;
-    this.metadata = config.metadata;
+    const requiresApproval =
+      config.requiresApproval === true || config.metadata?.requiresApproval === true;
+    this.metadata =
+      requiresApproval || config.metadata
+        ? { ...config.metadata, ...(requiresApproval ? { requiresApproval: true } : {}) }
+        : config.metadata;
+    this.requiresApproval = requiresApproval;
+    this.approvalHandler = config.approvalHandler;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     this.events = config.events ?? {};
   }
@@ -194,7 +226,7 @@ export abstract class BaseTool {
   }
 
   /** Run `fn` with an execution timeout. */
-  private runWithTimeout(fn: () => Promise<unknown>): Promise<unknown> {
+  protected runWithTimeout(fn: () => Promise<unknown>): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error(`Tool "${this.name}" timed out after ${this.timeoutMs}ms`));

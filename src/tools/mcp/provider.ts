@@ -1,11 +1,12 @@
 import { MCPClient } from './client.js';
-import { createMCPTool, type MCPTool } from './mcp-tool.js';
+import { createMCPTool, type CreateMCPToolOptions, type MCPTool } from './mcp-tool.js';
 import type { BaseTool } from '../tool.js';
 import type {
   MCPClientInfo,
   MCPConnectionState,
   MCPReconnectOptions,
   MCPServerConfig,
+  MCPToolDefinition,
   MCPToolProviderOptions,
 } from './types.js';
 
@@ -30,6 +31,7 @@ export class MCPToolProvider {
   private readonly spawnFn?: typeof import('node:child_process').spawn;
   private readonly requestTimeoutMs?: number;
   private readonly injectedTransport?: import('./transport.js').MCPTransport;
+  private readonly toolDefaults?: Omit<CreateMCPToolOptions, 'namespace'>;
 
   private client?: MCPClient;
   private tools: MCPTool[] = [];
@@ -39,7 +41,9 @@ export class MCPToolProvider {
   private intentionalDisconnect = false;
   private unsubscribeToolsChanged?: () => void;
   private readonly toolsChangedListeners = new Set<(tools: BaseTool[]) => void>();
+  private connectInFlight?: Promise<BaseTool[]>;
   private refreshInFlight?: Promise<void>;
+  private reconnectScheduled = false;
 
   /**
    * @param options - Server config, namespace, and reconnection policy.
@@ -52,6 +56,7 @@ export class MCPToolProvider {
     this.spawnFn = options.spawn;
     this.requestTimeoutMs = options.requestTimeoutMs;
     this.injectedTransport = options.transport;
+    this.toolDefaults = options.toolDefaults;
 
     if (options.reconnect === false) {
       this.reconnect = { ...DEFAULT_RECONNECT, enabled: false };
@@ -76,7 +81,24 @@ export class MCPToolProvider {
    * Connect to the MCP server, run the handshake, and discover tools.
    */
   async connect(): Promise<BaseTool[]> {
+    if (this.connectInFlight) {
+      return this.connectInFlight;
+    }
+
+    const promise = this.doConnect();
+    this.connectInFlight = promise;
+    try {
+      return await promise;
+    } finally {
+      if (this.connectInFlight === promise) {
+        this.connectInFlight = undefined;
+      }
+    }
+  }
+
+  private async doConnect(): Promise<BaseTool[]> {
     this.intentionalDisconnect = false;
+    this.reconnectScheduled = false;
     this.clearReconnectTimer();
     this.state = 'connecting';
 
@@ -101,9 +123,7 @@ export class MCPToolProvider {
       });
 
       const definitions = await this.client.listTools();
-      this.tools = definitions.map((def) =>
-        createMCPTool(def, this.client!, { namespace: this.namespace }),
-      );
+      this.tools = this.buildTools(definitions);
 
       this.state = 'connected';
       this.reconnectAttempts = 0;
@@ -129,9 +149,7 @@ export class MCPToolProvider {
         return;
       }
       const definitions = await this.client.listTools();
-      this.tools = definitions.map((def) =>
-        createMCPTool(def, this.client!, { namespace: this.namespace }),
-      );
+      this.tools = this.buildTools(definitions);
       const snapshot = this.getTools();
       for (const listener of this.toolsChangedListeners) {
         try {
@@ -185,7 +203,25 @@ export class MCPToolProvider {
     return this.client;
   }
 
+  private buildTools(definitions: MCPToolDefinition[]): MCPTool[] {
+    const previous = new Map(this.tools.map((tool) => [tool.getMcpToolName(), tool]));
+
+    return definitions.map((def) => {
+      const prev = previous.get(def.name);
+      return createMCPTool(def, this.client!, {
+        ...this.toolDefaults,
+        namespace: this.namespace,
+        metadata: prev?.metadata ?? this.toolDefaults?.metadata,
+        requiresApproval: prev?.requiresApproval ?? this.toolDefaults?.requiresApproval,
+        approvalHandler: prev?.approvalHandler ?? this.toolDefaults?.approvalHandler,
+      });
+    });
+  }
+
   private scheduleReconnect(): void {
+    if (this.reconnectScheduled) {
+      return;
+    }
     if (this.intentionalDisconnect || !this.reconnect.enabled) {
       this.state = 'disconnected';
       return;
@@ -199,6 +235,7 @@ export class MCPToolProvider {
 
     this.state = 'reconnecting';
     this.reconnectAttempts += 1;
+    this.reconnectScheduled = true;
 
     const initial = this.reconnect.initialDelayMs ?? 1_000;
     const maxDelay = this.reconnect.maxDelayMs ?? 30_000;
@@ -210,6 +247,7 @@ export class MCPToolProvider {
         await this.client?.disconnect().catch(() => undefined);
         await this.connect();
       })().catch(() => {
+        this.reconnectScheduled = false;
         this.scheduleReconnect();
       });
     }, delay);

@@ -149,17 +149,33 @@ export {
 // --- Tools ---
 export {
   FunctionTool,
+  ZodTool,
+  createTool,
+  isZodTool,
   BaseTool,
   ToolRegistry,
   ToolNotFoundError,
   DuplicateToolError,
   ToolValidationError,
+  ConfigurationError,
+  createCliApprovalHandler,
+  createAutoApproveHandler,
+  createCallbackApprovalHandler,
+  isToolApprovalDenied,
+  buildToolApprovalDenialMessage,
   MCPClient,
   MCPToolProvider,
   MCPTool,
   MCPRegistry,
   createMCPTool,
 } from './tools/index.js';
+
+export type {
+  ApprovalRequest,
+  ApprovalResponse,
+  ApprovalHandler,
+  ToolExecuteOptions,
+} from './types/tools.js';
 
 // --- Memory ---
 export {

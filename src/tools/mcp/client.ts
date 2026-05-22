@@ -5,6 +5,7 @@ import {
   isJsonRpcNotification,
   normalizeToolCallResult,
 } from './json-rpc.js';
+import { normalizeMcpInputSchema } from './mcp-tool.js';
 import { SseMCPTransport, resolveTransportResult } from './sse-transport.js';
 import { StdioMCPTransport } from './stdio-transport.js';
 import type { MCPTransport } from './transport.js';
@@ -141,7 +142,10 @@ export class MCPClient {
       cursor = result.nextCursor;
     } while (cursor);
 
-    return tools;
+    return tools.map((tool) => ({
+      ...tool,
+      inputSchema: normalizeMcpInputSchema(tool.inputSchema),
+    }));
   }
 
   /**

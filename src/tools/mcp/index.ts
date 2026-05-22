@@ -53,6 +53,7 @@ export { MCPClient } from './client.js';
 export {
   MCPTool,
   createMCPTool,
+  normalizeMcpInputSchema,
   type CreateMCPToolOptions,
   type MCPToolConfig,
 } from './mcp-tool.js';

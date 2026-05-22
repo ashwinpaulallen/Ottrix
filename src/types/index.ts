@@ -31,6 +31,10 @@ export type {
   ToolErrorDetails,
   ToolResult,
   ToolExecutor,
+  ApprovalRequest,
+  ApprovalResponse,
+  ApprovalHandler,
+  ToolExecuteOptions,
 } from './tools.js';
 
 export type {

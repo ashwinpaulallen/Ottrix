@@ -1,5 +1,14 @@
 import { BaseTool, type BaseToolConfig } from './tool.js';
 
+/** Zod-validated tools — see {@link ZodTool} and {@link createTool} in `./zod-tool.js`. */
+export {
+  ZodTool,
+  createTool,
+  isZodTool,
+  type ZodToolConfig,
+  type AnyZodSchema,
+} from './zod-tool.js';
+
 /**
  * Function invoked by {@link FunctionTool} after input validation.
  */

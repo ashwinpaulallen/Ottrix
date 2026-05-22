@@ -100,11 +100,12 @@ export function parseJsonRpcMessage(text: string): JsonRpcMessage {
   if (record.jsonrpc !== '2.0') {
     throw new MCPProtocolError('Invalid JSON-RPC message: missing jsonrpc 2.0', -32600);
   }
-  if ('method' in record && record.id === undefined) {
-    return parsed as JsonRpcNotification;
+  const message = parsed as JsonRpcMessage;
+  if (isJsonRpcNotification(message)) {
+    return message;
   }
-  if ('id' in record && record.id !== undefined) {
-    return parsed as JsonRpcResponse;
+  if (isJsonRpcResponse(message)) {
+    return message;
   }
   throw new MCPProtocolError('Invalid JSON-RPC message: unrecognized shape', -32600);
 }

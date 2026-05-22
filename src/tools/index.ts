@@ -13,12 +13,37 @@ export {
 export { FunctionTool, type FunctionToolConfig, type ToolExecuteFn } from './function-tool.js';
 
 export {
+  ZodTool,
+  createTool,
+  isZodTool,
+  type ZodToolConfig,
+  type AnyZodSchema,
+} from './zod-tool.js';
+
+export { ConfigurationError } from './errors.js';
+
+export {
   DuplicateToolError,
   ToolNotFoundError,
   ToolRegistry,
   type ToolRegistryOnDuplicate,
   type ToolRegistryRegisterOptions,
 } from './registry.js';
+
+export {
+  createCliApprovalHandler,
+  createAutoApproveHandler,
+  createCallbackApprovalHandler,
+} from './approval-handlers.js';
+
+export {
+  TOOL_APPROVAL_DENIED_PREFIX,
+  TOOL_APPROVAL_DENIED_NAME,
+  isToolApprovalDenied,
+  getToolApprovalDenialReason,
+  buildToolApprovalDenialMessage,
+  buildToolApprovalDeniedResult,
+} from './tool-approval.js';
 
 export type { JsonRpcMessage, JsonRpcNotification, JsonRpcRequest } from './mcp/types.js';
 export type { MCPTransport } from './mcp/transport.js';

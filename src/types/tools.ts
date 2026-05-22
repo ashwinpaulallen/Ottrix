@@ -66,6 +66,47 @@ export interface ToolMetadata {
   requiresAuth?: boolean;
   /** Whether repeated calls with the same input are safe. */
   idempotent?: boolean;
+  /** When true, execution requires human approval via an {@link ApprovalHandler}. */
+  requiresApproval?: boolean;
+}
+
+/** Context passed to an approval handler before a gated tool runs. */
+export interface ApprovalRequest {
+  /** Registered tool name. */
+  toolName: string;
+  /** Proposed tool arguments from the model. */
+  input: Record<string, unknown>;
+  /** Agent requesting execution. */
+  agentName: string;
+  /** Current ReAct step index. */
+  stepNumber: number;
+  /** Optional extra context for the approver. */
+  context?: string;
+}
+
+/** Human or policy decision for a gated tool call. */
+export interface ApprovalResponse {
+  /** Whether the tool may run. */
+  approved: boolean;
+  /** Optional replacement input when approved with edits. */
+  modifiedInput?: Record<string, unknown>;
+  /** Optional denial or approval note. */
+  reason?: string;
+}
+
+/**
+ * Decides whether a tool requiring approval may execute.
+ */
+export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalResponse>;
+
+/** Optional context when executing a tool through {@link import('../tools/registry.js').ToolRegistry}. */
+export interface ToolExecuteOptions {
+  /** Agent name for approval requests. @defaultValue `"agent"` */
+  agentName?: string;
+  /** ReAct step number for approval requests. @defaultValue `0` */
+  stepNumber?: number;
+  /** Extra context shown to the approval handler. */
+  context?: string;
 }
 
 /**

@@ -151,6 +151,11 @@ export interface MCPToolProviderOptions {
    * underlying {@link MCPClient}. Useful for testing.
    */
   transport?: import('./transport.js').MCPTransport;
+  /**
+   * Default options applied when wrapping MCP tools (merged per-tool on refresh;
+   * per-tool values from a previous generation take precedence).
+   */
+  toolDefaults?: Omit<import('./mcp-tool.js').CreateMCPToolOptions, 'namespace'>;
 }
 
 /** Connection state for an MCP provider. */

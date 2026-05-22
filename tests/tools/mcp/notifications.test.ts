@@ -173,6 +173,9 @@ describe('notifications/tools/list_changed', () => {
     const result = await brokenTool!.execute({});
     expect(result.success).toBe(false);
     expect(result.errorDetails?.name).toBe('MCPToolError');
+    expect(result.errorDetails?.data).toMatchObject({
+      result: { content: [{ type: 'text', text: 'tool failed' }], isError: true },
+    });
     expect(result.error).toBe('tool failed');
 
     await provider.disconnect();

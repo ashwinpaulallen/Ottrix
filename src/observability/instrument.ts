@@ -151,7 +151,8 @@ export function instrumentAgentToolRegistry(
   const component = options.component ?? 'tools';
   return {
     list: () => registry.list(),
-    execute: (name, input) => runToolSpan(telemetry, component, name, () => registry.execute(name, input)),
+    execute: (name, input, options) =>
+      runToolSpan(telemetry, component, name, () => registry.execute(name, input, options)),
   };
 }
 

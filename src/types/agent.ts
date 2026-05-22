@@ -1,6 +1,6 @@
 import type { TokenUsage } from './provider.js';
 import type { CompletionProvider } from './provider.js';
-import type { ToolDefinition, ToolExecutor, ToolResult } from './tools.js';
+import type { ToolDefinition, ToolExecuteOptions, ToolExecutor, ToolResult } from './tools.js';
 import type { MemoryProvider } from './memory.js';
 import type { GuardrailConfig } from './guardrails.js';
 
@@ -13,7 +13,11 @@ export interface AgentToolRegistry {
   /** Tool definitions exposed to the model. */
   list(): ToolDefinition[];
   /** Execute a tool by name with validated input. */
-  execute(name: string, input: Record<string, unknown>): Promise<ToolResult>;
+  execute(
+    name: string,
+    input: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<ToolResult>;
 }
 
 /** How the agent should proceed after {@link AgentConfig.onError}. */
@@ -33,7 +37,7 @@ export type AgentStopReason =
  * Streaming event emitted by {@link import('../agent/agent.js').Agent.stream}.
  */
 export interface AgentEvent {
-  type: 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'done';
+  type: 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'tool_denied' | 'done';
   data: unknown;
 }
 
@@ -102,6 +106,8 @@ export interface AgentConfig<
    * Called before a tool executes. Return `false` to block the call.
    */
   onToolCall?: (name: string, input: unknown) => boolean | void | Promise<boolean | void>;
+  /** Optional hook for streaming-style events during {@link import('../agent/agent.js').Agent.run}. */
+  onAgentEvent?: (event: AgentEvent) => void;
   /**
    * Called when a step fails. Return an action to retry, skip, or abort the run.
    */

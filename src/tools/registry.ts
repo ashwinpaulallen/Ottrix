@@ -1,8 +1,20 @@
-import type { ToolDefinition, ToolResult } from '../types/tools.js';
+import type {
+  ApprovalHandler,
+  ToolDefinition,
+  ToolExecuteOptions,
+  ToolResult,
+} from '../types/tools.js';
 import { runToolSpan } from '../observability/instrument.js';
 import type { Telemetry } from '../observability/telemetry.js';
+import { ConfigurationError } from './errors.js';
 import { BaseTool } from './tool.js';
 import { FunctionTool } from './function-tool.js';
+import { isZodTool, type AnyZodSchema } from './zod-tool.js';
+import {
+  buildApprovalRequest,
+  buildToolApprovalDeniedResult,
+  resolveApprovedInput,
+} from './tool-approval.js';
 
 /** Behavior when registering a tool whose name is already taken. */
 export type ToolRegistryOnDuplicate = 'overwrite' | 'ignore' | 'throw';
@@ -45,6 +57,8 @@ export class ToolRegistry {
   private readonly defaultDuplicateStrategy: ToolRegistryOnDuplicate;
   private readonly telemetry?: Telemetry;
   private readonly telemetryComponent: string;
+  private globalApprovalHandler?: ApprovalHandler;
+  private readonly toolApprovalHandlers = new Map<string, ApprovalHandler>();
 
   /**
    * @param options - Default duplicate-handling strategy (`'overwrite'` for legacy behavior).
@@ -58,11 +72,14 @@ export class ToolRegistry {
       component?: string;
       /** Copy tools from an existing registry (used by instrumentation wrappers). */
       cloneFrom?: ToolRegistry;
+      /** Initial global approval handler. */
+      approvalHandler?: ApprovalHandler;
     } = {},
   ) {
     this.defaultDuplicateStrategy = options.onDuplicate ?? 'overwrite';
     this.telemetry = options.telemetry;
     this.telemetryComponent = options.component ?? 'tools';
+    this.globalApprovalHandler = options.approvalHandler;
 
     if (options.cloneFrom) {
       for (const name of options.cloneFrom.names()) {
@@ -71,7 +88,40 @@ export class ToolRegistry {
           this.tools.set(name, tool);
         }
       }
+      const clonedHandler = options.cloneFrom.getGlobalApprovalHandler();
+      if (clonedHandler) {
+        this.globalApprovalHandler = clonedHandler;
+      }
+      for (const name of options.cloneFrom.names()) {
+        const handler = options.cloneFrom.getToolApprovalHandler(name);
+        if (handler) {
+          this.toolApprovalHandlers.set(name, handler);
+        }
+      }
     }
+  }
+
+  /** Returns the global approval handler, if set. */
+  getGlobalApprovalHandler(): ApprovalHandler | undefined {
+    return this.globalApprovalHandler;
+  }
+
+  /** Returns a per-tool approval handler override, if set. */
+  getToolApprovalHandler(toolName: string): ApprovalHandler | undefined {
+    return this.toolApprovalHandlers.get(toolName);
+  }
+
+  /** Register a global approval handler for tools with `requiresApproval`. */
+  setApprovalHandler(handler: ApprovalHandler): this {
+    this.globalApprovalHandler = handler;
+    return this;
+  }
+
+  /** Register a per-tool approval handler (overrides the global handler for that tool). */
+  setToolApprovalHandler(toolName: string, handler: ApprovalHandler): this {
+    this.assertRegistered(toolName);
+    this.toolApprovalHandlers.set(toolName, handler);
+    return this;
   }
 
   /**
@@ -126,6 +176,19 @@ export class ToolRegistry {
   }
 
   /**
+   * Return the Zod input schema for a tool registered via {@link ZodTool} / {@link createTool}.
+   *
+   * @returns The schema, or `undefined` for legacy JSON Schema tools.
+   */
+  getZodSchema(toolName: string): AnyZodSchema | undefined {
+    const tool = this.tools.get(toolName);
+    if (!tool || !isZodTool(tool)) {
+      return undefined;
+    }
+    return tool.zodSchema;
+  }
+
+  /**
    * Return registered tool names.
    */
   names(): string[] {
@@ -140,22 +203,54 @@ export class ToolRegistry {
   /**
    * Execute a tool by name with validated input.
    *
-   * @throws If no tool is registered for `name`.
+   * Tools with `requiresApproval` invoke an {@link ApprovalHandler} before running.
+   *
+   * @throws {ToolNotFoundError} If no tool is registered for `name`.
+   * @throws {ConfigurationError} If approval is required but no handler is registered.
    */
-  async execute(name: string, input: Record<string, unknown>): Promise<ToolResult> {
+  async execute(
+    name: string,
+    input: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<ToolResult> {
     const tool = this.tools.get(name);
     if (!tool) {
       throw new ToolNotFoundError(name);
     }
 
+    const run = async (): Promise<ToolResult> => {
+      if (!tool.requiresApproval) {
+        return tool.execute(input);
+      }
+
+      const handler = this.resolveApprovalHandler(tool);
+      if (!handler) {
+        throw new ConfigurationError(
+          `Tool '${name}' requires approval but no ApprovalHandler is registered`,
+        );
+      }
+
+      const approval = await handler(
+        buildApprovalRequest(name, input, {
+          agentName: options?.agentName,
+          stepNumber: options?.stepNumber,
+          context: options?.context,
+        }),
+      );
+
+      if (!approval.approved) {
+        return buildToolApprovalDeniedResult(approval.reason);
+      }
+
+      const effectiveInput = resolveApprovedInput(input, approval);
+      return tool.execute(effectiveInput);
+    };
+
     if (!this.telemetry) {
-      return tool.execute(input);
+      return run();
     }
 
-    return runToolSpan(this.telemetry, this.telemetryComponent, name, async () => {
-      const result = await tool.execute(input);
-      return result;
-    });
+    return runToolSpan(this.telemetry, this.telemetryComponent, name, run);
   }
 
   /**
@@ -196,5 +291,19 @@ export class ToolRegistry {
       }
     }
     return removed;
+  }
+
+  private resolveApprovalHandler(tool: BaseTool): ApprovalHandler | undefined {
+    return (
+      tool.approvalHandler ??
+      this.toolApprovalHandlers.get(tool.name) ??
+      this.globalApprovalHandler
+    );
+  }
+
+  private assertRegistered(name: string): void {
+    if (!this.tools.has(name)) {
+      throw new ToolNotFoundError(name);
+    }
   }
 }

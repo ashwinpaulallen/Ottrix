@@ -20,6 +20,7 @@ export {
   buildNotification,
   buildRequest,
   createMCPTool,
+  normalizeMcpInputSchema,
   extractTextContent,
   isJsonRpcNotification,
   isJsonRpcResponse,

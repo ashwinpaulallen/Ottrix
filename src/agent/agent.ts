@@ -20,7 +20,13 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '../types/provider.js';
+import { ConfigurationError } from '../tools/errors.js';
 import { ToolRegistry } from '../tools/registry.js';
+import {
+  buildToolApprovalDenialMessage,
+  getToolApprovalDenialReason,
+  isToolApprovalDenied,
+} from '../tools/tool-approval.js';
 import { ContextManager } from './context.js';
 import { PiiDetector, redactPii } from '../guardrails/validators.js';
 import type { GuardrailBlockCode } from '../guardrails/types.js';
@@ -478,7 +484,25 @@ export class Agent {
             continue;
           }
 
-          const exec = await this.runToolWithErrorHandling(toolUse);
+          const exec = await this.runToolWithErrorHandling(toolUse, []);
+          if (isToolApprovalDenied(exec.result)) {
+            const denialMessage = buildToolApprovalDenialMessage(exec.result!);
+            const reason = getToolApprovalDenialReason(exec.result!);
+            const block = buildToolResultBlock(toolUse.id, null, denialMessage);
+            messages.push(buildToolResultsMessage([block]));
+            const deniedEvent: AgentEvent = {
+              type: 'tool_denied',
+              data: { toolName: toolUse.name, reason },
+            };
+            this.emitAgentEvent(deniedEvent);
+            yield deniedEvent;
+            yield {
+              type: 'tool_result',
+              data: { id: toolUse.id, name: toolUse.name, success: false, error: denialMessage },
+            };
+            continue;
+          }
+
           const block = buildToolResultBlock(
             toolUse.id,
             exec.result?.output ?? null,
@@ -1013,6 +1037,28 @@ export class Agent {
 
       const toolStarted = Date.now();
       const exec = await this.runToolWithErrorHandling(toolUse, steps);
+
+      if (isToolApprovalDenied(exec.result)) {
+        const denialMessage = buildToolApprovalDenialMessage(exec.result!);
+        const reason = getToolApprovalDenialReason(exec.result!);
+        const block = buildToolResultBlock(toolUse.id, null, denialMessage);
+        resultBlocks.push(block);
+        this.recordStep(steps, {
+          type: 'tool_result',
+          content: {
+            id: toolUse.id,
+            name: toolUse.name,
+            success: false,
+            error: denialMessage,
+          },
+        });
+        this.emitAgentEvent({
+          type: 'tool_denied',
+          data: { toolName: toolUse.name, reason },
+        });
+        continue;
+      }
+
       let toolMessage =
         exec.result?.success === false ? exec.result.error : undefined;
 
@@ -1075,8 +1121,11 @@ export class Agent {
     while (attempt < maxAttempts) {
       attempt += 1;
       try {
-        const result = await this.toolRegistry.execute(toolUse.name, toolUse.input);
-        if (!result.success && this.config.onError) {
+        const result = await this.toolRegistry.execute(toolUse.name, toolUse.input, {
+          agentName: this.getName(),
+          stepNumber: steps?.length ?? 0,
+        });
+        if (!result.success && !isToolApprovalDenied(result) && this.config.onError) {
           const step: AgentStep = {
             type: 'tool_result',
             content: { name: toolUse.name, error: result.error },
@@ -1090,6 +1139,9 @@ export class Agent {
         }
         return { result };
       } catch (error) {
+        if (ConfigurationError.isConfigurationError(error)) {
+          throw error;
+        }
         const err = error instanceof Error ? error : new Error(String(error));
         const step: AgentStep = {
           type: 'tool_result',
@@ -1112,6 +1164,10 @@ export class Agent {
     return {
       result: { success: false, output: null, error: 'Tool failed after retries' },
     };
+  }
+
+  private emitAgentEvent(event: AgentEvent): void {
+    this.config.onAgentEvent?.(event);
   }
 
   private handleErrorAction(

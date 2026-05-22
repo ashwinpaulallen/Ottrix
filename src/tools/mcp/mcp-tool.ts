@@ -1,6 +1,29 @@
-import type { JSONSchema, ToolMetadata } from '../../types/tools.js';
-import { BaseTool, type BaseToolConfig } from '../tool.js';
+import type { ApprovalHandler, JSONSchema, ToolMetadata } from '../../types/tools.js';
+import { BaseTool, type BaseToolConfig, type ToolExecutionEvents } from '../tool.js';
 import type { MCPClient } from './client.js';
+
+/**
+ * Normalize an MCP `inputSchema` into a JSON Schema suitable for validation
+ * and LLM tool registration.
+ *
+ * MCP servers often omit `type: "object"` even when `properties` are present.
+ */
+export function normalizeMcpInputSchema(schema: JSONSchema | undefined): JSONSchema {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return { type: 'object', properties: {} };
+  }
+  if (schema.type !== undefined) {
+    return schema;
+  }
+  if (
+    schema.properties !== undefined ||
+    schema.required !== undefined ||
+    schema.additionalProperties !== undefined
+  ) {
+    return { type: 'object', ...schema };
+  }
+  return schema;
+}
 
 /** Configuration for {@link MCPTool}. */
 export interface MCPToolConfig extends BaseToolConfig {
@@ -45,6 +68,12 @@ export interface CreateMCPToolOptions {
   metadata?: ToolMetadata;
   /** Override tool execution timeout in milliseconds. */
   timeoutMs?: number;
+  /** Require human approval before execution. */
+  requiresApproval?: boolean;
+  /** Per-tool approval handler (overrides registry global handler). */
+  approvalHandler?: ApprovalHandler;
+  /** Lifecycle event hooks. */
+  events?: ToolExecutionEvents;
 }
 
 /**
@@ -67,9 +96,12 @@ export function createMCPTool(
     name,
     mcpToolName: definition.name,
     description: definition.description ?? `MCP tool: ${definition.name}`,
-    inputSchema: definition.inputSchema ?? { type: 'object', properties: {} },
+    inputSchema: normalizeMcpInputSchema(definition.inputSchema),
     client,
     metadata: opts.metadata,
     timeoutMs: opts.timeoutMs,
+    requiresApproval: opts.requiresApproval,
+    approvalHandler: opts.approvalHandler,
+    events: opts.events,
   });
 }
