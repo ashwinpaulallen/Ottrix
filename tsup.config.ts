@@ -24,6 +24,7 @@ export default defineConfig({
     'observability/exporters/langfuse': 'src/observability/exporters/langfuse.ts',
     'observability/exporters/braintrust': 'src/observability/exporters/braintrust.ts',
     'observability/exporters/webhook': 'src/observability/exporters/webhook.ts',
+    'observability/exporters/otel': 'src/observability/exporters/otel.ts',
   },
   format: ['esm', 'cjs'],
   platform: 'node',

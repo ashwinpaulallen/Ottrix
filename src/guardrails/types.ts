@@ -2,8 +2,8 @@ import type { AgentStep } from '../types/agent.js';
 import type { ChatMessage } from '../types/messages.js';
 import type { CompletionParams, CompletionResult } from '../types/provider.js';
 
-/** How a guardrail responds to a call. */
-export type GuardrailAction = 'allow' | 'block' | 'modify' | 'flag';
+/** Action when a guardrail responds to a call. */
+export type GuardrailAction = 'allow' | 'block' | 'modify' | 'flag' | 'suspend';
 
 /** Machine-readable code when a guardrail blocks execution. */
 export type GuardrailBlockCode = 'max_steps' | 'token_budget' | 'cost_budget' | 'guardrail';
@@ -63,6 +63,8 @@ export interface GuardrailPipelineResult<T extends LlmGuardrailContext | ToolGua
   reason?: string;
   /** Set when the pipeline blocks (maps to agent stop reasons). */
   code?: GuardrailBlockCode;
+  /** Set when a guardrail requests human approval before continuing. */
+  suspended?: boolean;
   flags: string[];
   context: T;
 }

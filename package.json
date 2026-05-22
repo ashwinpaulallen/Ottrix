@@ -80,6 +80,11 @@
       "types": "./dist/observability/exporters/*.d.ts",
       "import": "./dist/observability/exporters/*.js",
       "require": "./dist/observability/exporters/*.cjs"
+    },
+    "./exporters/otel": {
+      "types": "./dist/observability/exporters/otel.d.ts",
+      "import": "./dist/observability/exporters/otel.js",
+      "require": "./dist/observability/exporters/otel.cjs"
     }
   },
   "scripts": {
@@ -147,6 +152,9 @@
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.0",

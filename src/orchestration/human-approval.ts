@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod';
 
 import { DecisionSigner } from './decision-signer.js';
+import { emitAuditEvent } from '../guardrails/audit.js';
 import type { DAGStep } from './dag-types.js';
 import type { ResumeInput, SuspendedWorkflowState } from './dag-types.js';
 
@@ -200,6 +201,15 @@ export async function dispatchApprovalGate(
   await store.createRequest(request);
   await gate.dispatcher?.notify(request);
 
+  emitAuditEvent({
+    type: 'approval.request',
+    actor: { type: 'user', id: role, name: role },
+    action: 'request',
+    resource: `workflow:${workflowId}/step:${stepId}`,
+    outcome: 'success',
+    payload: { role, requiredApprovals: gate.multi ?? 1, expiresAt },
+  });
+
   const approvalMetadata: ApprovalStateMetadata = {
     role,
     expiresAt,
@@ -256,6 +266,15 @@ export async function handleApprovalResume(
   }
 
   await store.recordDecision(state.workflowId, metadata.gateStepId, decision);
+
+  emitAuditEvent({
+    type: 'approval.decide',
+    actor: { type: 'user', id: decision.approver.id, name: decision.approver.name ?? decision.approver.role },
+    action: decision.action,
+    resource: `workflow:${state.workflowId}/step:${metadata.gateStepId}`,
+    outcome: decision.action === 'reject' ? 'denied' : 'success',
+    payload: { reason: decision.reason, role: decision.approver.role },
+  });
 
   if (decision.action === 'redirect') {
     return handleRedirect(options, metadata, decision, upstreamStepId);

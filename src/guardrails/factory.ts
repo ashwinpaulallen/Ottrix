@@ -1,7 +1,7 @@
 import type { JSONSchema } from '../types/tools.js';
 import type { GuardrailConfig, Validator } from '../types/guardrails.js';
 import { AuditLogger, type AuditLoggerOptions } from './audit.js';
-import { BudgetGuardrail, type BudgetGuardrailOptions, type TokenCostRates } from './budget.js';
+import { BudgetGuardrail, getConfiguredBudgets, type BudgetConfig, type BudgetGuardrailOptions, type TokenCostRates } from './budget.js';
 import { GuardrailMiddleware } from './middleware.js';
 import { HumanApprovalGuardrail, type HumanApprovalGuardrailOptions } from './human-in-the-loop.js';
 import {
@@ -24,7 +24,7 @@ export interface CreateGuardrailsConfig {
   agentName?: string;
   /** Provider name for cost estimation. */
   providerName?: string;
-  budget?: BudgetGuardrailOptions;
+  budget?: BudgetGuardrailOptions | BudgetConfig;
   pii?: {
     mode?: PiiMode;
     blockOnDetect?: boolean;
@@ -66,10 +66,11 @@ export function createGuardrails(options: CreateGuardrailsConfig = {}): CreateGu
   }
 
   let budget: BudgetGuardrail | undefined;
-  if (options.budget) {
+  const budgetOptions = options.budget ?? getConfiguredBudgets();
+  if (budgetOptions) {
     budget = new BudgetGuardrail({
       providerName: options.providerName,
-      ...options.budget,
+      ...budgetOptions,
     });
     handlers.push(budget);
   }
@@ -133,14 +134,43 @@ export function createGuardrails(options: CreateGuardrailsConfig = {}): CreateGu
   }
 
   const config: GuardrailConfig = {
-    maxSteps: options.budget?.maxSteps,
-    maxTokenBudget: options.budget?.maxTokenBudget,
-    maxCostUsd: options.budget?.maxCostUsd,
+    maxSteps: readBudgetCap(options.budget, 'maxSteps'),
+    maxTokenBudget: readBudgetCap(options.budget, 'maxTokens'),
+    maxCostUsd: readBudgetCap(options.budget, 'maxCostUsd'),
     inputValidators: piiDetector ? [piiDetector] : undefined,
     outputValidators: outputValidators.length > 0 ? outputValidators : undefined,
   };
 
   return { middleware, budget, audit, config };
+}
+
+function readBudgetCap(
+  budget: BudgetGuardrailOptions | BudgetConfig | undefined,
+  field: 'maxSteps' | 'maxTokens' | 'maxCostUsd',
+): number | undefined {
+  if (!budget) {
+    return undefined;
+  }
+  if ('scopes' in budget) {
+    const agentScope = budget.scopes.find((scope) => scope.name === 'agent');
+    if (!agentScope) {
+      return undefined;
+    }
+    if (field === 'maxTokens') {
+      return agentScope.cap.maxTokens;
+    }
+    if (field === 'maxCostUsd') {
+      return agentScope.cap.maxCostUsd;
+    }
+    return agentScope.cap.maxSteps;
+  }
+  if (field === 'maxTokens') {
+    return budget.maxTokenBudget;
+  }
+  if (field === 'maxCostUsd') {
+    return budget.maxCostUsd;
+  }
+  return budget.maxSteps;
 }
 
 export type { TokenCostRates };

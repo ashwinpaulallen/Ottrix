@@ -45,6 +45,7 @@ import {
 import type { Plan, PlanStep, PlanValidationResult } from './planner.js';
 import { instrumentProvider, instrumentAgentToolRegistry } from '../observability/instrument.js';
 import { getMetricsCollector } from '../observability/global.js';
+import { emitAuditEvent } from '../guardrails/audit.js';
 import { ProviderRegistry } from '../providers/registry.js';
 import { runInActiveSpanStack, Span, SpanStack, type Telemetry } from '../observability/telemetry.js';
 import type { RunRecorder } from '../observability/replay.js';
@@ -192,6 +193,23 @@ export class Agent {
     spanStart: number,
   ): Promise<AgentResult> {
     const runStarted = performance.now();
+    const agentActor = { type: 'agent' as const, id: this.getName(), name: this.getName() };
+    const agentResource = `agent:${this.getName()}`;
+
+    emitAuditEvent({
+      type: 'agent.run.start',
+      actor: agentActor,
+      action: 'run',
+      resource: agentResource,
+      outcome: 'success',
+      payload: { inputLength: input.length },
+    });
+
+    const steps: AgentStep[] = [];
+    let stopReason: AgentStopReason = 'completed';
+    let runErrored = false;
+
+    try {
     const outputSchema = options?.outputSchema ?? this.config.outputSchema;
     const structuredOutput = outputSchema
       ? createStructuredOutputContext(
@@ -207,10 +225,8 @@ export class Agent {
       this.runRecorder?.recordMessage(message);
     }
 
-    const steps: AgentStep[] = [];
     const usages: TokenUsage[] = [];
     let lastModel: string | undefined;
-    let stopReason: AgentStopReason = 'completed';
     let warning: string | undefined;
     let finalResponse = '';
     let parsedOutput: unknown;
@@ -221,8 +237,10 @@ export class Agent {
 
       const providerCall = await this.callProvider(messages, structuredOutput);
       if (providerCall.blocked) {
-        stopReason = mapGuardrailBlockCode(providerCall.code);
-        warning = providerCall.reason;
+        stopReason = providerCall.suspended ? 'guardrail' : mapGuardrailBlockCode(providerCall.code);
+        warning = providerCall.suspended
+          ? `${providerCall.reason ?? 'Budget approval required'}`
+          : providerCall.reason;
         return 'break';
       }
 
@@ -397,6 +415,29 @@ export class Agent {
     this.scheduleObservationalExtraction(messages);
     this.syncRecorder(telemetry, result, spanStart);
     return result;
+    } catch (error) {
+      runErrored = true;
+      stopReason = 'error';
+      throw error;
+    } finally {
+      emitAuditEvent({
+        type: 'agent.run.end',
+        actor: agentActor,
+        action: 'run',
+        resource: agentResource,
+        outcome: runErrored
+          ? 'failure'
+          : stopReason === 'completed'
+            ? 'success'
+            : stopReason === 'guardrail' ||
+                stopReason === 'token_budget' ||
+                stopReason === 'cost_budget'
+              ? 'denied'
+              : 'failure',
+        payload: { stopReason, stepCount: steps.length },
+        duration: performance.now() - runStarted,
+      });
+    }
   }
 
   private annotateRootTrace(
@@ -511,10 +552,26 @@ export class Agent {
     input: string,
     spanStart: number,
   ): AsyncIterable<AgentEvent> {
+    const runStarted = performance.now();
+    const agentActor = { type: 'agent' as const, id: this.getName(), name: this.getName() };
+    const agentResource = `agent:${this.getName()}`;
+    let stopReason: AgentStopReason = 'completed';
+    let runErrored = false;
+    let stepCount = 0;
+
+    emitAuditEvent({
+      type: 'agent.run.start',
+      actor: agentActor,
+      action: 'stream',
+      resource: agentResource,
+      outcome: 'success',
+      payload: { inputLength: input.length },
+    });
+
+    try {
     const prepared = await this.prepareRun(input);
     const messages = prepared.messages;
     const usages: TokenUsage[] = [];
-    let stopReason: AgentStopReason = 'completed';
     let warning: string | undefined;
     let finalResponse = '';
 
@@ -659,6 +716,7 @@ export class Agent {
       if (loopState.break) {
         break;
       }
+      stepCount += 1;
     }
 
     if (!finalResponse && stopReason === 'completed') {
@@ -679,6 +737,29 @@ export class Agent {
         totalTokens: result.totalTokens,
       },
     };
+    } catch (error) {
+      runErrored = true;
+      stopReason = 'error';
+      throw error;
+    } finally {
+      emitAuditEvent({
+        type: 'agent.run.end',
+        actor: agentActor,
+        action: 'stream',
+        resource: agentResource,
+        outcome: runErrored
+          ? 'failure'
+          : stopReason === 'completed'
+            ? 'success'
+            : stopReason === 'guardrail' ||
+                stopReason === 'token_budget' ||
+                stopReason === 'cost_budget'
+              ? 'denied'
+              : 'failure',
+        payload: { stopReason, stepCount },
+        duration: performance.now() - runStarted,
+      });
+    }
   }
 
   private buildStreamResult(
@@ -963,7 +1044,7 @@ export class Agent {
     structuredOutput?: StructuredOutputContext,
     structuredOptions?: { forceJsonMode?: boolean },
   ): Promise<
-    | { blocked: true; reason: string; code?: GuardrailBlockCode }
+    | { blocked: true; reason: string; code?: GuardrailBlockCode; suspended?: boolean }
     | { blocked: false; result: CompletionResult }
   > {
     let params = this.buildCompletionParams(messages, structuredOutput, structuredOptions);
@@ -984,6 +1065,7 @@ export class Agent {
           blocked: true,
           reason: pre.reason ?? 'LLM call blocked by guardrail',
           code: pre.code,
+          suspended: pre.suspended,
         };
       }
 
@@ -1013,6 +1095,7 @@ export class Agent {
           blocked: true,
           reason: post.reason ?? 'LLM response blocked by guardrail',
           code: post.code,
+          suspended: post.suspended,
         };
       }
 
@@ -1347,7 +1430,7 @@ export class Agent {
     structuredOutput?: StructuredOutputContext,
     structuredOptions?: { forceJsonMode?: boolean },
   ): Promise<
-    | { blocked: true; reason: string; code?: GuardrailBlockCode }
+    | { blocked: true; reason: string; code?: GuardrailBlockCode; suspended?: boolean }
     | {
         blocked?: false;
         result: CompletionResult | null;
@@ -1373,6 +1456,7 @@ export class Agent {
           blocked: true,
           reason: pre.reason ?? 'LLM stream blocked by guardrail',
           code: pre.code,
+          suspended: pre.suspended,
         };
       }
 
@@ -1438,6 +1522,7 @@ export class Agent {
           blocked: true,
           reason: post.reason ?? 'LLM stream response blocked by guardrail',
           code: post.code,
+          suspended: post.suspended,
         };
       }
 
@@ -1524,7 +1609,7 @@ function toStopReason(reason?: string): AgentStopReason {
 }
 
 function mapGuardrailBlockCode(code?: GuardrailBlockCode): AgentStopReason {
-  if (code === 'max_steps' || code === 'token_budget') {
+  if (code === 'max_steps' || code === 'token_budget' || code === 'cost_budget') {
     return code;
   }
   return 'guardrail';

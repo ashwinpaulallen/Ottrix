@@ -1,0 +1,71 @@
+{
+  "name": "@ottrix/nestjs",
+  "version": "0.1.0",
+  "description": "First-party NestJS integration for Ottrix — DI, lifecycle, guards, interceptors, and SSE streaming.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "ottrix",
+    "nestjs",
+    "ai",
+    "agent",
+    "llm",
+    "opentelemetry"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ashwinpaulallen/ottrix.git",
+    "directory": "packages/nestjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@nestjs/common": ">=10.0.0",
+    "@nestjs/core": ">=10.0.0",
+    "@nestjs/terminus": ">=10.0.0",
+    "ottrix": ">=1.0.0",
+    "rxjs": "^7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nestjs/terminus": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/testing": "^11.1.0",
+    "@types/node": "25.9.0",
+    "ottrix": "file:../..",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  }
+}

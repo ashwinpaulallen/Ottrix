@@ -1,4 +1,5 @@
 import type { AgentStep } from '../types/agent.js';
+import { emitAuditEvent } from './audit.js';
 import type { GuardrailDecision, GuardrailHandler, ToolGuardrailContext } from './types.js';
 
 /** Options for {@link HumanApprovalGuardrail}. */
@@ -40,7 +41,25 @@ export class HumanApprovalGuardrail implements GuardrailHandler {
         timestamp: Date.now(),
       } satisfies AgentStep);
 
+    emitAuditEvent({
+      type: 'approval.request',
+      actor: { type: 'user', id: 'human-reviewer', name: 'human-reviewer' },
+      action: 'request',
+      resource: `tool:${context.toolName}`,
+      outcome: 'success',
+      payload: { toolName: context.toolName, input: context.input },
+    });
+
     const approved = await this.requestApproval(step);
+
+    emitAuditEvent({
+      type: 'approval.decide',
+      actor: { type: 'user', id: 'human-reviewer', name: 'human-reviewer' },
+      action: approved ? 'approve' : 'deny',
+      resource: `tool:${context.toolName}`,
+      outcome: approved ? 'success' : 'denied',
+      payload: { toolName: context.toolName },
+    });
     if (approved) {
       return;
     }

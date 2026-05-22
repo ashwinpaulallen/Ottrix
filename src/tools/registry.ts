@@ -7,6 +7,7 @@ import type {
   ToolResult,
 } from '../types/tools.js';
 import { Logger } from '../observability/logger.js';
+import { emitAuditEvent } from '../guardrails/audit.js';
 import { runToolSpan } from '../observability/instrument.js';
 import { getMetricsCollector } from '../observability/global.js';
 import type { Telemetry } from '../observability/telemetry.js';
@@ -282,16 +283,32 @@ export class ToolRegistry {
       throw new ToolNotFoundError(name);
     }
 
+    const agentName = options?.agentName;
+    const actor = toolAuditActor(agentName);
+    const resource = `tool:${name}`;
+
     const run = async (): Promise<ToolResult> => {
       const metadata = normalizeToolMetadata(tool.metadata);
       const skipSafety = options?.skipSafetyChecks === true;
       let effectiveInput = input;
       let approvalHandled = false;
+      const invokeStarted = performance.now();
 
       if (!skipSafety && metadata.sideEffect === 'destructive') {
+        emitAuditEvent({
+          type: 'policy.check',
+          actor,
+          action: 'check',
+          resource,
+          outcome: 'success',
+          payload: { sideEffect: metadata.sideEffect, requiresSandbox: metadata.requiresSandbox },
+        });
+
         if (metadata.requiresSandbox) {
           const available = await resolveSandboxAvailable(this.sandboxAvailable);
           if (!available) {
+            emitToolDeny(actor, resource, 'sandbox_required');
+            emitPolicyDeny(actor, resource, 'sandbox_required');
             return buildSafetyBlockedResult(
               `Tool '${name}' is destructive and requires a sandbox, but none is available`,
               'sandbox_required',
@@ -302,27 +319,51 @@ export class ToolRegistry {
         if (requiresApprovalEnabled(metadata.requiresApproval)) {
           const approvalOutcome = await this.runApprovalGate(name, tool, effectiveInput, options);
           if (approvalOutcome.result) {
-            await this.emitToolAudit(tool, effectiveInput, approvalOutcome.result, options?.agentName);
+            await this.emitToolAudit(tool, effectiveInput, approvalOutcome.result, agentName);
             return approvalOutcome.result;
           }
           effectiveInput = approvalOutcome.input;
           approvalHandled = true;
+          emitToolAllow(actor, resource);
+        } else {
+          emitToolAllow(actor, resource);
         }
       }
 
       if (tool.requiresApproval && !approvalHandled) {
         const approvalOutcome = await this.runApprovalGate(name, tool, effectiveInput, options);
         if (approvalOutcome.result) {
-          await this.emitToolAudit(tool, effectiveInput, approvalOutcome.result, options?.agentName);
+          await this.emitToolAudit(tool, effectiveInput, approvalOutcome.result, agentName);
           return approvalOutcome.result;
         }
         effectiveInput = approvalOutcome.input;
+        emitToolAllow(actor, resource);
       }
+
+      emitAuditEvent({
+        type: 'tool.invoke',
+        actor,
+        action: 'invoke',
+        resource,
+        outcome: 'success',
+        payload: { args: effectiveInput },
+      });
 
       const result = await this.runWithIdempotency(name, tool, effectiveInput, () =>
         tool.execute(effectiveInput),
       );
-      await this.emitToolAudit(tool, effectiveInput, result, options?.agentName);
+
+      emitAuditEvent({
+        type: result.success ? 'tool.success' : 'tool.fail',
+        actor,
+        action: result.success ? 'execute' : 'fail',
+        resource,
+        outcome: result.success ? 'success' : 'failure',
+        duration: performance.now() - invokeStarted,
+        payload: result.success ? undefined : { error: result.error },
+      });
+
+      await this.emitToolAudit(tool, effectiveInput, result, agentName);
       return result;
     };
 
@@ -467,9 +508,15 @@ export class ToolRegistry {
     options?: ToolExecuteOptions,
   ): Promise<{ input: Record<string, unknown>; result?: ToolResult }> {
     const handler = this.resolveApprovalHandler(tool);
+    const agentName = options?.agentName;
+    const actor = toolAuditActor(agentName);
+    const resource = `tool:${name}`;
+
     if (!handler) {
       const metadata = normalizeToolMetadata(tool.metadata);
       if (metadata.sideEffect === 'destructive') {
+        emitToolDeny(actor, resource, 'approval_required');
+        emitPolicyDeny(actor, resource, 'approval_required');
         return {
           input,
           result: buildSafetyBlockedResult(
@@ -483,6 +530,15 @@ export class ToolRegistry {
       );
     }
 
+    emitAuditEvent({
+      type: 'approval.request',
+      actor: { type: 'user', id: 'approver', name: 'approver' },
+      action: 'request',
+      resource,
+      outcome: 'success',
+      payload: { toolName: name, input },
+    });
+
     const approval = await handler(
       buildApprovalRequest(name, input, {
         agentName: options?.agentName,
@@ -492,8 +548,26 @@ export class ToolRegistry {
     );
 
     if (!approval.approved) {
+      emitAuditEvent({
+        type: 'approval.decide',
+        actor: { type: 'user', id: 'approver', name: 'approver' },
+        action: 'deny',
+        resource,
+        outcome: 'denied',
+        payload: { reason: approval.reason },
+      });
+      emitToolDeny(actor, resource, 'approval_denied');
+      emitPolicyDeny(actor, resource, 'approval_denied');
       return { input, result: buildToolApprovalDeniedResult(approval.reason) };
     }
+
+    emitAuditEvent({
+      type: 'approval.decide',
+      actor: { type: 'user', id: 'approver', name: 'approver' },
+      action: 'approve',
+      resource,
+      outcome: 'success',
+    });
 
     return { input: resolveApprovedInput(input, approval) };
   }
@@ -535,4 +609,48 @@ export class ToolRegistry {
       throw new ToolNotFoundError(name);
     }
   }
+}
+
+function toolAuditActor(agentName?: string) {
+  return { type: 'agent' as const, id: agentName ?? 'unknown', name: agentName };
+}
+
+function emitToolAllow(actor: ReturnType<typeof toolAuditActor>, resource: string): void {
+  emitAuditEvent({
+    type: 'tool.allow',
+    actor,
+    action: 'allow',
+    resource,
+    outcome: 'success',
+  });
+}
+
+function emitToolDeny(
+  actor: ReturnType<typeof toolAuditActor>,
+  resource: string,
+  code: string,
+): void {
+  emitAuditEvent({
+    type: 'tool.deny',
+    actor,
+    action: 'deny',
+    resource,
+    outcome: 'denied',
+    payload: { code },
+  });
+}
+
+function emitPolicyDeny(
+  actor: ReturnType<typeof toolAuditActor>,
+  resource: string,
+  code: string,
+): void {
+  emitAuditEvent({
+    type: 'policy.deny',
+    actor,
+    action: 'deny',
+    resource,
+    outcome: 'denied',
+    payload: { code },
+  });
 }

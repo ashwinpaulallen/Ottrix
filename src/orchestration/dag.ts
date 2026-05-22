@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent/agent.js';
 import type { AgentResult } from '../types/agent.js';
 import { getRunContext, runWith, withStep } from '../context/run-context.js';
+import { emitAuditEvent } from '../guardrails/audit.js';
 import {
   buildDependentsMap,
   buildFinalOutput,
@@ -203,6 +204,14 @@ export class DAGWorkflow {
     try {
       let resumeInputForExecute = resumeInput;
       const step = this.steps.get(state.currentStepId);
+
+      emitAuditEvent({
+        type: 'workflow.resume',
+        actor: { type: 'system', id: 'workflow', name: 'workflow' },
+        action: 'resume',
+        resource: `workflow:${state.workflowId}/step:${state.currentStepId}`,
+        outcome: 'success',
+      });
 
       if (step?.approvalGate) {
         const approvalStore = resolveApprovalStore(this.config.approvalStore, step.approvalGate);
@@ -488,6 +497,14 @@ export class DAGWorkflow {
         }
 
         suspendedState = nextSuspendedState;
+        emitAuditEvent({
+          type: 'workflow.suspend',
+          actor: { type: 'system', id: 'workflow', name: 'workflow' },
+          action: 'suspend',
+          resource: `workflow:${workflowId}/step:${step.id}`,
+          outcome: 'success',
+          payload: { suspensionMessage: nextSuspendedState.suspensionMessage },
+        });
         notify();
         return true;
       }
@@ -630,14 +647,32 @@ export class DAGWorkflow {
     depOutputs: Record<string, unknown>,
   ): Promise<{ status: DAGStepStatus; output?: unknown; duration: number }> {
     const started = Date.now();
+    const workflowId = getRunContext()?.runId ?? 'unknown';
+    const resource = `workflow:${workflowId}/step:${step.id}`;
 
     if (this.cancelled || this.workflowAbortController.signal.aborted) {
       throw new DAGWorkflowCancelledError();
     }
 
     if (step.condition && !step.condition(depOutputs)) {
+      emitAuditEvent({
+        type: 'workflow.step.end',
+        actor: { type: 'system', id: 'workflow', name: 'workflow' },
+        action: 'step',
+        resource,
+        outcome: 'skipped',
+        duration: Date.now() - started,
+      });
       return { status: 'skipped', duration: Date.now() - started };
     }
+
+    emitAuditEvent({
+      type: 'workflow.step.start',
+      actor: { type: 'system', id: 'workflow', name: 'workflow' },
+      action: 'step',
+      resource,
+      outcome: 'success',
+    });
 
     const retries = step.retries ?? 0;
     let lastError: Error | undefined;
@@ -682,6 +717,14 @@ export class DAGWorkflow {
         }
         this.workflowAbortController.signal.removeEventListener('abort', abortFromWorkflow);
         this.activeControllers.delete(controller);
+        emitAuditEvent({
+          type: 'workflow.step.end',
+          actor: { type: 'system', id: 'workflow', name: 'workflow' },
+          action: 'step',
+          resource,
+          outcome: 'success',
+          duration: Date.now() - started,
+        });
         return { status: 'completed', output, duration: Date.now() - started };
       } catch (error) {
         if (timeoutId) {
@@ -708,9 +751,26 @@ export class DAGWorkflow {
 
     if (lastError) {
       void this.config.onStepError?.(step.id, lastError);
+      emitAuditEvent({
+        type: 'workflow.step.end',
+        actor: { type: 'system', id: 'workflow', name: 'workflow' },
+        action: 'step',
+        resource,
+        outcome: 'failure',
+        duration: Date.now() - started,
+        payload: { error: lastError.message },
+      });
       return { status: 'failed', duration: Date.now() - started };
     }
 
+    emitAuditEvent({
+      type: 'workflow.step.end',
+      actor: { type: 'system', id: 'workflow', name: 'workflow' },
+      action: 'step',
+      resource,
+      outcome: 'failure',
+      duration: Date.now() - started,
+    });
     return { status: 'failed', duration: Date.now() - started };
   }
 }
