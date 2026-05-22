@@ -68,9 +68,22 @@ export type {
 } from './dag-types.js';
 
 export {
-  InMemoryStateStore,
   type WorkflowStateStore,
+  type SaveMeta,
+  type ListFilter,
+  type SuspendedRunInfo,
+  type LockHandle,
+  WorkflowStateLockError,
+  StateStorePeerDependencyError,
 } from './state-store.js';
+
+export {
+  InMemoryStateStore,
+  PostgresStateStore,
+  RedisStateStore,
+  type PostgresStateStoreOptions,
+  type RedisStateStoreOptions,
+} from './state-stores/index.js';
 
 export {
   WorkflowLoader,
@@ -100,5 +113,31 @@ export type {
   RouterRule,
   WorkflowStructureDescription,
 } from './workflow-definition.js';
+
+export {
+  humanApproval,
+  InMemoryApprovalStore,
+  isApprovalDecision,
+  type ApprovalGateConfig,
+  type ApprovalDecision,
+  type ApprovalDispatcher,
+  type ApprovalRequest,
+  type ApprovalStore,
+  type ApprovalGateResult,
+} from './human-approval.js';
+
+export {
+  DecisionSigner,
+  signJwt,
+  verifyJwt,
+} from './decision-signer.js';
+
+export {
+  WebhookDispatcher,
+  ConsoleDispatcher,
+  CallbackDispatcher,
+  type WebhookDispatcherOptions,
+  type CallbackDispatcherOptions,
+} from './approval-dispatchers/index.js';
 
 export { parseYamlSubset, parseWorkflowFile, tryImportJsYaml } from './yaml-parse.js';

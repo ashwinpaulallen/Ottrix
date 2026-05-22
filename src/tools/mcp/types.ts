@@ -1,4 +1,4 @@
-import type { JSONSchema } from '../../types/tools.js';
+import type { JSONSchema, ToolMetadata } from '../../types/tools.js';
 
 /** MCP protocol version used for the initialize handshake. */
 export const MCP_PROTOCOL_VERSION = '2024-11-05';
@@ -156,6 +156,11 @@ export interface MCPToolProviderOptions {
    * per-tool values from a previous generation take precedence).
    */
   toolDefaults?: Omit<import('./mcp-tool.js').CreateMCPToolOptions, 'namespace'>;
+  /**
+   * Classify MCP tools with safety metadata when building {@link BaseTool} wrappers.
+   * When omitted, the built-in pattern matcher is used.
+   */
+  classify?: (tool: MCPToolDefinition) => Partial<ToolMetadata>;
 }
 
 /** Connection state for an MCP provider. */

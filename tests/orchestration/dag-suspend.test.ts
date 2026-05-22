@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DAGBuilder, WorkflowResumeError } from '../../src/orchestration/dag.js';
 import type { SuspendedWorkflowState } from '../../src/orchestration/dag-types.js';
-import { InMemoryStateStore } from '../../src/orchestration/state-store.js';
+import { InMemoryStateStore } from '../../src/orchestration/state-stores/in-memory.js';
 
 function buildReviewWorkflow() {
   return new DAGBuilder()
@@ -217,7 +217,7 @@ describe('InMemoryStateStore', () => {
       suspensionMessage: 'Waiting for review',
     };
 
-    await store.save(state);
+    await store.save('store-1', state);
     expect(await store.load('store-1')).toEqual(state);
     expect(await store.list()).toHaveLength(1);
 
@@ -246,7 +246,7 @@ describe('InMemoryStateStore', () => {
       workflowInput: 'task',
     };
 
-    await store.save(state);
+    await store.save('clone-test', state);
     const loaded = await store.load('clone-test');
     loaded!.completedSteps.draft = 'mutated';
 

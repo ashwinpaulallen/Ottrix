@@ -1,41 +1,69 @@
 import type { SuspendedWorkflowState } from './dag-types.js';
 
-/** Persistence layer for {@link SuspendedWorkflowState} between suspend and resume. */
+/** Metadata persisted alongside a suspended workflow state. */
+export interface SaveMeta {
+  /** Why the workflow suspended (approval, human input, external wait). */
+  reason?: string;
+  /** Auto-expire the suspended state after this duration in milliseconds. */
+  ttlMs?: number;
+  /** Tags for filtering (e.g. orgId, agentName). */
+  tags?: Record<string, string>;
+}
+
+/** Filter options for {@link WorkflowStateStore.list}. */
+export interface ListFilter {
+  tags?: Record<string, string>;
+  status?: 'suspended' | 'expired' | 'all';
+  limit?: number;
+  offset?: number;
+  orderBy?: 'suspendedAt' | 'ttlExpiry';
+}
+
+/** Summary of a suspended workflow run returned by {@link WorkflowStateStore.list}. */
+export interface SuspendedRunInfo {
+  workflowId: string;
+  suspendedAt: number;
+  currentStepId: string;
+  reason?: string;
+  tags?: Record<string, string>;
+  ttlExpiry?: number;
+}
+
+/** Handle returned by {@link WorkflowStateStore.acquireLock}. */
+export interface LockHandle {
+  release(): Promise<void>;
+  extend(ttlMs: number): Promise<void>;
+}
+
+/**
+ * Pluggable persistence for {@link SuspendedWorkflowState} between suspend and resume.
+ */
 export interface WorkflowStateStore {
-  /** Persist a suspended workflow state. */
-  save(state: SuspendedWorkflowState): Promise<void>;
-  /** Load a suspended workflow by ID, or null if not found. */
+  save(workflowId: string, state: SuspendedWorkflowState, meta?: SaveMeta): Promise<void>;
   load(workflowId: string): Promise<SuspendedWorkflowState | null>;
-  /** Remove a suspended workflow state. */
+  list(filter?: ListFilter): Promise<SuspendedRunInfo[]>;
   delete(workflowId: string): Promise<void>;
-  /** List all suspended workflow states. */
-  list(): Promise<SuspendedWorkflowState[]>;
+  acquireLock?(workflowId: string, ttlMs: number): Promise<LockHandle | null>;
 }
 
-/** In-memory {@link WorkflowStateStore} backed by a Map. */
-export class InMemoryStateStore implements WorkflowStateStore {
-  private readonly states = new Map<string, SuspendedWorkflowState>();
+/** Thrown when a workflow resume lock cannot be acquired. */
+export class WorkflowStateLockError extends Error {
+  readonly workflowId: string;
 
-  save(state: SuspendedWorkflowState): Promise<void> {
-    this.states.set(state.workflowId, cloneState(state));
-    return Promise.resolve();
-  }
-
-  load(workflowId: string): Promise<SuspendedWorkflowState | null> {
-    const state = this.states.get(workflowId);
-    return Promise.resolve(state ? cloneState(state) : null);
-  }
-
-  delete(workflowId: string): Promise<void> {
-    this.states.delete(workflowId);
-    return Promise.resolve();
-  }
-
-  list(): Promise<SuspendedWorkflowState[]> {
-    return Promise.resolve([...this.states.values()].map(cloneState));
+  constructor(workflowId: string, message?: string) {
+    super(message ?? `Could not acquire lock for workflow "${workflowId}"`);
+    this.name = 'WorkflowStateLockError';
+    this.workflowId = workflowId;
   }
 }
 
-function cloneState(state: SuspendedWorkflowState): SuspendedWorkflowState {
-  return structuredClone(state);
+/** Thrown when importing optional peer dependencies for state store adapters. */
+export class StateStorePeerDependencyError extends Error {
+  constructor(packageName: string) {
+    super(
+      `${packageName} is required for this state store adapter. ` +
+        `Install it with: npm install ${packageName}`,
+    );
+    this.name = 'StateStorePeerDependencyError';
+  }
 }

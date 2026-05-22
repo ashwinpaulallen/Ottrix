@@ -1,9 +1,12 @@
 import type {
   ApprovalHandler,
+  ToolAuditEvent,
   ToolDefinition,
+  ToolDescriptor,
   ToolExecuteOptions,
   ToolResult,
 } from '../types/tools.js';
+import { Logger } from '../observability/logger.js';
 import { runToolSpan } from '../observability/instrument.js';
 import { getMetricsCollector } from '../observability/global.js';
 import type { Telemetry } from '../observability/telemetry.js';
@@ -16,6 +19,26 @@ import {
   buildToolApprovalDeniedResult,
   resolveApprovedInput,
 } from './tool-approval.js';
+import {
+  applyAuditFilter,
+  buildSafetyBlockedResult,
+  buildToolDescriptor,
+  normalizeToolMetadata,
+  requiresApprovalEnabled,
+  resolveSandboxAvailable,
+  warnDestructiveWithoutApproval,
+} from './tool-safety.js';
+import {
+  buildIdempotencyInProgressResult,
+  computeIdempotencyKey,
+  getIdempotencyOptions,
+  isIdempotentTool,
+  resolveIdempotencyStore,
+  waitForIdempotencyResult,
+  type IdempotencyExecutionOptions,
+  type IdempotencyKeyFn,
+  type IdempotencyStore,
+} from './idempotency.js';
 
 /** Behavior when registering a tool whose name is already taken. */
 export type ToolRegistryOnDuplicate = 'overwrite' | 'ignore' | 'throw';
@@ -25,6 +48,9 @@ export interface ToolRegistryRegisterOptions {
   /** Strategy when a tool with the same name already exists. @defaultValue 'overwrite' */
   onDuplicate?: ToolRegistryOnDuplicate;
 }
+
+/** Sink for post-execution tool audit events. */
+export type ToolAuditHandler = (event: ToolAuditEvent) => void | Promise<void>;
 
 /** Error thrown when registering a tool with a duplicate name under `'throw'` strategy. */
 export class DuplicateToolError extends Error {
@@ -60,6 +86,11 @@ export class ToolRegistry {
   private readonly telemetryComponent: string;
   private globalApprovalHandler?: ApprovalHandler;
   private readonly toolApprovalHandlers = new Map<string, ApprovalHandler>();
+  private readonly logger: Logger;
+  private readonly auditHandler?: ToolAuditHandler;
+  private readonly sandboxAvailable?: boolean | (() => boolean | Promise<boolean>);
+  private readonly idempotencyStore?: IdempotencyStore;
+  private readonly idempotencyOptions: IdempotencyExecutionOptions;
 
   /**
    * @param options - Default duplicate-handling strategy (`'overwrite'` for legacy behavior).
@@ -75,12 +106,30 @@ export class ToolRegistry {
       cloneFrom?: ToolRegistry;
       /** Initial global approval handler. */
       approvalHandler?: ApprovalHandler;
+      /** Post-execution audit sink for tools with {@link AuditConfig}. */
+      auditHandler?: ToolAuditHandler;
+      /** Whether a sandbox is available for `requiresSandbox` tools. */
+      sandboxAvailable?: boolean | (() => boolean | Promise<boolean>);
+      /** Logger for registration warnings. */
+      logger?: Logger;
+      /** Global idempotency ledger for tools marked `idempotent: true`. */
+      idempotencyStore?: IdempotencyStore;
+      /** Retry timing when an idempotency key is already in progress. */
+      idempotencyOptions?: IdempotencyExecutionOptions;
     } = {},
   ) {
     this.defaultDuplicateStrategy = options.onDuplicate ?? 'overwrite';
     this.telemetry = options.telemetry;
     this.telemetryComponent = options.component ?? 'tools';
     this.globalApprovalHandler = options.approvalHandler;
+    this.auditHandler = options.auditHandler;
+    this.sandboxAvailable = options.sandboxAvailable;
+    this.idempotencyStore = options.idempotencyStore;
+    this.idempotencyOptions = {
+      ...getIdempotencyOptions(),
+      ...options.idempotencyOptions,
+    };
+    this.logger = options.logger ?? new Logger({ component: 'ToolRegistry' });
 
     if (options.cloneFrom) {
       for (const name of options.cloneFrom.names()) {
@@ -142,6 +191,11 @@ export class ToolRegistry {
         return this;
       }
     }
+
+    warnDestructiveWithoutApproval(tool.name, tool.metadata, (message) => {
+      this.logger.warn(message, { toolName: tool.name });
+    });
+
     this.tools.set(tool.name, tool);
     return this;
   }
@@ -177,6 +231,13 @@ export class ToolRegistry {
   }
 
   /**
+   * Return complete descriptors including safety metadata for every registered tool.
+   */
+  toolDescriptors(): ToolDescriptor[] {
+    return [...this.tools.values()].map((tool) => buildToolDescriptor(tool));
+  }
+
+  /**
    * Return the Zod input schema for a tool registered via {@link ZodTool} / {@link createTool}.
    *
    * @returns The schema, or `undefined` for legacy JSON Schema tools.
@@ -205,6 +266,8 @@ export class ToolRegistry {
    * Execute a tool by name with validated input.
    *
    * Tools with `requiresApproval` invoke an {@link ApprovalHandler} before running.
+   * Destructive tools run additional safety checks unless {@link ToolExecuteOptions.skipSafetyChecks}
+   * is set.
    *
    * @throws {ToolNotFoundError} If no tool is registered for `name`.
    * @throws {ConfigurationError} If approval is required but no handler is registered.
@@ -220,31 +283,47 @@ export class ToolRegistry {
     }
 
     const run = async (): Promise<ToolResult> => {
-      if (!tool.requiresApproval) {
-        return tool.execute(input);
+      const metadata = normalizeToolMetadata(tool.metadata);
+      const skipSafety = options?.skipSafetyChecks === true;
+      let effectiveInput = input;
+      let approvalHandled = false;
+
+      if (!skipSafety && metadata.sideEffect === 'destructive') {
+        if (metadata.requiresSandbox) {
+          const available = await resolveSandboxAvailable(this.sandboxAvailable);
+          if (!available) {
+            return buildSafetyBlockedResult(
+              `Tool '${name}' is destructive and requires a sandbox, but none is available`,
+              'sandbox_required',
+            );
+          }
+        }
+
+        if (requiresApprovalEnabled(metadata.requiresApproval)) {
+          const approvalOutcome = await this.runApprovalGate(name, tool, effectiveInput, options);
+          if (approvalOutcome.result) {
+            await this.emitToolAudit(tool, effectiveInput, approvalOutcome.result, options?.agentName);
+            return approvalOutcome.result;
+          }
+          effectiveInput = approvalOutcome.input;
+          approvalHandled = true;
+        }
       }
 
-      const handler = this.resolveApprovalHandler(tool);
-      if (!handler) {
-        throw new ConfigurationError(
-          `Tool '${name}' requires approval but no ApprovalHandler is registered`,
-        );
+      if (tool.requiresApproval && !approvalHandled) {
+        const approvalOutcome = await this.runApprovalGate(name, tool, effectiveInput, options);
+        if (approvalOutcome.result) {
+          await this.emitToolAudit(tool, effectiveInput, approvalOutcome.result, options?.agentName);
+          return approvalOutcome.result;
+        }
+        effectiveInput = approvalOutcome.input;
       }
 
-      const approval = await handler(
-        buildApprovalRequest(name, input, {
-          agentName: options?.agentName,
-          stepNumber: options?.stepNumber,
-          context: options?.context,
-        }),
+      const result = await this.runWithIdempotency(name, tool, effectiveInput, () =>
+        tool.execute(effectiveInput),
       );
-
-      if (!approval.approved) {
-        return buildToolApprovalDeniedResult(approval.reason);
-      }
-
-      const effectiveInput = resolveApprovedInput(input, approval);
-      return tool.execute(effectiveInput);
+      await this.emitToolAudit(tool, effectiveInput, result, options?.agentName);
+      return result;
     };
 
     const recordMetrics = async (): Promise<ToolResult> => {
@@ -303,6 +382,144 @@ export class ToolRegistry {
       }
     }
     return removed;
+  }
+
+  private async runWithIdempotency(
+    name: string,
+    tool: BaseTool,
+    input: Record<string, unknown>,
+    execute: () => Promise<ToolResult>,
+  ): Promise<ToolResult> {
+    if (!isIdempotentTool(tool)) {
+      return execute();
+    }
+
+    const store = resolveIdempotencyStore(this.getToolIdempotencyStore(tool), this.idempotencyStore);
+    if (!store) {
+      this.logger.warn(`Idempotent tool "${name}" has no IdempotencyStore configured`);
+      return execute();
+    }
+
+    const key = computeIdempotencyKey(
+      name,
+      input,
+      this.getToolIdempotencyKeyFn(tool),
+      this.logger,
+    );
+
+    let check = await store.begin(key);
+    if (check.status === 'done') {
+      this.emitIdempotencyHit(name, key);
+      return check.result as ToolResult;
+    }
+
+    if (check.status === 'in_progress') {
+      check = await waitForIdempotencyResult(store, key, this.idempotencyOptions);
+      if (check.status === 'done') {
+        this.emitIdempotencyHit(name, key);
+        return check.result as ToolResult;
+      }
+      if (check.status === 'in_progress') {
+        return buildIdempotencyInProgressResult(name, key);
+      }
+    }
+
+    try {
+      const result = await execute();
+      if (result.success) {
+        await store.complete(key, result);
+      } else {
+        await store.fail(key, result.error);
+      }
+      return result;
+    } catch (error) {
+      await store.fail(key, error);
+      throw error;
+    }
+  }
+
+  private getToolIdempotencyStore(tool: BaseTool): IdempotencyStore | undefined {
+    if (isZodTool(tool)) {
+      return tool.idempotencyStore;
+    }
+    return undefined;
+  }
+
+  private getToolIdempotencyKeyFn(tool: BaseTool): IdempotencyKeyFn | undefined {
+    if (isZodTool(tool)) {
+      return tool.idempotencyKey;
+    }
+    return undefined;
+  }
+
+  private emitIdempotencyHit(toolName: string, key: string): void {
+    this.telemetry?.activeSpan?.addEvent('tool_idempotency_hit', {
+      type: 'tool_idempotency_hit',
+      toolName,
+      key: key.slice(0, 64),
+    });
+  }
+
+  private async runApprovalGate(
+    name: string,
+    tool: BaseTool,
+    input: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<{ input: Record<string, unknown>; result?: ToolResult }> {
+    const handler = this.resolveApprovalHandler(tool);
+    if (!handler) {
+      const metadata = normalizeToolMetadata(tool.metadata);
+      if (metadata.sideEffect === 'destructive') {
+        return {
+          input,
+          result: buildSafetyBlockedResult(
+            `Tool '${name}' is destructive and requires approval, but no ApprovalHandler is registered`,
+            'approval_required',
+          ),
+        };
+      }
+      throw new ConfigurationError(
+        `Tool '${name}' requires approval but no ApprovalHandler is registered`,
+      );
+    }
+
+    const approval = await handler(
+      buildApprovalRequest(name, input, {
+        agentName: options?.agentName,
+        stepNumber: options?.stepNumber,
+        context: options?.context,
+      }),
+    );
+
+    if (!approval.approved) {
+      return { input, result: buildToolApprovalDeniedResult(approval.reason) };
+    }
+
+    return { input: resolveApprovedInput(input, approval) };
+  }
+
+  private async emitToolAudit(
+    tool: BaseTool,
+    input: Record<string, unknown>,
+    result: ToolResult,
+    agentName?: string,
+  ): Promise<void> {
+    const audit = normalizeToolMetadata(tool.metadata).audit;
+    if (!audit || !this.auditHandler) {
+      return;
+    }
+
+    const event: ToolAuditEvent = {
+      timestamp: new Date().toISOString(),
+      toolName: tool.name,
+      agentName,
+      success: result.success,
+      input: applyAuditFilter(input, audit),
+      output: result.success ? result.output : undefined,
+      error: result.success ? undefined : result.error,
+    };
+
+    await this.auditHandler(event);
   }
 
   private resolveApprovalHandler(tool: BaseTool): ApprovalHandler | undefined {

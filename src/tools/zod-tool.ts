@@ -2,6 +2,8 @@ import type { ZodType, ZodTypeAny } from 'zod';
 import type { ToolMetadata, ToolResult } from '../types/tools.js';
 import { invokeWithRunContext, type RunContext } from '../context/run-context.js';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema.js';
+import { normalizeToolMetadata, type ToolSafetyFields } from './tool-safety.js';
+import type { IdempotencyKeyFn, IdempotencyStore } from './idempotency.js';
 import {
   BaseTool,
   ToolValidationError,
@@ -9,8 +11,18 @@ import {
   type ToolExecutionEvents,
 } from './tool.js';
 
+/** Optional idempotency fields accepted by {@link createTool} / {@link ZodTool}. */
+export interface IdempotencyToolFields {
+  /** Custom idempotency key generator (defaults to runId + stepId + tool + args hash). */
+  idempotencyKey?: IdempotencyKeyFn;
+  /** Per-tool idempotency store override. */
+  idempotencyStore?: IdempotencyStore;
+}
+
 /** Configuration for {@link ZodTool}. */
-export interface ZodToolConfig<TInput, TOutput = unknown> {
+export interface ZodToolConfig<TInput, TOutput = unknown>
+  extends ToolSafetyFields,
+    IdempotencyToolFields {
   /** Unique tool name. */
   name: string;
   /** Model-facing description. */
@@ -21,7 +33,7 @@ export interface ZodToolConfig<TInput, TOutput = unknown> {
   output?: ZodType<TOutput>;
   /** Typed implementation invoked after input validation. */
   execute: ((input: TInput) => Promise<TOutput>) | ((input: TInput, ctx: RunContext | undefined) => Promise<TOutput>);
-  /** Optional operational metadata. */
+  /** Optional operational metadata (merged with top-level safety fields). */
   metadata?: ToolMetadata;
   /** Execution timeout in milliseconds. */
   timeoutMs?: number;
@@ -41,6 +53,12 @@ export class ZodTool<TInput, TOutput = unknown> extends BaseTool {
   /** Optional Zod output schema. */
   readonly zodOutputSchema?: ZodType<TOutput>;
 
+  /** Optional custom idempotency key generator. */
+  readonly idempotencyKey?: IdempotencyKeyFn;
+
+  /** Optional per-tool idempotency store override. */
+  readonly idempotencyStore?: IdempotencyStore;
+
   private readonly executeFn: (
     input: TInput,
     ctx?: RunContext,
@@ -50,17 +68,40 @@ export class ZodTool<TInput, TOutput = unknown> extends BaseTool {
    * @param config - Tool metadata, Zod schemas, and typed executor.
    */
   constructor(config: ZodToolConfig<TInput, TOutput>) {
-    super({
-      name: config.name,
-      description: config.description,
-      inputSchema: zodToJsonSchema(config.input),
-      metadata: config.metadata,
-      timeoutMs: config.timeoutMs,
-      events: config.events,
+    const {
+      sideEffect,
+      idempotent,
+      requiresApproval,
+      requiresSandbox,
+      audit,
+      version,
+      idempotencyKey,
+      idempotencyStore,
+      metadata: configMetadata,
+      ...rest
+    } = config;
+    const metadata = normalizeToolMetadata({
+      ...configMetadata,
+      ...(sideEffect !== undefined ? { sideEffect } : {}),
+      ...(idempotent !== undefined ? { idempotent } : {}),
+      ...(requiresApproval !== undefined ? { requiresApproval } : {}),
+      ...(requiresSandbox !== undefined ? { requiresSandbox } : {}),
+      ...(audit !== undefined ? { audit } : {}),
+      ...(version !== undefined ? { version } : {}),
     });
-    this.zodSchema = config.input;
-    this.zodOutputSchema = config.output;
-    this.executeFn = config.execute;
+    super({
+      name: rest.name,
+      description: rest.description,
+      inputSchema: zodToJsonSchema(rest.input),
+      metadata,
+      timeoutMs: rest.timeoutMs,
+      events: rest.events,
+    });
+    this.zodSchema = rest.input;
+    this.zodOutputSchema = rest.output;
+    this.idempotencyKey = idempotencyKey;
+    this.idempotencyStore = idempotencyStore;
+    this.executeFn = rest.execute;
   }
 
   /** @inheritdoc — validates with Zod instead of JSON Schema. */

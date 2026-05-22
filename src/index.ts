@@ -43,6 +43,8 @@ export {
   ZOD_REQUIRED_MESSAGE,
 } from './utils/zod-to-json-schema.js';
 
+export { sha256, canonicalStringify } from './utils/hash.js';
+
 export type {
   ChatMessage,
   ChatRole,
@@ -186,6 +188,15 @@ export {
   MCPTool,
   MCPRegistry,
   createMCPTool,
+  defaultMcpToolClassifier,
+  classifyMcpToolMetadata,
+  buildToolDescriptor,
+  normalizeToolMetadata,
+  useIdempotencyStore,
+  getIdempotencyStore,
+  resetIdempotencyStore,
+  InMemoryIdempotencyStore,
+  TOOL_IDEMPOTENCY_IN_PROGRESS_NAME,
   MCPServer,
   serveMCP,
   ASK_AGENT_TOOL_NAME,
@@ -196,7 +207,15 @@ export type {
   ApprovalResponse,
   ApprovalHandler,
   ToolExecuteOptions,
+  ToolMetadata,
+  ApprovalRequirement,
+  AuditConfig,
+  ToolDescriptor,
+  ToolDescriptorSafety,
+  ToolAuditEvent,
 } from './types/tools.js';
+
+export type { ToolAuditHandler } from './tools/index.js';
 
 // --- Memory ---
 export {
@@ -229,7 +248,11 @@ export {
   DAGWorkflowCancelledError,
   WorkflowResumeError,
   WorkflowSuspendedError,
+  WorkflowStateLockError,
+  StateStorePeerDependencyError,
   InMemoryStateStore,
+  PostgresStateStore,
+  RedisStateStore,
   WorkflowLoader,
   LoadedWorkflow,
 } from './orchestration/index.js';

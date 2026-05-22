@@ -13,6 +13,7 @@ import {
 } from './providers/index.js';
 import { ToolRegistry } from './tools/registry.js';
 import type { BaseTool } from './tools/tool.js';
+import { getIdempotencyStore } from './tools/idempotency.js';
 import { createGuardrails, type CreateGuardrailsConfig } from './guardrails/factory.js';
 import { getTelemetry, setLogger } from './observability/global.js';
 import { Logger, setGlobalLogLevel } from './observability/logger.js';
@@ -327,7 +328,11 @@ function buildToolRegistry(
   if (!tools?.length) {
     return undefined;
   }
-  const registry = new ToolRegistry({ telemetry, component });
+  const registry = new ToolRegistry({
+    telemetry,
+    component,
+    idempotencyStore: getIdempotencyStore(),
+  });
   for (const tool of tools) {
     registry.register(tool);
   }

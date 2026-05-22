@@ -7,6 +7,20 @@ import type {
 } from '../types/tools.js';
 import { validateSchema } from '../utils/schema-validator.js';
 
+function requiresApprovalEnabled(value?: ToolMetadata['requiresApproval']): boolean {
+  return value !== undefined && value !== false;
+}
+
+function normalizeToolMetadata(metadata?: ToolMetadata): ToolMetadata {
+  return {
+    sideEffect: 'none',
+    idempotent: false,
+    requiresApproval: false,
+    requiresSandbox: false,
+    ...metadata,
+  };
+}
+
 /** Default tool execution timeout in milliseconds. */
 export const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
 
@@ -147,13 +161,17 @@ export abstract class BaseTool {
     this.name = config.name;
     this.description = config.description;
     this.inputSchema = config.inputSchema;
-    const requiresApproval =
-      config.requiresApproval === true || config.metadata?.requiresApproval === true;
+    const metadata = config.metadata ? normalizeToolMetadata(config.metadata) : undefined;
+    const requiresApprovalFlag =
+      config.requiresApproval === true || requiresApprovalEnabled(metadata?.requiresApproval);
     this.metadata =
-      requiresApproval || config.metadata
-        ? { ...config.metadata, ...(requiresApproval ? { requiresApproval: true } : {}) }
-        : config.metadata;
-    this.requiresApproval = requiresApproval;
+      metadata || config.requiresApproval === true
+        ? normalizeToolMetadata({
+            ...metadata,
+            ...(config.requiresApproval === true ? { requiresApproval: true } : {}),
+          })
+        : undefined;
+    this.requiresApproval = requiresApprovalFlag;
     this.approvalHandler = config.approvalHandler;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     this.events = config.events ?? {};

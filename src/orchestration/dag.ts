@@ -23,6 +23,18 @@ import {
   type StepContext,
   type SuspendedWorkflowState,
 } from './dag-types.js';
+import {
+  WorkflowStateLockError,
+  type LockHandle,
+  type SaveMeta,
+  type WorkflowStateStore,
+} from './state-store.js';
+import {
+  dispatchApprovalGate,
+  handleApprovalResume,
+  resolveApprovalStore,
+  type ApprovalResumeOutcome,
+} from './human-approval.js';
 
 export {
   CyclicDependencyError,
@@ -37,6 +49,16 @@ export {
   type StepContext,
   type SuspendedWorkflowState,
 } from './dag-types.js';
+
+export {
+  WorkflowStateLockError,
+  StateStorePeerDependencyError,
+  type WorkflowStateStore,
+  type SaveMeta,
+  type ListFilter,
+  type SuspendedRunInfo,
+  type LockHandle,
+} from './state-store.js';
 
 interface ExecutionSnapshot {
   workflowId: string;
@@ -101,7 +123,7 @@ export class DAGWorkflow {
     const workflowInput = input ?? this.config.input;
     const workflowId = options?.workflowId ?? randomUUID();
     const existing = getRunContext();
-    return runWith(
+    const result = await runWith(
       {
         ...existing,
         runId: (existing?.runId as string | undefined) ?? workflowId,
@@ -111,18 +133,51 @@ export class DAGWorkflow {
           createInitialSnapshot(workflowId, workflowInput, [...this.steps.keys()]),
         ),
     );
+
+    if (result.status === 'suspended' && result.suspendedState && this.config.stateStore) {
+      await this.persistSuspendedState(result.suspendedState);
+    }
+
+    return result;
   }
 
   /**
-   * Resume a suspended workflow from a serialized state.
+   * Resume a suspended workflow.
    *
-   * @param state - State produced by a prior suspended {@link DAGResult}.
+   * When a {@link DAGWorkflowConfig.stateStore} is configured, pass only {@link ResumeInput}
+   * and the state is loaded automatically from the store.
+   *
+   * @param stateOrInput - Suspended state, or resume input when using a state store.
    * @param input - Human-provided output for the suspended step.
    */
-  async resume(state: SuspendedWorkflowState, input: ResumeInput): Promise<DAGResult> {
-    if (input.workflowId !== state.workflowId) {
+  async resume(
+    stateOrInput: SuspendedWorkflowState | ResumeInput,
+    input?: ResumeInput,
+  ): Promise<DAGResult> {
+    let state: SuspendedWorkflowState;
+    let resumeInput: ResumeInput;
+
+    if (input !== undefined) {
+      state = stateOrInput as SuspendedWorkflowState;
+      resumeInput = input;
+    } else if (this.config.stateStore) {
+      resumeInput = stateOrInput as ResumeInput;
+      const loaded = await this.config.stateStore.load(resumeInput.workflowId);
+      if (!loaded) {
+        throw new WorkflowResumeError(
+          `No suspended state found for workflow "${resumeInput.workflowId}"`,
+        );
+      }
+      state = loaded;
+    } else {
       throw new WorkflowResumeError(
-        `workflowId mismatch: expected "${state.workflowId}", received "${input.workflowId}"`,
+        'resume requires suspended state when no stateStore is configured',
+      );
+    }
+
+    if (resumeInput.workflowId !== state.workflowId) {
+      throw new WorkflowResumeError(
+        `workflowId mismatch: expected "${state.workflowId}", received "${resumeInput.workflowId}"`,
       );
     }
 
@@ -140,20 +195,170 @@ export class DAGWorkflow {
       }
     }
 
-    const snapshot = rehydrateSnapshot(state, input, [...this.steps.keys()]);
-    const existing = getRunContext();
-    return runWith(
-      {
-        ...existing,
-        runId: (existing?.runId as string | undefined) ?? state.workflowId,
-      },
-      () => this.execute(snapshot),
-    );
+    const lock = await this.acquireResumeLock(state.workflowId);
+    if (this.config.stateStore?.acquireLock && !lock) {
+      throw new WorkflowStateLockError(state.workflowId);
+    }
+
+    try {
+      let resumeInputForExecute = resumeInput;
+      const step = this.steps.get(state.currentStepId);
+
+      if (step?.approvalGate) {
+        const approvalStore = resolveApprovalStore(this.config.approvalStore, step.approvalGate);
+        const upstreamStepId = step.dependencies?.[0];
+        const approvalOutcome = await handleApprovalResume({
+          gate: step.approvalGate,
+          store: approvalStore,
+          state,
+          resumeInput,
+          upstreamStepId,
+          signerSecret: this.config.approvalSignerSecret,
+        });
+
+        const handled = await this.finalizeApprovalOutcome(
+          approvalOutcome,
+          state.currentStepId,
+          state.workflowId,
+          lock,
+        );
+        if (handled) {
+          return handled;
+        }
+
+        resumeInputForExecute = {
+          ...resumeInput,
+          stepOutput: (approvalOutcome as Extract<ApprovalResumeOutcome, { kind: 'complete' }>).output,
+        };
+      }
+
+      const snapshot = rehydrateSnapshot(state, resumeInputForExecute, [...this.steps.keys()]);
+      const existing = getRunContext();
+      const result = await runWith(
+        {
+          ...existing,
+          runId: (existing?.runId as string | undefined) ?? state.workflowId,
+        },
+        () => this.execute(snapshot),
+      );
+
+      if (result.status === 'completed' && this.config.stateStore) {
+        await this.config.stateStore.delete(state.workflowId);
+      } else if (result.status === 'suspended' && result.suspendedState && this.config.stateStore) {
+        await this.persistSuspendedState(result.suspendedState);
+      }
+
+      return result;
+    } finally {
+      await lock?.release();
+    }
+  }
+
+  /**
+   * Returns a workflow instance that auto-persists on suspend and auto-loads on resume
+   * using the given store.
+   */
+  suspendTo(
+    store: WorkflowStateStore,
+    options?: { saveMeta?: SaveMeta; lockTtlMs?: number },
+  ): DAGWorkflow {
+    return new DAGWorkflow({
+      ...this.config,
+      steps: this.config.steps,
+      stateStore: store,
+      saveMeta: options?.saveMeta ?? this.config.saveMeta,
+      lockTtlMs: options?.lockTtlMs ?? this.config.lockTtlMs,
+    });
   }
 
   /** Validate workflow graph structure. */
   validate(): void {
     validateDagSteps(this.config.steps);
+  }
+
+  private getLockTtlMs(): number {
+    return this.config.lockTtlMs ?? 60_000;
+  }
+
+  private async persistSuspendedState(state: SuspendedWorkflowState): Promise<void> {
+    const store = this.config.stateStore;
+    if (!store) {
+      return;
+    }
+
+    const lock = await store.acquireLock?.(state.workflowId, this.getLockTtlMs());
+    if (store.acquireLock && !lock) {
+      throw new WorkflowStateLockError(
+        state.workflowId,
+        `Could not acquire lock while persisting workflow "${state.workflowId}"`,
+      );
+    }
+
+    try {
+      await store.save(state.workflowId, state, this.config.saveMeta);
+    } finally {
+      await lock?.release();
+    }
+  }
+
+  private async finalizeApprovalOutcome(
+    outcome: ApprovalResumeOutcome,
+    previousStepId: string,
+    workflowId: string,
+    lock: LockHandle | null,
+  ): Promise<DAGResult | null> {
+    if (outcome.kind === 'complete') {
+      return null;
+    }
+
+    try {
+      if (outcome.state.currentStepId !== previousStepId) {
+        const existing = getRunContext();
+        const result = await runWith(
+          {
+            ...existing,
+            runId: (existing?.runId as string | undefined) ?? workflowId,
+          },
+          () => this.execute(snapshotFromSuspendedState(outcome.state, [...this.steps.keys()])),
+        );
+
+        if (result.status === 'suspended' && result.suspendedState && this.config.stateStore) {
+          await this.persistSuspendedState(result.suspendedState);
+        } else if (result.status === 'completed' && this.config.stateStore) {
+          await this.config.stateStore.delete(workflowId);
+        }
+
+        return result;
+      }
+
+      const result: DAGResult = {
+        status: 'suspended',
+        outputs: { ...outcome.state.completedSteps },
+        finalOutput: undefined,
+        duration: 0,
+        stepDurations: { ...outcome.state.stepDurations },
+        skippedSteps: [...outcome.state.skippedSteps],
+        failedSteps: [],
+        suspendedState: outcome.state,
+        suspensionMessage: outcome.suspensionMessage ?? outcome.state.suspensionMessage,
+      };
+
+      if (this.config.stateStore && outcome.state) {
+        await this.persistSuspendedState(outcome.state);
+      }
+
+      return result;
+    } finally {
+      await lock?.release();
+    }
+  }
+
+  private async acquireResumeLock(workflowId: string): Promise<LockHandle | null> {
+    const store = this.config.stateStore;
+    if (!store?.acquireLock) {
+      return null;
+    }
+    return store.acquireLock(workflowId, this.getLockTtlMs());
   }
 
   private async execute(snapshot: ExecutionSnapshot): Promise<DAGResult> {
@@ -229,7 +434,7 @@ export class DAGWorkflow {
       notify();
     };
 
-    const trySuspendAtReadyStep = (): boolean => {
+    const trySuspendAtReadyStep = async (): Promise<boolean> => {
       if (runningCount > 0 || suspendedState) {
         return false;
       }
@@ -255,7 +460,7 @@ export class DAGWorkflow {
         }
 
         const pendingStepInput = mapStepInput(step, workflowInput, depOutputs);
-        suspendedState = {
+        let nextSuspendedState: SuspendedWorkflowState = {
           workflowId,
           stepIds: [...this.steps.keys()],
           completedSteps: Object.fromEntries(outputs),
@@ -268,6 +473,21 @@ export class DAGWorkflow {
           suspensionMessage: `Waiting for human input at step "${step.name}"`,
           metadata: { ...metadata },
         };
+
+        if (step.approvalGate) {
+          const approvalStore = resolveApprovalStore(this.config.approvalStore, step.approvalGate);
+          nextSuspendedState = await dispatchApprovalGate({
+            gate: step.approvalGate,
+            store: approvalStore,
+            workflowId,
+            stepId: step.id,
+            payload: pendingStepInput,
+            suspendedState: nextSuspendedState,
+            signerSecret: this.config.approvalSignerSecret,
+          });
+        }
+
+        suspendedState = nextSuspendedState;
         notify();
         return true;
       }
@@ -275,8 +495,8 @@ export class DAGWorkflow {
       return false;
     };
 
-    const scheduleReadySteps = (): void => {
-      if (trySuspendAtReadyStep()) {
+    const scheduleReadySteps = async (): Promise<void> => {
+      if (await trySuspendAtReadyStep()) {
         return;
       }
 
@@ -356,14 +576,14 @@ export class DAGWorkflow {
         throw new DAGWorkflowCancelledError();
       }
 
-      scheduleReadySteps();
+      await scheduleReadySteps();
 
       if (suspendedState) {
         break;
       }
 
       if (runningCount === 0 && pendingCount > 0) {
-        if (trySuspendAtReadyStep()) {
+        if (await trySuspendAtReadyStep()) {
           break;
         }
         throw new Error('Workflow deadlock: pending steps with no runnable steps');
@@ -597,6 +817,37 @@ function createInitialSnapshot(workflowId: string, workflowInput: unknown, stepI
     outputs: new Map<string, unknown>(),
     stepDurations: new Map<string, number>(),
     skippedSteps: [],
+    failedSteps: [],
+  };
+}
+
+function snapshotFromSuspendedState(
+  state: SuspendedWorkflowState,
+  allStepIds: string[],
+): ExecutionSnapshot {
+  const statuses = new Map<string, DAGStepStatus>();
+  const outputs = new Map<string, unknown>(Object.entries(state.completedSteps));
+  const stepDurations = new Map<string, number>(Object.entries(state.stepDurations));
+  const skippedSteps = [...state.skippedSteps];
+
+  for (const stepId of allStepIds) {
+    if (outputs.has(stepId)) {
+      statuses.set(stepId, 'completed');
+    } else if (skippedSteps.includes(stepId)) {
+      statuses.set(stepId, 'skipped');
+    } else {
+      statuses.set(stepId, 'pending');
+    }
+  }
+
+  return {
+    workflowId: state.workflowId,
+    workflowInput: state.workflowInput,
+    metadata: { ...state.metadata },
+    statuses,
+    outputs,
+    stepDurations,
+    skippedSteps,
     failedSteps: [],
   };
 }
