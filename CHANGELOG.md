@@ -7,7 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No changes yet._
+### Added
+
+#### Run context (AsyncLocalStorage)
+
+Propagate `runId`, `stepId`, `agentName`, and custom fields (`orgId`, etc.) through agent runs, workflows, budgets, audit, and OTEL export without manual parameter threading.
+
+```ts
+import { runWith } from 'ottrix';
+
+await runWith({ runId: 'req-42', orgId: 'acme' }, () => agent.run('Hello'));
+```
+
+See [docs/context.md](docs/context.md).
+
+#### Tool safety envelope
+
+Tools declare safety metadata: `sideEffect`, `idempotent`, `requiresApproval`, `requiresSandbox`, and optional `audit` field filters. `ToolRegistry` enforces sandbox and approval gates for destructive tools and emits policy audit events.
+
+See [docs/tools.md](docs/tools.md#tool-safety-envelope).
+
+#### Idempotent tool execution
+
+Mark tools `idempotent: true` and configure an `IdempotencyStore` on `ToolRegistry` to deduplicate concurrent and retried executions.
+
+See [docs/tools.md](docs/tools.md#idempotent-tool-execution).
+
+#### Pluggable workflow state stores
+
+Persist suspended DAG workflow state to **Redis** (`ioredis`) or **PostgreSQL** (`pg`) for cross-process resume. Includes optional distributed locks.
+
+See [docs/orchestration.md](docs/orchestration.md#state-persistence).
+
+#### Human approval gates (DAG)
+
+DAG steps support `approvalGate` with role-based approvers, timeouts, escalation, signed decisions, and `ApprovalStore` persistence.
+
+See [docs/orchestration.md](docs/orchestration.md#human-approval-gates).
+
+#### Native OpenTelemetry exporter
+
+First-party OTLP/HTTP JSON exporter with GenAI semantic conventions, batching, retry, and RunContext-aware resource grouping.
+
+```ts
+import { OtelExporter, createOtelExporter } from 'ottrix/exporters/otel';
+
+getTelemetry().addExporter(createOtelExporter('datadog', {
+  apiKey: process.env.DD_API_KEY!,
+  serviceName: 'my-agent',
+}));
+```
+
+Subpath: `ottrix/exporters/otel`. See [docs/observability.md](docs/observability.md).
+
+#### Multi-scope budget enforcement
+
+Budget guardrail supports a scope stack — **agent → run → org → global** — with USD cost accounting via per-1k token rates. Global configuration via `configureBudgets()`.
+
+```ts
+import { configureBudgets } from 'ottrix/guardrails';
+
+configureBudgets({
+  scopes: [
+    { name: 'agent', source: 'agentDef', cap: { maxTokens: 1000 } },
+    { name: 'org', source: (ctx) => ctx.orgId as string, cap: { maxCostUsd: 10, period: 'month' } },
+  ],
+  onBreachDefault: 'terminate',
+});
+```
+
+New stop reason: **`cost_budget`**. See [docs/guardrails.md](docs/guardrails.md).
+
+#### AuditEmitter (SOC2-ready audit trail)
+
+Append-only audit system with automatic lifecycle emits, optional HMAC signing, field redaction, and pluggable sinks (`ConsoleSink`, `InMemorySink`, `FileSink`).
+
+```ts
+import { AuditEmitter, FileSink, HmacSigner, useAudit } from 'ottrix';
+
+useAudit(new AuditEmitter({
+  sink: new FileSink({ path: './audit.jsonl' }),
+  signer: new HmacSigner({ secret: process.env.AUDIT_SECRET! }),
+  redact: ['args.token', 'args.password'],
+}));
+```
+
+See [docs/guardrails.md](docs/guardrails.md).
+
+#### `@ottrix/nestjs` adapter
+
+First-party NestJS integration package in `packages/nestjs/` — `OttrixModule.forRoot/forFeature`, guards (`InjectionGuard`, `BudgetGuard`), interceptors (`RunContextInterceptor`, `TelemetryInterceptor`), SSE helper, and health indicator.
+
+```bash
+npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core
+```
+
+See [docs/nestjs.md](docs/nestjs.md) and [packages/nestjs/README.md](packages/nestjs/README.md).
+
+### Changed
+
+- `AuditLogger` moved to `src/guardrails/audit-logger.ts`; re-exported for backward compatibility
+- Agent scope budget keys include `runId` to prevent cross-run budget leakage
+- `createGuardrails()` merges global `configureBudgets()` when no per-agent budget is set
+- `GuardrailAction` includes `'suspend'` for budget approval-required breaches
+- OTEL exporter: Datadog default endpoint is `https://otlp.datadoghq.com`; permanent 4xx batches are dropped (not re-queued forever)
+
+### Fixed
+
+- OTEL exporter shutdown no longer silently drops buffered spans
+- OTEL `createOtelExporter` merges auth headers with custom headers
+- HMAC audit signature verification uses constant-time compare with length check
+- `agent.run.end` audit events report failure on thrown errors; `Agent.stream()` now emits run lifecycle audit events
+- NestJS `BudgetGuard` checks org-scoped budgets via authenticated `user.orgId`
+- NestJS `forFeature` tool registration ordering race resolved
+- NestJS injection guard handles `messages[].content` and blocks when sanitize cannot apply
 
 ## [1.0.0] - 2026-05-19
 

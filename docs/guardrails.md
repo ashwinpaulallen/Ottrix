@@ -52,7 +52,7 @@ Returns `{ middleware, budget?, audit?, config }`.
 
 ### Decision actions (`GuardrailAction`)
 
-`allow` · `block` · `modify` · `flag`
+`allow` · `block` · `modify` · `flag` · **`suspend`**
 
 **Block:** `proceed: false`, `reason` (default `'Blocked by guardrail'`), `code` (default `'guardrail'`).
 
@@ -123,60 +123,164 @@ Blocks on `maxCharacters` or estimated token count.
 
 ---
 
-## `AuditLogger`
+## `AuditLogger` (legacy guardrail handler)
 
-**File:** `src/guardrails/audit.ts`  
+**File:** `src/guardrails/audit-logger.ts`  
 **Name:** `audit`
+
+Legacy guardrail handler that records LLM/tool/guardrail events as `AuditLogEntry` records.
 
 | Option | Default |
 |--------|---------|
 | `agentName` | `'agent'` |
 | `console` | `false` |
 
-Hooks: `llm_pre`, `llm_post` (with usage/duration), `tool_pre`, `tool_post`, `guardrail_decision`, **`injection_scan`** (hash only — no raw content).
+Hooks: `llm_pre`, `llm_post`, `tool_pre`, `tool_post`, `guardrail_decision`, `injection_scan` (hash only).
 
-| Method | Behavior |
-|--------|----------|
-| `getLogs()` | In-memory entries |
-| `exportLogs(pretty?)` | JSON string |
-| `clear()` | Empty logs |
-
-Sinks: in-memory array, optional `console.info`, custom `handler`, `appendFile(filePath)` (JSON lines).
-
-Never returns blocking decisions from audit hooks.
+Re-exported from `ottrix/guardrails` for backward compatibility. Prefer **`AuditEmitter`** for SOC2-style append-only trails.
 
 ---
 
-## `BudgetGuardrail`
+## `AuditEmitter` (SOC2-ready audit trail)
+
+**File:** `src/guardrails/audit.ts`
+
+Append-only audit system with automatic lifecycle emits, optional HMAC signing, and field redaction. No manual `emit()` calls required in application code — framework internals emit fire-and-forget events.
+
+### Registration
+
+```ts
+import { AuditEmitter, FileSink, HmacSigner, useAudit } from 'ottrix';
+
+useAudit(new AuditEmitter({
+  sink: new FileSink({ path: './audit.jsonl' }),
+  signer: new HmacSigner({ secret: process.env.AUDIT_SECRET! }),
+  redact: ['args.token', 'args.password', 'args.apiKey'],
+  filter: (event) => event.type !== 'tool.invoke', // optional
+}));
+```
+
+### Event types
+
+`agent.run.start` · `agent.run.end` · `tool.invoke` · `tool.allow` · `tool.deny` · `tool.success` · `tool.fail` · `guardrail.check` · `guardrail.trip` · `approval.request` · `approval.decide` · `policy.check` · `policy.deny` · `budget.breach` · `budget.warn` · `workflow.step.start` · `workflow.step.end` · `workflow.suspend` · `workflow.resume`
+
+### Built-in sinks
+
+| Class | Purpose |
+|-------|---------|
+| `ConsoleSink` | Pretty-print (development) |
+| `InMemorySink` | Tests and inspection (`getEvents()`) |
+| `FileSink` | Append JSON lines to a file |
+
+Interfaces for user implementation: `PostgresSink`, `WebhookSink`.
+
+### Signer
+
+`HmacSigner` — HMAC-SHA256 over canonical JSON for tamper-evidence (`sign` / `verify`).
+
+### Automatic emit points
+
+| Component | Events |
+|-----------|--------|
+| `Agent.run()` / `Agent.stream()` | `agent.run.start`, `agent.run.end` |
+| `ToolRegistry.execute()` | `tool.invoke`, `tool.allow`, `tool.deny`, `tool.success`, `tool.fail`, `policy.check`, `policy.deny`, `approval.*` |
+| `GuardrailMiddleware` | `guardrail.check` (budget handler excluded — uses dedicated budget events) |
+| `PromptInjectionGuardrail` | `guardrail.trip` |
+| `BudgetGuardrail` | `budget.breach`, `budget.warn` |
+| `HumanApprovalGuardrail` / DAG approval gates | `approval.request`, `approval.decide` |
+| `DAGWorkflow` | `workflow.step.*`, `workflow.suspend`, `workflow.resume` |
+
+Every event automatically includes the current **`RunContext`** from ALS (`runId`, `orgId`, etc.). Sink errors are logged and never crash the agent.
+
+### API
+
+| Symbol | Purpose |
+|--------|---------|
+| `useAudit(emitter)` | Register global emitter |
+| `getAuditEmitter()` | Get global instance |
+| `resetAudit()` | Clear global (tests) |
+
+---
+
+## `BudgetGuardrail` (multi-scope)
 
 **File:** `src/guardrails/budget.ts`  
 **Name:** `budget` (stateful)
 
-| Option | Default |
-|--------|---------|
-| `defaultCostPer1k` | `{ inputPer1k: 0.005, outputPer1k: 0.015 }` |
-| `costPer1kByProvider` | `{}` |
+Tracks step, token, and **USD cost** budgets across a **scope stack**: agent → run → org → global. Innermost applicable scope is checked first; first breach wins.
 
-| Hook | Behavior |
-|------|----------|
-| `beforeLlm` (pre) | `checkBudgets`; then `stepCount += 1` |
-| `afterLlm` | `recordUsage` from `context.result.usage`; `checkBudgets` |
-| `beforeTool` (pre) | `checkBudgets` only (no step increment) |
+### Legacy flat options
 
-**Blocks when:**
+```ts
+new BudgetGuardrail({ maxSteps: 10, maxTokenBudget: 8000, maxCostUsd: 1.0 })
+```
 
-- `stepCount >= maxSteps` → `max_steps`
-- `totalTokens >= maxTokenBudget` → `token_budget`
-- `totalCostUsd >= maxCostUsd` → `cost_budget`
+Converted internally to a single agent scope.
+
+### Multi-scope configuration
+
+```ts
+import { configureBudgets, BudgetGuardrail } from 'ottrix/guardrails';
+
+configureBudgets({
+  scopes: [
+    { name: 'agent', source: 'agentDef', cap: { maxTokens: 1000, maxSteps: 10 }, onBreach: 'terminate' },
+    { name: 'run', source: (ctx) => ctx.runId, cap: { maxTokens: 5000 } },
+    { name: 'org', source: (ctx) => ctx.orgId as string, cap: { maxCostUsd: 10, period: 'month' } },
+    { name: 'global', source: () => 'global', cap: { maxCostUsd: 100, period: 'month' } },
+  ],
+  onBreachDefault: 'terminate',
+  store: new InMemoryBudgetStore(),
+});
+
+// createGuardrails() picks up configureBudgets() when no per-agent budget is set
+```
+
+| Scope source | Resolves to |
+|--------------|-------------|
+| `'agentDef'` | `{agentName}:{runId}` when runId present, else agent name |
+| `(ctx) => ctx.runId` | Per-run bucket |
+| `(ctx) => ctx.orgId` | Per-org bucket |
+| `() => 'global'` | Global bucket |
+
+### Breach actions (`BudgetBreachAction`)
+
+`terminate` · `requestApproval` (maps to guardrail `suspend`) · `flag` · `warn`
+
+### Cost accounting
+
+`estimateCostUsd(usage, rates)` — USD from per-1k input/output token rates. Falls back to `totalTokens` when input/output counts are zero.
+
+`AgentStopReason` includes **`cost_budget`** when cost cap is exceeded.
+
+### Store
+
+| Implementation | File |
+|----------------|------|
+| `InMemoryBudgetStore` | `src/guardrails/budget-store.ts` |
+| Custom | Implement `BudgetUsageStore` for Redis/Postgres |
 
 | Method | Behavior |
 |--------|----------|
-| `getRemainingBudget()` | Remaining steps/tokens/cost |
-| `getUsageSnapshot()` | Current counters |
+| `getRemainingBudget(scopeName?)` | Sync snapshot for innermost or named scope |
+| `getScopeRemaining(name, key)` | Async remaining for explicit scope key (HTTP guards) |
+| `getAllBudgets()` | Async status for all configured scopes |
 | `recordUsage(usage, providerName?)` | Manual usage recording |
-| `reset()` | Zero counters |
+| `reset()` | No-op on shared store (org/global persist) |
 
-`estimateCostUsd(usage, rates)` — same formula as provider registry.
+### Hooks
+
+| Hook | Behavior |
+|------|----------|
+| `beforeLlm` (pre) | Increment step counter; check breaches |
+| `afterLlm` | Record token usage and estimated USD cost; check breaches |
+| `beforeTool` (pre) | Check-only (no step increment) |
+
+**Blocks when usage exceeds cap:**
+
+- `max_steps` → `max_steps`
+- `maxTokens` → `token_budget`
+- `maxCostUsd` → `cost_budget`
 
 ---
 
@@ -252,6 +356,6 @@ createAgent({ guardrails: false });
 
 ## Subpath `ottrix/guardrails`
 
-Exports middleware, `createGuardrails`, budget, validators, human approval, audit, **`PromptInjectionGuardrail`**, injection types, and guardrail context types.
+Exports middleware, `createGuardrails`, `configureBudgets`, multi-scope budget types, validators, human approval, **`AuditEmitter`**, legacy **`AuditLogger`**, **`PromptInjectionGuardrail`**, injection types, and guardrail context types.
 
-Root `ottrix` exports `createGuardrails`, `GuardrailMiddleware`, `PromptInjectionGuardrail`, and related types.
+Root `ottrix` exports `createGuardrails`, `GuardrailMiddleware`, `AuditEmitter`, `useAudit`, `configureBudgets`, `PromptInjectionGuardrail`, and related types.

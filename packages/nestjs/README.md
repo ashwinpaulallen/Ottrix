@@ -46,7 +46,7 @@ export class AppModule {}
 |---------|-------------------|
 | Jaeger / Grafana Tempo | `{ exporter: 'otel', otel: { endpoint: 'http://localhost:4318' } }` |
 | Langfuse | `{ exporter: 'langfuse', langfuse: { publicKey, secretKey } }` |
-| Datadog | `{ exporter: 'otel', otel: { endpoint: 'https://trace.agent.datadoghq.com', headers: { 'DD-API-KEY': key } } }` |
+| Datadog OTLP | `{ exporter: 'otel', otel: { endpoint: 'https://otlp.datadoghq.com', headers: { 'DD-API-KEY': key } } }` |
 | Honeycomb | `{ exporter: 'otel', otel: { endpoint: 'https://api.honeycomb.io', headers: { 'x-honeycomb-team': key } } }` |
 | Webhook | `{ exporter: 'webhook', webhook: { url: 'https://...' } }` |
 

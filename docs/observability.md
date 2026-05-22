@@ -105,6 +105,49 @@ When a root span ends, `buildTraceData` assembles `TraceData` (spans, input/outp
 | `TraceConsoleExporter` | `console.info` formatted trace |
 | `InMemoryTraceExporter` | In-memory array (tests) |
 | `MultiExporter` | Fan-out to multiple exporters |
+| **`OtelExporter`** | OTLP/HTTP JSON to Jaeger, Tempo, Datadog, Honeycomb, or custom collectors |
+| `createOtelExporter(backend, options?)` | Factory presets for common backends |
+
+### `OtelExporter`
+
+**File:** `src/observability/exporters/otel.ts`  
+**Subpath:** `ottrix/exporters/otel`
+
+Translates Ottrix spans to OTLP/HTTP JSON with GenAI and Ottrix semantic conventions. No protobuf/grpc dependency.
+
+```ts
+import { OtelExporter, createOtelExporter } from 'ottrix/exporters/otel';
+import { getTelemetry } from 'ottrix';
+
+// Local collector (Jaeger, Grafana Tempo)
+getTelemetry().addExporter(new OtelExporter({
+  endpoint: 'http://localhost:4318',
+  serviceName: 'my-agent',
+}));
+
+// Factory presets
+const datadog = createOtelExporter('datadog', {
+  apiKey: process.env.DD_API_KEY!,
+  serviceName: 'my-agent',
+});
+```
+
+| Option | Default |
+|--------|---------|
+| `protocol` | `'http'` (`grpc` throws — use HTTP JSON) |
+| `batchSize` | `50` |
+| `flushIntervalMs` | `5000` |
+| `maxRetries` | `3` |
+| `fetchTimeoutMs` | `30000` |
+
+**Behavior:**
+
+- Captures `RunContext` at export time and groups spans into separate OTLP resources per run
+- Retries 5xx and 429; drops permanent 4xx batches (no infinite re-queue)
+- `shutdown()` drains buffer with explicit drop on persistent failure
+- Optional Langfuse cross-link via `setLangfuseTraceId()`
+
+**Semantic attributes:** `gen_ai.*`, `ottrix.agent.name`, `ottrix.run.id`, `ottrix.tool.name`, `ottrix.cost.usd`, `ottrix.ttft_ms`
 
 ### Configuration wiring
 
@@ -132,6 +175,7 @@ getTelemetry().setExporter(new LangfuseExporter({
 import { LangfuseExporter } from 'ottrix/exporters/langfuse';
 import { BraintrustExporter } from 'ottrix/exporters/braintrust';
 import { WebhookExporter } from 'ottrix/exporters/webhook';
+import { OtelExporter } from 'ottrix/exporters/otel';
 ```
 
 **Helpers:** `buildTraceData`, `createTraceExporterFromConfig`, `configureTraceExportFromConfig`

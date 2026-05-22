@@ -30,7 +30,9 @@ Source (`src/`), tests, and examples are not included in the tarball.
 | `ottrix/observability` | `dist/observability/index.js` | Logging, telemetry, replay |
 | `ottrix/agent` | `dist/agent/index.js` | Agent internals |
 | `ottrix/evals` | `dist/evals/index.js` | Evaluation framework |
-| `ottrix/exporters/*` | `dist/observability/exporters/*.js` | Langfuse, Braintrust, webhook exporters |
+| `ottrix/exporters/*` | `dist/observability/exporters/*.js` | Langfuse, Braintrust, webhook, **OTEL** exporters |
+| `ottrix/exporters/otel` | `dist/observability/exporters/otel.js` | Native OTLP/HTTP exporter |
+| `@ottrix/nestjs` | `packages/nestjs` | NestJS DI adapter (monorepo workspace) |
 
 CLI bin: **`ottrix-serve`** → `dist/cli/serve.js` (MCP server hosting).
 
@@ -72,21 +74,42 @@ Built-in LLM providers do **not** require vendor SDK packages. They call HTTP AP
 | Supervisor | `SupervisorWorkflow`, `createSupervisor` |
 | DAG workflows | `DAGWorkflow`, `DAGBuilder`, suspend/resume, `InMemoryStateStore` |
 | Evals | `evaluate`, `EvalRunner`, scorers, `EvalReporter` |
-| Trace exporters | `LangfuseExporter`, `BraintrustExporter`, `WebhookExporter`, `MultiExporter` |
+| Trace exporters | `LangfuseExporter`, `BraintrustExporter`, `WebhookExporter`, **`OtelExporter`**, `MultiExporter` |
 | Prompt injection | `PromptInjectionGuardrail` — **enabled by default** in `createGuardrails` |
+| Run context | `RunContext`, `runWith`, ALS propagation across agent/workflow/audit/OTEL |
+| Multi-scope budget | `configureBudgets`, agent/run/org/global USD cost caps |
+| Audit trail | `AuditEmitter`, `useAudit`, automatic SOC2 lifecycle events |
+| Tool safety | Destructive/sandbox/approval metadata on tools |
+| Idempotent tools | `IdempotencyStore`, deduplicated tool execution |
+| Workflow state stores | `RedisStateStore`, `PostgresStateStore` for DAG suspend/resume |
+| Human approval gates | DAG `approvalGate`, signed decisions, `ApprovalStore` |
+| NestJS adapter | `@ottrix/nestjs` — DI, guards, interceptors, SSE, health |
 
 See each module document for complete symbol lists and behavior.
 
 ## Branch commit → documentation index
 
-Maps the v2 feature branch commits to module docs:
+Maps commits on the `RunContext-via-AsyncLocalStorage` branch:
 
-| Git commit (summary) | Document |
-|----------------------|----------|
-| `9a7d1db` — Zod + structured outputs | [agent.md](./agent.md#structured-output-zod) |
-| `9e15667` — Fallback chain + circuit breaker | [providers.md](./providers.md) |
-| `0dfd9ad` — Zod tools + HITL approval | [tools.md](./tools.md) |
-| `6e2b75f` — Observational memory | [memory.md](./memory.md#observationalmemory) |
-| `0b66e65` — Supervisor + DAG orchestration | [orchestration.md](./orchestration.md) |
-| `8887e9e` — Evals + observability exporters | [evals.md](./evals.md), [observability.md](./observability.md) |
-| `49b5df6` — Prompt injection guardrails | [guardrails.md](./guardrails.md#promptinjectionguardrail) |
+| Commit | Feature | Document |
+|--------|---------|----------|
+| `7895d45` | RunContext via AsyncLocalStorage | [context.md](./context.md) |
+| `1039351` | Tool safety envelope, idempotent execution | [tools.md](./tools.md#tool-safety-envelope) |
+| `1039351` | Pluggable workflow state stores | [orchestration.md](./orchestration.md#state-persistence) |
+| `1039351` | Human approval gates for DAG | [orchestration.md](./orchestration.md#human-approval-gates) |
+| `a40ea26` | Native OTEL exporter | [observability.md](./observability.md#otelexporter) |
+| `a40ea26` | Multi-scope budget + USD cost accounting | [guardrails.md](./guardrails.md#budgetguardrail-multi-scope) |
+| `a40ea26` | AuditEmitter (SOC2 audit trail) | [guardrails.md](./guardrails.md#auditemitter-soc2-ready-audit-trail) |
+| `a40ea26` | `@ottrix/nestjs` adapter | [nestjs.md](./nestjs.md) |
+
+Prior v2 commits (1.0.0 release):
+
+| Commit | Feature | Document |
+|--------|---------|----------|
+| Structured output (Zod) | [agent.md](./agent.md) |
+| Fallback chain, circuit breaker | [providers.md](./providers.md) |
+| Zod tools, tool approval | [tools.md](./tools.md) |
+| Observational memory | [memory.md](./memory.md) |
+| Supervisor, DAG, suspend/resume | [orchestration.md](./orchestration.md) |
+| Evals, trace exporters | [evals.md](./evals.md), [observability.md](./observability.md) |
+| Prompt injection (default) | [guardrails.md](./guardrails.md) |

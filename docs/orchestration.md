@@ -223,9 +223,53 @@ When suspended, `suspendedState` contains `workflowId`, `currentStepId`, `comple
 
 Continue from suspension with `{ workflowId, stepOutput }`. Throws `WorkflowResumeError` on workflow ID mismatch.
 
+When using a `stateStore`, pass only `{ workflowId, stepOutput }` — state is loaded automatically.
+
 ### State persistence
 
-**`InMemoryStateStore`** — optional store for suspended workflow state (development/tests).
+**Interface:** `WorkflowStateStore` (`src/orchestration/state-store.ts`)
+
+| Implementation | Backend | Peer dependency |
+|----------------|---------|-----------------|
+| `InMemoryStateStore` | In-process map | none |
+| `RedisStateStore` | Redis | `ioredis` |
+| `PostgresStateStore` | PostgreSQL | `pg` |
+
+Stores suspended workflow state for cross-process resume. Supports optional distributed locks via `acquireLock()` for safe concurrent resume.
+
+`DAGWorkflow.suspendTo(store)` returns a workflow instance that auto-persists on suspend and auto-loads on resume.
+
+### Human approval gates
+
+**File:** `src/orchestration/human-approval.ts`
+
+DAG steps can include an **`approvalGate`** that suspends until human approvers respond.
+
+```ts
+import { humanApproval, InMemoryApprovalStore } from 'ottrix/orchestration';
+
+.addStep('publish', {
+  approvalGate: humanApproval({
+    role: 'editor',
+    onTimeout: 'reject',
+    timeoutSec: 86400,
+  }),
+  execute: async (input) => input,
+})
+```
+
+| Type | Purpose |
+|------|---------|
+| `ApprovalGateConfig` | Role, multi-approver, timeout, escalation |
+| `ApprovalDecision` | Signed approve/reject/redirect payload |
+| `ApprovalStore` | Persistent request/decision storage |
+| `ApprovalDispatcher` | Notify humans (webhook, email, etc.) |
+| `InMemoryApprovalStore` | Development and tests |
+| `DecisionSigner` | HMAC signing for tamper-evident decisions |
+
+**Flow:** workflow suspends → `dispatchApprovalGate()` creates request → resume with `ApprovalDecision` as `stepOutput` → `handleApprovalResume()` evaluates quorum.
+
+Emits **`approval.request`** and **`approval.decide`** audit events when global audit is registered.
 
 ### Errors
 
