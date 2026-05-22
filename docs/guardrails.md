@@ -13,16 +13,20 @@ Returns `{ middleware, budget?, audit?, config }`.
 | Option | Default |
 |--------|---------|
 | `agentName` | `'agent'` |
+| `promptInjection` | Enabled (`block`, `medium`, scan tool outputs); `false` to disable |
 
-### Handler order (when each config key is set)
+### Handler order
 
 1. `AuditLogger` (if `audit` config)
 2. `BudgetGuardrail` (if `budget` config)
-3. `PiiDetector` (if `piiDetection` / `pii`)
+3. `PiiDetector` (if `pii` config)
 4. `ContentFilter` (if `contentFilter`)
-5. `SchemaValidator` (if `schema`)
-6. `MaxLengthValidator` (if `maxLength`)
+5. `SchemaValidator` (if `outputSchema` in guardrails config — distinct from agent Zod output)
+6. `MaxLengthValidator` (if `maxOutputLength`)
 7. `HumanApprovalGuardrail` (if `humanApproval`)
+8. **`PromptInjectionGuardrail`** — **always included unless `promptInjection: false`**
+
+`createAgent` with default guardrails (`guardrails: true` or omitted) includes prompt injection protection with no extra configuration.
 
 `config` output maps budget limits into `GuardrailConfig` for the agent:
 
@@ -129,7 +133,7 @@ Blocks on `maxCharacters` or estimated token count.
 | `agentName` | `'agent'` |
 | `console` | `false` |
 
-Hooks: `llm_pre`, `llm_post` (with usage/duration), `tool_pre`, `tool_post`, `guardrail_decision`.
+Hooks: `llm_pre`, `llm_post` (with usage/duration), `tool_pre`, `tool_post`, `guardrail_decision`, **`injection_scan`** (hash only — no raw content).
 
 | Method | Behavior |
 |--------|----------|
@@ -176,6 +180,67 @@ Never returns blocking decisions from audit hooks.
 
 ---
 
+## `PromptInjectionGuardrail`
+
+**File:** `src/guardrails/injection.ts`  
+**Name:** `prompt-injection`
+
+Detects and mitigates prompt injection in user input, LLM output, and tool results.
+
+### Default settings (`DEFAULT_PROMPT_INJECTION_OPTIONS`)
+
+| Option | Default |
+|--------|---------|
+| `mode` | `'block'` |
+| `strictness` | `'medium'` |
+| `scanToolOutputs` | `true` |
+
+### Modes
+
+| Mode | Behavior |
+|------|----------|
+| `block` | Rejects request with `"I can't process this request"` |
+| `flag` | Proceeds; adds `[injection:category:severity]` flags |
+| `sanitize` | Wraps/strips matched content; modifies messages or tool output |
+
+### Strictness
+
+| Level | Pattern coverage |
+|-------|------------------|
+| `low` | Critical patterns only (e.g. ignore instructions) |
+| `medium` | Default — balanced coverage |
+| `high` | Broader patterns + optional LLM classifier for ambiguous input |
+
+### Detection layers
+
+1. **Pattern rules** — instruction override, jailbreak, exfiltration, indirect injection
+2. **Encoding tricks** — base64 and hex payloads decoded and re-scanned
+3. **Invisible characters** — requires 3+ zero-width / bidi chars
+4. **Output leak** — system prompt substring overlap in model response
+5. **Optional model detection** — LLM classifier when `modelDetection.provider` set and heuristics inconclusive
+
+### Hooks
+
+| Hook | Phase |
+|------|-------|
+| `beforeLlm` (pre) | Scan user messages |
+| `afterLlm` | Scan response for prompt leak / tone shift |
+| `afterTool` | Scan tool output when `scanToolOutputs: true` |
+
+### Public methods
+
+`checkInput(message)`, `checkOutput(response, systemPrompt)` — return `InjectionDetection` with severity, category, matched patterns, optional `sanitizedContent`.
+
+### Opt out
+
+```ts
+createAgent({ guardrails: { promptInjection: false } });
+// or disable all guardrails:
+createAgent({ guardrails: false });
+```
+
+---
+
 ## Agent integration
 
 - `Agent` calls `guardrailMiddleware.beforeLlm` / `afterLlm` around each completion
@@ -187,6 +252,6 @@ Never returns blocking decisions from audit hooks.
 
 ## Subpath `agentic-fabric/guardrails`
 
-Exports middleware, `createGuardrails`, budget, validators, human approval, audit, and guardrail context types (`GuardrailHandler`, `LlmGuardrailContext`, `ToolGuardrailContext`, etc.).
+Exports middleware, `createGuardrails`, budget, validators, human approval, audit, **`PromptInjectionGuardrail`**, injection types, and guardrail context types.
 
-Root `agentic-fabric` exports `createGuardrails`, `GuardrailMiddleware`, and `CreateGuardrailsConfig` types only.
+Root `agentic-fabric` exports `createGuardrails`, `GuardrailMiddleware`, `PromptInjectionGuardrail`, and related types.

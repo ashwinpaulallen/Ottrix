@@ -179,9 +179,52 @@ Vendor HTTP: 401 → `auth`; 429 → `rate_limit`; 413 → `context_length`.
 
 `true` only for `ProviderError` where `retryable` and code is **not** `auth` or `context_length`.
 
+### Fallback execution (`fallback-executor.ts`)
+
+When a fallback chain is configured, `complete` / `stream` / `countTokens`:
+
+1. Try each provider in order (skipping unhealthy / open circuits)
+2. Retry transient errors on the same provider per `BaseProvider` retry policy
+3. Record usage and health on success/failure
+4. Emit fallback events via optional `onFallbackEvent` / `onProviderFallback` callbacks
+
+**Exports:** `shouldTryFallback`, `normalizeFallbackChain`, `computeFallbackBackoffMs`, `computeProviderBackoffMs`, `classifyProviderError`, `isProviderCircuitOpen`, `isProviderRequestBlocked`
+
 ### `estimateCost(usage, rates)`
 
 Linear: `(inputTokens/1000)*inputPer1k + (outputTokens/1000)*outputPer1k`.
+
+---
+
+## `CircuitBreaker`
+
+**File:** `src/providers/circuit-breaker.ts`
+
+Per-provider circuit breaker integrated into `ProviderRegistry` fallback execution.
+
+| State | Behavior |
+|-------|----------|
+| `closed` | Normal operation |
+| `open` | Rejects requests with `CircuitOpenError` (includes `retryAfterMs`) |
+| `half_open` | Allows probe requests after `resetTimeoutMs` |
+
+| Option | Default |
+|--------|---------|
+| `failureThreshold` | `5` consecutive failures |
+| `resetTimeoutMs` | `60_000` |
+| `halfOpenMaxAttempts` | `1` |
+
+**Exports:** `CircuitBreaker`, `CircuitOpenError`, `isProviderCircuitOpen`, `computeProviderBackoffMs`
+
+Also exported from root `agentic-fabric` for advanced custom wiring.
+
+---
+
+## Latency tracking
+
+**File:** `src/providers/latency.ts`
+
+Registry tracks rolling latency per provider for `selectProvider` sorting (lower latency preferred after cost tier).
 
 ---
 

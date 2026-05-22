@@ -149,13 +149,97 @@ Supervisor delegates to specialist workers via the shared `delegate` tool. Deleg
 
 Fires **during** the supervisor run loop when a thinking step is recorded — wired through the supervisor agent's `onStep` hook via `createSupervisorThinkingOnStep`. {@link createSupervisor} attaches this automatically; when constructing {@link SupervisorWorkflow} manually, pass the same hook on the supervisor {@link Agent}.
 
+### `createSupervisor(options)`
+
+**File:** `src/orchestration/supervisor.ts`
+
+Convenience factory that builds a `SupervisorWorkflow` from a provider and worker map:
+
+```ts
+const pipeline = createSupervisor({
+  provider,
+  systemPrompt: 'You manage a content team.',
+  workers: {
+    researcher: { systemPrompt: '...', description: 'Finds facts' },
+    writer: { systemPrompt: '...', description: 'Writes prose', provider: writerProvider },
+  },
+  onSupervisorThinking: (thought) => console.log(thought),
+});
+```
+
+Creates a supervisor `Agent` with the `delegate` tool and worker roster in the system prompt. Workers can be nested `SupervisorWorkflow` instances (up to `maxNestedDepth`).
+
 ---
 
 ## `DAGWorkflow`
 
 **File:** `src/orchestration/dag.ts`
 
-Directed acyclic graph of steps with optional suspend/resume, retries, and concurrency limits. Use {@link DAGBuilder} or YAML `type: dag` via {@link WorkflowLoader}.
+Directed acyclic graph of steps with parallelism, retries, timeouts, cancellation, and **suspend/resume**.
+
+### Building workflows
+
+**`DAGBuilder`** fluent API:
+
+```ts
+const workflow = new DAGBuilder()
+  .addStep('draft', { name: 'Draft', execute: async (input) => `Draft: ${input}` })
+  .addStep('review', {
+    name: 'Review',
+    suspend: true,
+    execute: async (input) => input,
+    dependencies: ['draft'],
+  })
+  .build();
+```
+
+**Helpers:** `agentStep(id, name, agent)`, `functionStep(id, name, fn)`, `parallelStep(...)`
+
+### Step options (`DAGStep`)
+
+| Field | Description |
+|-------|-------------|
+| `dependencies` | Step IDs that must complete first |
+| `inputMapper` | `(depOutputs) => input` for multi-parent steps |
+| `retries` | Retry count after first failure |
+| `timeout` | Per-step timeout ms |
+| `suspend` | Pause before execute; wait for `resume()` |
+| `condition` | Skip step when false |
+
+### `run(input, options?)`
+
+Returns `DAGResult`:
+
+| `status` | Meaning |
+|----------|---------|
+| `completed` | All steps finished |
+| `suspended` | Paused at `suspend: true` step |
+| `failed` | Unrecoverable error |
+| `cancelled` | `workflow.cancel()` called |
+
+When suspended, `suspendedState` contains `workflowId`, `currentStepId`, `completedSteps`, and serializable outputs for resume.
+
+### `resume(state, input)`
+
+Continue from suspension with `{ workflowId, stepOutput }`. Throws `WorkflowResumeError` on workflow ID mismatch.
+
+### State persistence
+
+**`InMemoryStateStore`** — optional store for suspended workflow state (development/tests).
+
+### Errors
+
+| Class | When |
+|-------|------|
+| `CyclicDependencyError` | Invalid graph |
+| `DAGStepTimeoutError` | Step exceeded timeout |
+| `DAGWorkflowCancelledError` | Cancelled run |
+| `WorkflowSuspendedError` | Internal suspend signal |
+| `WorkflowResumeError` | Invalid resume |
+
+| Config | Default |
+|--------|---------|
+| `maxConcurrency` | `Infinity` |
 
 ---
 
@@ -255,4 +339,4 @@ Workflow classes, `WorkflowLoader`, `LoadedWorkflow`, `ParallelThenWorkflow`, ru
 
 ### Root `agentic-fabric`
 
-`SequentialWorkflow`, `ParallelWorkflow`, `ParallelThenWorkflow`, `RouterWorkflow`, `HierarchicalWorkflow`, `WorkflowLoader`, `LoadedWorkflow` only.
+`SequentialWorkflow`, `ParallelWorkflow`, `ParallelThenWorkflow`, `RouterWorkflow`, `HierarchicalWorkflow`, `SupervisorWorkflow`, `createSupervisor`, `DAGWorkflow`, `DAGBuilder`, `agentStep`, `functionStep`, workflow errors, `InMemoryStateStore`, `WorkflowLoader`, `LoadedWorkflow`.

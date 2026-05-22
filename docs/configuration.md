@@ -25,6 +25,10 @@ After merge, `applyProviderApiKeysFromEnv` re-applies `ANTHROPIC_API_KEY`, `OPEN
 | `logLevel` | `'info'` |
 | `telemetry.enabled` | `true` |
 | `telemetry.exporter` | `'memory'` |
+| `telemetry.langfuse` | Langfuse keys when `exporter: 'langfuse'` |
+| `telemetry.braintrust` | Braintrust config when `exporter: 'braintrust'` |
+| `telemetry.webhook` | Webhook URL when `exporter: 'webhook'` |
+| `telemetry.maxFinishedSpans` | Optional retention cap |
 | `guardrails.piiDetection` | `true` |
 | `guardrails.maxCostUsd` | `undefined` |
 
@@ -38,7 +42,10 @@ After merge, `applyProviderApiKeysFromEnv` re-applies `ANTHROPIC_API_KEY`, `OPEN
 | `AGENTIC_MAX_TOKEN_BUDGET` | `maxTokenBudget` |
 | `AGENTIC_LOG_LEVEL` | `logLevel` (`debug`, `info`, `warn`, `error`) |
 | `AGENTIC_TELEMETRY_ENABLED` | `telemetry.enabled` (`1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`) |
-| `AGENTIC_TELEMETRY_EXPORTER` | `telemetry.exporter` (`console`, `memory`, `none`) |
+| `AGENTIC_TELEMETRY_EXPORTER` | `telemetry.exporter` (`console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook`) |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | `telemetry.langfuse` |
+| `BRAINTRUST_API_KEY`, `BRAINTRUST_PROJECT_NAME` | `telemetry.braintrust` |
+| `AGENTIC_TELEMETRY_WEBHOOK_URL` | `telemetry.webhook.url` |
 | `AGENTIC_GUARDRAILS_PII_DETECTION` | `guardrails.piiDetection` |
 | `AGENTIC_GUARDRAILS_MAX_COST_USD` | `guardrails.maxCostUsd` |
 | `AGENTIC_CONFIG_PATH` | Explicit config file path |
@@ -123,7 +130,10 @@ Builds an `Agent` with opinionated defaults from merged `AgenticConfig`.
 | `tools` | Non-empty → new `ToolRegistry` with tools registered |
 | `memory` | `true` or omitted → internal `KeywordMemoryProvider`; `false` → none; object → used as-is |
 | `telemetry` | `false` → none; object → that instance; else global telemetry if `agentic.telemetry.enabled` |
-| `guardrails` | `false` → none; `true`/omitted → `createGuardrails` from agentic config; object → merged |
+| `guardrails` | `false` → none; `true`/omitted → `createGuardrails` from agentic config (**includes prompt injection**); object → merged |
+| `outputSchema` | Zod schema on agent for structured output (requires `zod` peer) |
+| `structuredOutputRetries` | Passed to `Agent` (default **3**) |
+| `observationalMemory` | `ObservationalMemory` instance for fact extraction |
 | `contextLimitTokens` | `128_000` |
 | `keepRecentMessages` | `6` |
 | `systemPrompt`, `maxSteps`, `maxTokenBudget` | Passed to `Agent` |

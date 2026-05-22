@@ -25,7 +25,7 @@ The types package is **type-only** at runtime (no implementations in this folder
 |------|---------|
 | `TokenUsage` | `{ inputTokens; outputTokens; totalTokens }` |
 | `ProviderConfig` | `{ apiKey?; baseUrl?; defaultModel; maxRetries?; timeout? }` |
-| `CompletionParams<TModel>` | `{ messages; model?; temperature?; maxTokens?; tools?; stopSequences?; systemPrompt? }` |
+| `CompletionParams<TModel>` | Adds optional `responseFormat: 'text' \| 'json'` |
 | `CompletionResult<TModel>` | `{ content: ContentBlock[]; model; usage; stopReason: string }` |
 | `StreamChunk` | Union of `text_delta`, `tool_use_start`, `tool_use_delta`, `tool_use_end`, `done` |
 | `CompletionProvider<TModel>` | `{ complete; stream; countTokens }` |
@@ -40,7 +40,10 @@ Stream chunk `done` data: `{ stopReason: string; usage?: TokenUsage }`.
 |------|---------|
 | `JSONSchemaType` | JSON Schema type enum strings |
 | `JSONSchema` | Subset schema fields: `type`, `properties`, `required`, `items`, validation keywords, `oneOf`/`anyOf`/`allOf` |
-| `ToolMetadata` | Optional `cost`, `latency`, `requiresAuth`, `idempotent` |
+| `ToolMetadata` | Optional `cost`, `latency`, `requiresAuth`, `idempotent`, **`requiresApproval`** |
+| `ApprovalRequest` | Tool approval prompt payload |
+| `ApprovalResponse` | `{ approved; reason?; modifiedInput? }` |
+| `ApprovalHandler` | `(request) => Promise<ApprovalResponse>` |
 | `ToolDefinition` | `{ name; description; inputSchema; metadata? }` |
 | `ToolErrorDetails` | `{ name; code?; data? }` |
 | `ToolResult` | `{ success; output; error?; errorDetails? }` |
@@ -55,12 +58,13 @@ Stream chunk `done` data: `{ stopReason: string; usage?: TokenUsage }`.
 | `AgentToolRegistry` | `{ list(); execute(name, input) }` |
 | `AgentErrorAction` | `'retry' \| 'skip' \| 'abort'` |
 | `AgentStopReason` | See [Agent](./agent.md#stop-reasons-agentstopreason) |
-| `AgentEvent` | `{ type: 'thinking' \| 'text' \| 'tool_call' \| 'tool_result' \| 'done'; data: unknown }` |
+| `AgentEvent` | `{ type: 'thinking' \| 'text' \| 'tool_call' \| 'tool_result' \| 'tool_denied' \| 'done'; data: unknown }` |
 | `AgentStepType` | `'thinking' \| 'tool_call' \| 'tool_result' \| 'response'` |
 | `AgentStep` | `{ type; content; timestamp; tokenUsage? }` |
-| `AgentConfig` | Full agent configuration (see [Agent](./agent.md#agentconfig)) |
+| `AgentConfig` | Full agent configuration including `outputSchema`, `observationalMemory` (see [Agent](./agent.md#agentconfig)) |
+| `AgentRunOptions` | Per-run overrides (`outputSchema`) |
 | `AgentRunMetadata` | `stopReason` required; optional `warning`, `model`, `plan`, `planValidation`, `resultEvaluation` |
-| `AgentResult` | `{ response; steps; totalTokens; metadata }` |
+| `AgentResult` | `{ response; parsedOutput?; steps; totalTokens; metadata }` |
 
 ---
 
@@ -83,6 +87,18 @@ Stream chunk `done` data: `{ stopReason: string; usage?: TokenUsage }`.
 | `ValidationResult` | `{ passed; reason?; severity? }` |
 | `Validator` | `{ name; validate(content): Promise<ValidationResult> }` |
 | `GuardrailConfig` | `maxTokenBudget?`, `maxSteps?`, `maxCostUsd?`, `inputValidators?`, `outputValidators?`, `requireApproval?` |
+
+## Evals (`src/evals/types.ts`)
+
+Import types from `agentic-fabric/evals` or root package:
+
+`EvalDatasetEntry`, `EvalResult`, `ScoreResult`, `EvalReport`, `AggregateScore`, `EvalRunConfig`
+
+## Guardrails injection types (`src/guardrails/injection.ts`)
+
+Export from `agentic-fabric/guardrails`:
+
+`InjectionDetection`, `InjectionGuardrailMode`, `InjectionSeverity`, `InjectionStrictness`, `PromptInjectionGuardrailOptions`
 
 Runtime guardrail **handlers** and middleware types live in `src/guardrails/types.ts` and export from `agentic-fabric/guardrails`.
 

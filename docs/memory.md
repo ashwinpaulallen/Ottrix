@@ -164,7 +164,7 @@ Returns zero vectors (similarity search yields score 0 for all).
 
 ## Exports (`agentic-fabric/memory`)
 
-`WorkingMemory`, `SemanticMemory`, `EpisodicMemory`, `InMemoryVectorStore`, `NoOpEmbeddingProvider`, `FetchEmbeddingProvider`, type `MemorySnapshot`.
+`WorkingMemory`, `SemanticMemory`, `EpisodicMemory`, `ObservationalMemory`, `InMemoryObservationStore`, `InMemoryVectorStore`, `NoOpEmbeddingProvider`, `FetchEmbeddingProvider`, type `MemorySnapshot`.
 
 `SemanticMemory` also re-exports `chunkText`.
 
@@ -174,3 +174,49 @@ Returns zero vectors (similarity search yields score 0 for all).
 
 When `Agent` has `memory` configured, `prepareRun` calls `memory.retrieve(input, { limit: 5 })` and injects results into context.  
 `createAgent({ memory: true })` uses internal keyword-based `KeywordMemoryProvider` (not exported).
+
+---
+
+## `ObservationalMemory`
+
+**File:** `src/memory/observational.ts`
+
+LLM-driven extraction of user facts, preferences, and context. Deduplicates and resolves contradictions (supersedes older observations).
+
+### Requirements
+
+- `provider: CompletionProvider` — used for extraction prompts
+- `store: ObservationStore` — persistence backend
+
+### Options
+
+| Option | Default |
+|--------|---------|
+| `extractionModel` | Provider default model |
+| `maxObservationsInContext` | `10` |
+| `extractionInterval` | `'every_turn'` · `'every_n_turns'` · `'on_demand'` |
+| `extractionN` | `3` (for `every_n_turns`) |
+
+### Observation categories
+
+`preference` · `fact` · `behavior` · `context` · `instruction`
+
+### Methods
+
+| Method | Behavior |
+|--------|----------|
+| `observe(text, source?)` | Explicit observation storage |
+| `extractFromMessages(messages)` | LLM extraction from conversation |
+| `getObservations(filter?)` | List stored observations |
+| `buildContextPrompt()` | Markdown block for system prompt injection |
+| `clear()` | Remove all observations |
+
+### `InMemoryObservationStore`
+
+Development/test store implementing `ObservationStore` (`save`, `getAll`, `getByCategory`, `delete`, `clear`).
+
+### Agent integration
+
+Set `AgentConfig.observationalMemory`. Agent injects `buildContextPrompt()` before runs and triggers extraction after turns per `extractionInterval`.
+
+---

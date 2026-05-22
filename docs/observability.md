@@ -12,6 +12,7 @@ Source: `src/observability/`
 | `setTelemetry(t)` | Replace global instance |
 | `getLogger()` | Lazy `new Logger({ component: 'agentic-fabric' })` |
 | `setLogger(l)` | Replace global instance |
+| `shutdownObservability()` | Flush trace exporters and reset globals (used by CLI shutdown) |
 
 ---
 
@@ -46,14 +47,6 @@ Global default: **`info`** via `getGlobalLogLevel` / `setGlobalLogLevel`.
 
 `child(context)` — new logger with merged context object.
 
-### Default handler
-
-- `jsonLines: true` → `console.log(JSON.stringify(entry))`
-- `pretty: true` → formatted line; `error` → `console.error`, `warn` → `console.warn`
-- Else → JSON via `console.log`
-
-`safeJsonStringify` returns `'[Unserializable]'` on failure.
-
 **Note:** Logger intentionally uses `console` as its output sink.
 
 ---
@@ -62,37 +55,101 @@ Global default: **`info`** via `getGlobalLogLevel` / `setGlobalLogLevel`.
 
 **File:** `src/observability/telemetry.ts`
 
+Uses `AsyncLocalStorage` for active span stack (supports nested async agent runs).
+
 ### `Telemetry` class
 
 | Method | Behavior |
 |--------|----------|
-| `startSpan(name, attrs?)` | Child of active span if any; else new `traceId` (`randomUUID`) |
+| `startSpan(name, attrs?)` | Child of active span if any; else new `traceId` |
 | `withActiveSpan(span, fn)` | Push span, run `fn`, pop in `finally` |
-| `enterActiveSpan` / `leaveActiveSpan` | Manual stack management |
-| `getFinishedSpansSince(index)` | `spans.slice(index)` |
-| `counter(name, attrs?)` | Deduped cumulative counter |
-| `histogram(name, attrs?)` | Records values |
-| `gauge(name, attrs?)` | Sets current value |
-| `addExporter(exporter)` | Append exporter |
-| `reset()` | Clear spans, metrics, stack, instruments |
+| `setExporter(exporter)` | Replace trace exporter; auto-exports root span on end |
+| `addExporter(exporter)` | Append to multi-export list |
+| `counter` / `histogram` / `gauge` | Metrics with deduplicated keys |
+| `reset()` | Clear spans, metrics, stack |
 
-Metric deduplication key: `name` + sorted JSON of attributes.
+### Retention (`TelemetryRetentionOptions`)
 
-Exporter errors during `exportSpan` / `exportMetric` are **swallowed** (try/catch).
+When configured (via constructor or `applyTelemetryRetention`):
 
-### `Span` class
+| Option | Behavior |
+|--------|----------|
+| `maxFinishedSpans` | Drop oldest finished spans |
+| `maxMetricPoints` | Drop oldest metric points |
+| `maxHistogramSamples` | Per-series cap (default 1000 when retention set) |
+| `maxMetricsCollectorSamples` | MetricsCollector series cap |
 
-- `setAttribute`, `addEvent`, `setStatus(code, message?)`
-- `end()` — sets duration; status `unset` → `ok`; records span to telemetry; histogram `span.duration_ms`
+Config file keys: `telemetry.maxFinishedSpans`, `maxMetricPoints`, etc. (see [Configuration](./configuration.md)).
 
-### Exporters (implemented)
+### Trace export on span end
+
+When a root span ends, `buildTraceData` assembles `TraceData` (spans, input/output, attributes) and calls `TraceExporter.export()`. Exporter errors are logged, not thrown.
+
+---
+
+## Trace exporters
+
+**Files:** `src/observability/exporters/*`
+
+### `TraceExporter` interface
+
+`export(trace: TraceData): Promise<void>`, optional `shutdown()`.
+
+### Implementations
+
+| Class | Destination |
+|-------|-------------|
+| `LangfuseExporter` | Langfuse ingestion API (batch + flush interval) |
+| `BraintrustExporter` | Braintrust log API |
+| `WebhookExporter` | HTTP POST with JSON payload |
+| `TraceConsoleExporter` | `console.info` formatted trace |
+| `InMemoryTraceExporter` | In-memory array (tests) |
+| `MultiExporter` | Fan-out to multiple exporters |
+
+### Configuration wiring
+
+```ts
+import { configureTraceExportFromConfig, loadConfig } from 'agentic-fabric';
+
+const { config } = loadConfig();
+configureTraceExportFromConfig(config.telemetry);
+```
+
+Or manually:
+
+```ts
+import { getTelemetry, LangfuseExporter } from 'agentic-fabric';
+
+getTelemetry().setExporter(new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+}));
+```
+
+### Subpath imports
+
+```ts
+import { LangfuseExporter } from 'agentic-fabric/exporters/langfuse';
+import { BraintrustExporter } from 'agentic-fabric/exporters/braintrust';
+import { WebhookExporter } from 'agentic-fabric/exporters/webhook';
+```
+
+**Helpers:** `buildTraceData`, `createTraceExporterFromConfig`, `configureTraceExportFromConfig`
+
+### Legacy in-process exporters
 
 | Class | Behavior |
 |-------|----------|
-| `ConsoleExporter` | `console.info` for spans and metrics |
-| `InMemoryExporter` | Appends to internal arrays; `clear()` |
+| `ConsoleExporter` | Span/metric `console.info` (telemetry `addExporter`) |
+| `InMemoryExporter` | Appends spans/metrics internally |
 
-`OpenTelemetryBridge` is an **interface only** in this module (no OTEL adapter shipped).
+---
+
+## Metrics bridge
+
+**File:** `src/observability/metrics.ts`
+
+`MetricsCollector` integrates with `Telemetry` for unified counter/histogram recording. Instrumented providers record `llm.calls`, `llm.tokens`, `llm.latency_ms`, stream variants, and TTFT histograms.
 
 ---
 
@@ -102,20 +159,18 @@ Exporter errors during `exportSpan` / `exportMetric` are **swallowed** (try/catc
 
 | Function | Behavior |
 |----------|----------|
-| `isInstrumentedProvider(p)` | Checks `Symbol.for('agentic-fabric.observability.instrumented')` |
-| `instrumentProvider(provider, telemetry, options?)` | Wraps `complete` and `stream`; `countTokens` passthrough |
-| `instrumentAgentToolRegistry(registry, telemetry, options?)` | Clones `ToolRegistry` with telemetry or wraps generic registry |
-| `runToolSpan(telemetry, component, toolName, fn)` | Span `tool.execute` around tool fn |
+| `isInstrumentedProvider(p)` | Checks instrumented symbol |
+| `instrumentProvider(provider, telemetry, options?)` | Wraps `complete` and `stream` |
+| `instrumentAgentToolRegistry(registry, telemetry, options?)` | Tool execution spans |
+| `runToolSpan(telemetry, component, toolName, fn)` | Span `tool.execute` |
 
 ### Instrumented `complete`
 
-Span `llm.complete` with attrs `component`, `llm.model`. On success: token attrs, `llm.calls` counter, `llm.tokens` histogram, `llm.latency_ms`. On error: `llm.errors` counter.
+Span `llm.complete` — records tokens, latency, TTFT (`llm.ttft_ms`), error counters.
 
 ### Instrumented `stream`
 
-Span `llm.stream`; `enterActiveSpan` for iteration; on `done` chunk with usage, records tokens; `llm.stream_calls` and latency histogram.
-
-Default `component`: `'provider'` or `'tools'`.
+Span `llm.stream` with active span context for nested tool spans during streaming.
 
 ---
 
@@ -123,33 +178,16 @@ Default `component`: `'provider'` or `'tools'`.
 
 **File:** `src/observability/replay.ts`
 
-### Types
-
-- **`RecordedRun`:** `id`, `agentName`, `input`, `response`, `stopReason?`, timestamps, `steps`, `messages`, `spans`, optional `result`
-- **`RecordedRunStep`:** timeline entry with `type: 'input'|'llm'|'tool'|'output'|'span'`
-
-### Methods
-
-| Method | Behavior |
-|--------|----------|
-| `startRun(input, agentName?)` | **Error** if run already active |
-| `recordMessage` / `recordAgentStep` / `recordSpan` | No-op if no active run |
-| `endRun(result)` | **Error** if no active run; pushes completed run |
-| `cancelRun()` | Clears active run without saving |
-| `getRuns()` / `getLatestRun()` | Access completed runs |
-| `toJSON(pretty?)` | Serialize all runs |
-| `fromJSON(json)` static | **Error** if not JSON array |
-| `replay(runId?)` | Generator over sorted timeline (input → spans → steps → output) |
-| `clear()` | Empty all runs |
-
-### Agent integration
-
-`Agent` calls `startRun` at run start, records messages/steps/spans when configured, `endRun` on success, `cancelRun` on thrown error.
+Records agent runs for debugging and replay. See prior API: `startRun`, `recordMessage`, `endRun`, `replay`, etc.
 
 ---
 
-## Subpath `agentic-fabric/observability`
+## Subpath exports
 
-Full barrel: Logger, Telemetry, RunRecorder, exporters, instrumentation helpers, global getters/setters.
+### `agentic-fabric/observability`
 
-Root export includes commonly used symbols; use subpath for `runToolSpan`, `isInstrumentedProvider`, etc.
+Logger, Telemetry, RunRecorder, trace exporters, instrumentation, global getters/setters, retention helpers.
+
+### Root `agentic-fabric`
+
+Commonly used symbols including `LangfuseExporter`, `BraintrustExporter`, `WebhookExporter`, `MultiExporter`, `configureTraceExportFromConfig`.

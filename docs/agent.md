@@ -17,7 +17,7 @@ The **Agent** runs a ReAct-style loop: call the LLM, execute tool calls, append 
 | `getReflector()` | `Reflector \| undefined` | `config.reflector` |
 | `getToolRegistry()` | `ToolRegistry \| undefined` | Only if `config.toolRegistry` is a `ToolRegistry` instance |
 | `run(input)` | `Promise<AgentResult>` | Full loop with steps, reflector, guardrails, optional telemetry span `agent.run` |
-| `stream(input)` | `AsyncIterable<AgentEvent>` | Streaming loop; span `agent.stream`; yields `thinking`, `text`, `tool_call`, `tool_result`, `done` |
+| `stream(input)` | `AsyncIterable<AgentEvent>` | Streaming loop; span `agent.stream`; yields `thinking`, `text`, `tool_call`, `tool_result`, `tool_denied`, `done` |
 
 ### `run` vs `stream` (implemented differences)
 
@@ -27,7 +27,7 @@ The **Agent** runs a ReAct-style loop: call the LLM, execute tool calls, append 
 | `result.steps` populated | Yes | Returns `steps: []` |
 | `onStep` in final metadata path | Yes | Not recorded in stream result builder |
 | Telemetry root span | `agent.run` | `agent.stream` |
-| Event types | N/A (returns `AgentResult`) | `thinking`, `text`, `tool_call`, `tool_result`, `done` |
+| Event types | N/A (returns `AgentResult`) | `thinking`, `text`, `tool_call`, `tool_result`, `tool_denied`, `done` |
 
 ### Defaults (constructor)
 
@@ -94,6 +94,48 @@ There is no dedicated `AgentError` class.
 | `reflector` | No | `Reflector` instance |
 | `telemetry` | No | `Telemetry` for spans/metrics |
 | `runRecorder` | No | `RunRecorder` for replay |
+| `outputSchema` | No | Zod schema for final response validation (requires `zod` peer) |
+| `structuredOutputRetries` | No | Re-prompts after failed validation; default **3** (4 total attempts) |
+| `observationalMemory` | No | `ObservationalMemory` for user fact extraction |
+
+---
+
+## Structured output (Zod)
+
+**Files:** `src/agent/structured-output.ts`, `src/utils/zod-to-json-schema.ts`
+
+When `outputSchema` is set on `AgentConfig` or passed in `AgentRunOptions`, the agent requires the final LLM text to parse and validate against the schema.
+
+```ts
+import { z } from 'zod';
+
+const schema = z.object({ name: z.string(), age: z.number() });
+const result = await agent.run('Introduce Ada', { outputSchema: schema });
+// result.parsedOutput — typed object when validation succeeds
+```
+
+| Behavior | Detail |
+|----------|--------|
+| Validation | `parseAndValidateStructuredOutput` strips markdown JSON fences before parse |
+| Retries | Up to `1 + structuredOutputRetries` attempts; re-prompts model on failure |
+| Success | `parsedOutput` populated; `response` is raw model text |
+| Failure | Throws `StructuredOutputError` with `attempts`, `lastOutput`, `zodError` |
+| Tool loop | Structured validation runs only on final text-only response |
+
+**Exports:** `StructuredOutputError`, `zodToJsonSchema`, `ensureZodPeer`, `ZOD_REQUIRED_MESSAGE`
+
+Peer dependency **`zod`** must be installed for structured output and Zod tools.
+
+---
+
+## Observational memory integration
+
+When `config.observationalMemory` is set, the agent:
+
+1. Injects relevant observations into the system prompt before each run
+2. After successful runs, may extract new observations from the conversation (per `extractionInterval`)
+
+See [Memory](./memory.md#observationalmemory) for configuration.
 
 ---
 

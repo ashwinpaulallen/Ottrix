@@ -225,6 +225,96 @@ Injected `transport` option bypasses stdio/SSE factory (used in examples).
 
 ---
 
+## Zod tools (`createTool`, `ZodTool`)
+
+**File:** `src/tools/zod-tool.ts`
+
+Define tools with Zod input/output schemas. JSON Schema for the LLM is generated via `zodToJsonSchema`.
+
+```ts
+import { createTool } from 'agentic-fabric';
+import { z } from 'zod';
+
+const weather = createTool({
+  name: 'get_weather',
+  description: 'Get weather for a city',
+  input: z.object({ city: z.string() }),
+  output: z.object({ tempF: z.number() }).optional(),
+  execute: async ({ city }) => ({ tempF: 72 }),
+});
+```
+
+| Behavior | Detail |
+|----------|--------|
+| Input validation | Zod `safeParse` before execute |
+| Output validation | Optional Zod schema on return value |
+| `zodSchema` | Original Zod input schema on `ZodTool` instance |
+| `isZodTool(tool)` | Type guard |
+
+Requires optional peer **`zod`**.
+
+---
+
+## Tool approval (human-in-the-loop)
+
+**Files:** `src/tools/tool-approval.ts`, `src/tools/approval-handlers.ts`, `src/tools/registry.ts`
+
+Tools with `metadata.requiresApproval: true` pause execution until an `ApprovalHandler` responds.
+
+| API | Purpose |
+|-----|---------|
+| `ToolRegistry.setApprovalHandler(handler)` | Global handler for all approval-gated tools |
+| `ToolRegistry.setToolApprovalHandler(name, handler)` | Per-tool override |
+| `createCliApprovalHandler()` | Terminal y/n prompt |
+| `createAutoApproveHandler()` | Always approve (tests) |
+| `createCallbackApprovalHandler(fn)` | Custom logic |
+
+**Approval flow:**
+
+1. Registry builds `ApprovalRequest` with tool name, input, agent name, step number
+2. Handler returns `{ approved, reason?, modifiedInput? }`
+3. Denial → `buildToolApprovalDeniedResult`; agent receives `tool_denied` stream event
+4. Approval with `modifiedInput` → executes with adjusted input
+
+**Helpers:** `isToolApprovalDenied`, `buildToolApprovalDenialMessage`, `getToolApprovalDenialReason`
+
+Distinct from **`HumanApprovalGuardrail`** (guardrail middleware) — registry approval runs inside tool execution before `_execute`.
+
+---
+
+## MCP server (`MCPServer`, `serveMCP`)
+
+**Files:** `src/tools/mcp-server.ts`, `src/tools/serve.ts`, `src/tools/mcp-transports/*`
+
+Expose a `ToolRegistry` (and optionally an `Agent` via `ask_agent` meta-tool) to external MCP clients.
+
+```ts
+import { serveMCP, ToolRegistry } from 'agentic-fabric/mcp-server';
+
+await serveMCP({
+  name: 'my-tools',
+  version: '1.0.0',
+  toolRegistry: registry,
+  transport: 'stdio', // or 'sse' with port/host
+  agent: optionalAgent, // adds ASK_AGENT_TOOL_NAME = 'ask_agent'
+});
+```
+
+| Transport | Behavior |
+|-----------|----------|
+| `stdio` | Newline-delimited JSON-RPC on stdin/stdout |
+| `sse` | HTTP+SSE; default port **3001**, host **127.0.0.1** |
+
+**CLI:** `npx agentic-serve --transport stdio` (see `src/cli/serve.ts`)
+
+**Subpath:** `agentic-fabric/mcp-server` — lightweight import without full tools barrel.
+
+**Errors:** `MCPProtocolError`, `ConfigurationError` for invalid server config.
+
+---
+
 ## Subpath `agentic-fabric/tools`
 
-Exports tools, registry errors, MCP client/provider/registry, transports, and JSON-RPC types (`JsonRpcMessage`, `MCPTransport`, etc.).
+Exports tools, registry errors, MCP **client** provider/registry, transports, JSON-RPC types, Zod tools, approval handlers.
+
+**Subpath `agentic-fabric/mcp-server`:** `MCPServer`, `serveMCP`, `ASK_AGENT_TOOL_NAME` only.
