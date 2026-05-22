@@ -269,7 +269,7 @@ describe('Telemetry trace export integration', () => {
       name: 'echo',
       description: 'Echo',
       inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
-      execute: async (input) => (typeof input.text === 'string' ? input.text : ''),
+      execute: async (input: Record<string, unknown>) => (typeof input.text === 'string' ? input.text : ''),
     });
 
     const registry = new ToolRegistry({ telemetry, component: 'test-tools' });

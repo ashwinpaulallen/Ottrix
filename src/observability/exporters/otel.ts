@@ -215,7 +215,16 @@ function toOtlpValue(value: unknown): OtlpAnyValue | undefined {
     }
     return { kvlistValue: { values: kvList } };
   }
-  return { stringValue: String(value) };
+  if (typeof value === 'bigint') {
+    return { stringValue: value.toString() };
+  }
+  if (typeof value === 'symbol') {
+    return { stringValue: value.toString() };
+  }
+  if (typeof value === 'function') {
+    return { stringValue: value.name || '[function]' };
+  }
+  return undefined;
 }
 
 /**
@@ -796,7 +805,8 @@ export function createOtelExporter(
   };
 
   const backendDefaults = defaults[backend] ?? defaults.custom;
-  const { apiKey: _apiKey, ...restOptions } = options;
+  const { apiKey, ...restOptions } = options;
+  void apiKey;
 
   return new OtelExporter({
     ...backendDefaults,

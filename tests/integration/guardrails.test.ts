@@ -157,7 +157,7 @@ describe('integration: guardrails', () => {
         properties: { value: { type: 'string' } },
         required: ['value'],
       },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         const value = input.value;
         return typeof value === 'string' ? value : '';
       },

@@ -162,7 +162,7 @@ export class Agent {
     return runWith(
       {
         ...existing,
-        runId: (existing?.runId as string | undefined) ?? randomUUID(),
+        runId: (existing?.runId) ?? randomUUID(),
         agentName: this.getName(),
       },
       fn,
@@ -425,15 +425,7 @@ export class Agent {
         actor: agentActor,
         action: 'run',
         resource: agentResource,
-        outcome: runErrored
-          ? 'failure'
-          : stopReason === 'completed'
-            ? 'success'
-            : stopReason === 'guardrail' ||
-                stopReason === 'token_budget' ||
-                stopReason === 'cost_budget'
-              ? 'denied'
-              : 'failure',
+        outcome: auditOutcomeForAgentRun(runErrored, stopReason),
         payload: { stopReason, stepCount: steps.length },
         duration: performance.now() - runStarted,
       });
@@ -489,7 +481,7 @@ export class Agent {
     const existing = getRunContext();
     const ctx = {
       ...existing,
-      runId: (existing?.runId as string | undefined) ?? randomUUID(),
+      runId: (existing?.runId) ?? randomUUID(),
       agentName: this.getName(),
     };
 
@@ -747,15 +739,7 @@ export class Agent {
         actor: agentActor,
         action: 'stream',
         resource: agentResource,
-        outcome: runErrored
-          ? 'failure'
-          : stopReason === 'completed'
-            ? 'success'
-            : stopReason === 'guardrail' ||
-                stopReason === 'token_budget' ||
-                stopReason === 'cost_budget'
-              ? 'denied'
-              : 'failure',
+        outcome: auditOutcomeForAgentRun(runErrored, stopReason),
         payload: { stopReason, stepCount },
         duration: performance.now() - runStarted,
       });
@@ -1602,6 +1586,26 @@ export class Agent {
         break;
     }
   }
+}
+
+function auditOutcomeForAgentRun(
+  runErrored: boolean,
+  stopReason: AgentStopReason,
+): 'success' | 'failure' | 'denied' {
+  if (runErrored) {
+    return 'failure';
+  }
+  if (stopReason === 'completed') {
+    return 'success';
+  }
+  if (
+    stopReason === 'guardrail' ||
+    stopReason === 'token_budget' ||
+    stopReason === 'cost_budget'
+  ) {
+    return 'denied';
+  }
+  return 'failure';
 }
 
 function toStopReason(reason?: string): AgentStopReason {

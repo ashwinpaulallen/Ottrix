@@ -97,7 +97,7 @@ describe('Agent telemetry integration', () => {
       name: 'echo',
       description: 'Echo',
       inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         const text = input.text;
         return typeof text === 'string' ? text : '';
       },

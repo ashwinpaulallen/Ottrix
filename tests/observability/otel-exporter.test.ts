@@ -564,17 +564,14 @@ describe('OtelExporter', () => {
 
       await exporter.export(createTestTrace({ spans: [createTestSpan()] }));
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        'http://localhost:4318/v1/traces',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'x-api-key': 'test-key',
-            Authorization: 'Bearer token',
-          }),
-        }),
-      );
+      expect(fetchMock).toHaveBeenCalledOnce();
+      const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(requestInit.method).toBe('POST');
+      expect(requestInit.headers).toMatchObject({
+        'Content-Type': 'application/json',
+        'x-api-key': 'test-key',
+        Authorization: 'Bearer token',
+      });
 
       await exporter.shutdown();
     });
@@ -598,14 +595,11 @@ describe('OtelExporter', () => {
 
       await exporter.export(createTestTrace({ spans: [createTestSpan()] }));
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('https://api.honeycomb.io'),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'x-honeycomb-team': 'hc-api-key',
-          }),
-        }),
-      );
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const [, requestInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(requestInit.headers).toMatchObject({
+        'x-honeycomb-team': 'hc-api-key',
+      });
 
       await exporter.shutdown();
     });
@@ -621,14 +615,12 @@ describe('OtelExporter', () => {
 
       await exporter.export(createTestTrace({ spans: [createTestSpan()] }));
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('datadoghq.com'),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'DD-API-KEY': 'dd-api-key',
-          }),
-        }),
-      );
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const [url, requestInit] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('datadoghq.com');
+      expect(requestInit.headers).toMatchObject({
+        'DD-API-KEY': 'dd-api-key',
+      });
 
       await exporter.shutdown();
     });

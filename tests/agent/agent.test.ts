@@ -54,7 +54,7 @@ describe('Agent.run', () => {
         properties: { a: { type: 'number' }, b: { type: 'number' } },
         required: ['a', 'b'],
       },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         const a = typeof input.a === 'number' ? input.a : 0;
         const b = typeof input.b === 'number' ? input.b : 0;
         return a + b;
@@ -91,7 +91,7 @@ describe('Agent.run', () => {
         properties: { key: { type: 'string' } },
         required: ['key'],
       },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         const key = typeof input.key === 'string' ? input.key : '';
         return key === 'population' ? 8_000_000 : 'unknown';
       },
@@ -105,7 +105,7 @@ describe('Agent.run', () => {
         properties: { value: { type: 'number' } },
         required: ['value'],
       },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         const value = typeof input.value === 'number' ? input.value : 0;
         return `${value.toLocaleString()} people`;
       },
@@ -310,7 +310,7 @@ describe('Agent.stream', () => {
         properties: { msg: { type: 'string' } },
         required: ['msg'],
       },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         return typeof input.msg === 'string' ? input.msg : '';
       },
     });
@@ -410,7 +410,7 @@ describe('Agent with Planner and Reflector', () => {
         properties: { a: { type: 'number' }, b: { type: 'number' } },
         required: ['a', 'b'],
       },
-      execute: async (input) => {
+      execute: async (input: Record<string, unknown>) => {
         const a = typeof input.a === 'number' ? input.a : 0;
         const b = typeof input.b === 'number' ? input.b : 0;
         return a + b;

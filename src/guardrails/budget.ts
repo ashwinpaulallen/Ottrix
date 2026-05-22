@@ -538,7 +538,7 @@ function emptyRemaining(): RemainingBudget {
 /** Estimate USD cost from token usage and per-1k rates. */
 export function estimateCostUsd(usage: TokenUsage, rates: TokenCostRates): number {
   let inputTokens = usage.inputTokens;
-  let outputTokens = usage.outputTokens;
+  const outputTokens = usage.outputTokens;
   if (inputTokens + outputTokens === 0 && usage.totalTokens > 0) {
     inputTokens = usage.totalTokens;
   }

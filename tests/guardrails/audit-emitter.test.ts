@@ -91,7 +91,8 @@ describe('AuditEmitter', () => {
         name: 'echo',
         description: 'Echo input',
         inputSchema: { type: 'object', properties: { msg: { type: 'string' } } },
-        execute: async (input) => input.msg,
+        execute: async (input: Record<string, unknown>) =>
+          typeof input.msg === 'string' ? input.msg : '',
       }),
     );
 
@@ -282,7 +283,7 @@ describe('AuditEmitter', () => {
     const contents = await readFile(path, 'utf8');
     const lines = contents.trim().split('\n');
     expect(lines).toHaveLength(1);
-    expect(JSON.parse(lines[0]!).type).toBe('tool.invoke');
+    expect((JSON.parse(lines[0]!) as { type: string }).type).toBe('tool.invoke');
 
     await rm(dir, { recursive: true, force: true });
   });

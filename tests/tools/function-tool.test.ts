@@ -11,7 +11,7 @@ describe('FunctionTool', () => {
         properties: { value: { type: 'number' } },
         required: ['value'],
       },
-      execute: async (input) => Number(input.value) * 2,
+      execute: async (input: Record<string, unknown>) => Number(input.value) * 2,
     });
 
     const result = await tool.execute({ value: 21 });

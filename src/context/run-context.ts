@@ -88,7 +88,7 @@ export async function* runGeneratorWith<T>(
     }
   } finally {
     if (gen.return) {
-      await runContextStorage.run(merged, () => gen.return!()).catch(() => undefined);
+      await runContextStorage.run(merged, () => gen.return()).catch(() => undefined);
     }
   }
 }

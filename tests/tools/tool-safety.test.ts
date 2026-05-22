@@ -24,7 +24,7 @@ describe('Tool safety metadata', () => {
         description: 'echo',
         input: z.object({ message: z.string() }),
         sideEffect: 'none',
-        execute: async ({ message }) => message,
+        execute: async ({ message }: { message: string }) => message,
       }),
     );
 
@@ -217,7 +217,7 @@ describe('Tool audit config', () => {
             exclude: ['secret'],
           },
         },
-        execute: async ({ publicField }) => publicField,
+        execute: async ({ publicField }: { publicField: string }) => publicField,
       }),
     );
 

@@ -80,10 +80,10 @@ export interface AuditEmitterConfig {
 }
 
 /** User-implemented sink that persists audit events to PostgreSQL. */
-export interface PostgresSink extends AuditSink {}
+export type PostgresSink = AuditSink;
 
 /** User-implemented sink that forwards audit events to a webhook. */
-export interface WebhookSink extends AuditSink {}
+export type WebhookSink = AuditSink;
 
 /** Options for {@link HmacSigner}. */
 export interface HmacSignerOptions {
@@ -117,8 +117,9 @@ export class HmacSigner implements AuditSigner {
 
 /** Pretty-prints audit events to the console (development). */
 export class ConsoleSink implements AuditSink {
-  async write(event: AuditEvent): Promise<void> {
+  write(event: AuditEvent): Promise<void> {
     console.info('[audit]', JSON.stringify(event, null, 2));
+    return Promise.resolve();
   }
 
   async writeBatch(events: AuditEvent[]): Promise<void> {
@@ -134,8 +135,9 @@ export class ConsoleSink implements AuditSink {
 export class InMemorySink implements AuditSink {
   private readonly events: AuditEvent[] = [];
 
-  async write(event: AuditEvent): Promise<void> {
+  write(event: AuditEvent): Promise<void> {
     this.events.push(structuredClone(event));
+    return Promise.resolve();
   }
 
   async writeBatch(events: AuditEvent[]): Promise<void> {
@@ -165,7 +167,7 @@ export interface FileSinkOptions {
 /** Appends JSON lines to a file (append-only audit trail). */
 export class FileSink implements AuditSink {
   private readonly path: string;
-  private readonly queue: Promise<void> = Promise.resolve();
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(options: FileSinkOptions) {
     this.path = options.path;
@@ -313,7 +315,7 @@ function redactAuditEvent(event: AuditEvent, paths: string[]): AuditEvent {
       redactPath(next.payload, path);
     }
     if (next.runContext) {
-      redactPath(next.runContext as Record<string, unknown>, path);
+      redactPath(next.runContext, path);
     }
   }
   return next;
@@ -324,7 +326,7 @@ function redactPath(root: Record<string, unknown>, path: string): void {
   let current: Record<string, unknown> = root;
 
   for (let index = 0; index < segments.length - 1; index += 1) {
-    const segment = segments[index]!;
+    const segment = segments[index];
     const value = current[segment];
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return;
@@ -332,7 +334,7 @@ function redactPath(root: Record<string, unknown>, path: string): void {
     current = value as Record<string, unknown>;
   }
 
-  const leaf = segments[segments.length - 1]!;
+  const leaf = segments[segments.length - 1];
   if (leaf in current) {
     current[leaf] = '[REDACTED]';
   }

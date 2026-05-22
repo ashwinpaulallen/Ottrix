@@ -99,7 +99,7 @@ export const calculatorTool = new FunctionTool({
     required: ['expression'],
   },
   metadata: { cost: 'free', latency: 'fast', idempotent: true },
-  execute: async (input) => {
+  execute: async (input: Record<string, unknown>) => {
     const expression = readStringField(input, 'expression');
     return { result: evaluateExpression(expression) };
   },
@@ -117,7 +117,7 @@ export const weatherLookupTool = new FunctionTool({
     required: ['city'],
   },
   metadata: { cost: 'low', latency: 'fast' },
-  execute: async (input) => {
+  execute: async (input: Record<string, unknown>) => {
     const city = readStringField(input, 'city').toLowerCase();
     const record = weatherData[city];
     if (!record) {
@@ -139,7 +139,7 @@ export const fileReaderTool = new FunctionTool({
     required: ['path'],
   },
   metadata: { cost: 'free', latency: 'fast', requiresAuth: false },
-  execute: async (input) => {
+  execute: async (input: Record<string, unknown>) => {
     const path = readStringField(input, 'path');
     const content = fileStore.get(path);
     if (content === undefined) {

@@ -127,7 +127,7 @@ export class DAGWorkflow {
     const result = await runWith(
       {
         ...existing,
-        runId: (existing?.runId as string | undefined) ?? workflowId,
+        runId: (existing?.runId) ?? workflowId,
       },
       () =>
         this.execute(
@@ -246,7 +246,7 @@ export class DAGWorkflow {
       const result = await runWith(
         {
           ...existing,
-          runId: (existing?.runId as string | undefined) ?? state.workflowId,
+          runId: (existing?.runId) ?? state.workflowId,
         },
         () => this.execute(snapshot),
       );
@@ -326,7 +326,7 @@ export class DAGWorkflow {
         const result = await runWith(
           {
             ...existing,
-            runId: (existing?.runId as string | undefined) ?? workflowId,
+            runId: (existing?.runId) ?? workflowId,
           },
           () => this.execute(snapshotFromSuspendedState(outcome.state, [...this.steps.keys()])),
         );

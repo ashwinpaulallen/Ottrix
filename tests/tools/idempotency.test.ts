@@ -88,7 +88,7 @@ describe('ToolRegistry idempotency', () => {
         description: 'Open a PR',
         input: z.object({ title: z.string() }),
         idempotent: true,
-        execute: async ({ title }) => {
+        execute: async ({ title }: { title: string }) => {
           calls += 1;
           return { url: `https://github.com/pr/${title}` };
         },
@@ -118,7 +118,7 @@ describe('ToolRegistry idempotency', () => {
         description: 'Deploy',
         input: z.object({ env: z.string() }),
         idempotent: true,
-        execute: async ({ env }) => {
+        execute: async ({ env }: { env: string }) => {
           calls += 1;
           return { env };
         },
@@ -171,7 +171,7 @@ describe('ToolRegistry idempotency', () => {
         name: 'read_file',
         description: 'Read',
         input: z.object({ path: z.string() }),
-        execute: async ({ path }) => {
+        execute: async ({ path }: { path: string }) => {
           calls += 1;
           return path;
         },
@@ -230,7 +230,7 @@ describe('ToolRegistry idempotency', () => {
         idempotent: true,
         idempotencyKey: ({ args, toolName }) =>
           sha256(canonicalStringify([toolName, 'static-scope', args.value])),
-        execute: async ({ value }) => {
+        execute: async ({ value }: { value: string }) => {
           calls += 1;
           return value;
         },
@@ -259,7 +259,7 @@ describe('ToolRegistry idempotency', () => {
         description: 'Cached',
         input: z.object({ id: z.string() }),
         idempotent: true,
-        execute: async ({ id }) => id,
+        execute: async ({ id }: { id: string }) => id,
       }),
     );
 
@@ -294,7 +294,7 @@ describe('ToolRegistry idempotency', () => {
         description: 'Slow',
         input: z.object({ id: z.string() }),
         idempotent: true,
-        execute: async ({ id }) => {
+        execute: async ({ id }: { id: string }) => {
           calls += 1;
           await gate;
           return id;
