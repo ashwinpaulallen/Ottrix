@@ -5,6 +5,7 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '../types/provider.js';
+import { stampStreamChunk, unknownCompletionLatency } from './latency.js';
 import type { JSONSchema, ToolDefinition } from '../types/tools.js';
 import { BaseProvider, type BaseProviderConfig } from './base.js';
 import { ProviderError } from './errors.js';
@@ -334,6 +335,7 @@ export class OllamaProvider extends BaseProvider<OllamaModel> {
       for (;;) {
         const readResult = await reader.read();
         if (readResult.done) break;
+        const arrivedAt = performance.now();
         if (readResult.value !== undefined) {
           buffer += decoder.decode(readResult.value as Uint8Array, { stream: true });
         }
@@ -360,7 +362,7 @@ export class OllamaProvider extends BaseProvider<OllamaModel> {
               ? full.slice(previousContent.length)
               : full;
             if (delta) {
-              yield { type: 'text_delta', data: { text: delta } };
+              yield stampStreamChunk({ type: 'text_delta', data: { text: delta } }, arrivedAt);
             }
             previousContent = full;
           }
@@ -372,8 +374,8 @@ export class OllamaProvider extends BaseProvider<OllamaModel> {
               if (!call) continue;
               const id = ollamaToolCallId(call, i);
               const args = normalizeToolArguments(call.function.arguments);
-              yield { type: 'tool_use_start', data: { id, name: call.function.name } };
-              yield { type: 'tool_use_end', data: { id, name: call.function.name, input: args } };
+              yield stampStreamChunk({ type: 'tool_use_start', data: { id, name: call.function.name } }, arrivedAt);
+              yield stampStreamChunk({ type: 'tool_use_end', data: { id, name: call.function.name, input: args } }, arrivedAt);
             }
           }
 
@@ -387,10 +389,10 @@ export class OllamaProvider extends BaseProvider<OllamaModel> {
       reader.releaseLock();
     }
 
-    yield {
+    yield stampStreamChunk({
       type: 'done',
       data: { stopReason, usage },
-    };
+    });
   }
 
   /** Build `/api/chat` request body. */
@@ -440,6 +442,7 @@ export class OllamaProvider extends BaseProvider<OllamaModel> {
       model: response.model ?? model,
       usage: mapOllamaUsage(response),
       stopReason: response.done_reason ?? 'stop',
+      latency: unknownCompletionLatency(),
     };
   }
 }

@@ -16,6 +16,7 @@ import type { BaseTool } from './tools/tool.js';
 import { createGuardrails, type CreateGuardrailsConfig } from './guardrails/factory.js';
 import { getTelemetry, setLogger } from './observability/global.js';
 import { Logger, setGlobalLogLevel } from './observability/logger.js';
+import { configureTraceExportFromConfig } from './observability/exporters/index.js';
 import type { Telemetry } from './observability/telemetry.js';
 import type { AgenticProviderName } from './env.js';
 import {
@@ -222,6 +223,8 @@ function applyConfigDefaults(agentic: AgenticConfig): void {
     setGlobalLogLevel(agentic.logLevel);
     setLogger(new Logger({ component: 'agentic-fabric', level: agentic.logLevel }));
   }
+
+  configureTraceExportFromConfig(agentic.telemetry);
 }
 
 function resolveProviderName(

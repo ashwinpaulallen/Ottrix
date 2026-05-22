@@ -15,6 +15,7 @@ import {
   ProviderRegistry,
   shouldTryFallback,
 } from '../../src/providers/registry.js';
+import { ensureCompletionLatency } from '../../src/providers/latency.js';
 import { ProviderError } from '../../src/providers/errors.js';
 
 function createMockProvider(
@@ -26,12 +27,14 @@ function createMockProvider(
   return {
     complete:
       handlers.complete ??
-      vi.fn(async () => ({
-        content: [{ type: 'text' as const, text: 'ok' }],
-        model: name,
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-        stopReason: 'stop',
-      })),
+      vi.fn(async () =>
+        ensureCompletionLatency({
+          content: [{ type: 'text' as const, text: 'ok' }],
+          model: name,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          stopReason: 'stop',
+        }),
+      ),
     stream: async function* () {
       yield { type: 'text_delta', data: { text: name } };
       yield { type: 'done', data: { stopReason: 'stop' } };
@@ -53,12 +56,12 @@ class TestBaseProvider extends BaseProvider {
 
   protected async _rawComplete(): Promise<CompletionResult> {
     if (this.handlers.complete) return this.handlers.complete();
-    return {
+    return ensureCompletionLatency({
       content: [{ type: 'text', text: 'ok' }],
       model: this.config.defaultModel,
       usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
       stopReason: 'stop',
-    };
+    });
   }
 
   protected _rawStream(): AsyncIterable<StreamChunk> {
@@ -268,12 +271,12 @@ describe('computeFallbackBackoffMs', () => {
       if (calls < 2) {
         throw new ProviderError('down', { code: 'server_error', retryable: true });
       }
-      return {
+      return ensureCompletionLatency({
         content: [{ type: 'text' as const, text: 'backup' }],
         model: 'secondary',
         usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
         stopReason: 'stop',
-      };
+      });
     });
 
     const registry = new ProviderRegistry({

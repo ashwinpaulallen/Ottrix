@@ -1,4 +1,9 @@
-import type { CompletionParams, CompletionProvider, CompletionResult, StreamChunk } from '../types/provider.js';
+import type {
+  CompletionParams,
+  CompletionProvider,
+  CompletionResult,
+  StreamChunk,
+} from '../types/provider.js';
 import type { AgentToolRegistry } from '../types/agent.js';
 import type { ToolResult } from '../types/tools.js';
 import { ToolRegistry } from '../tools/registry.js';
@@ -56,6 +61,9 @@ export function instrumentProvider(
             .setAttribute('llm.output_tokens', result.usage.outputTokens)
             .setAttribute('llm.total_tokens', result.usage.totalTokens)
             .setAttribute('llm.stop_reason', result.stopReason)
+            .setAttribute('llm.ttft_ms', result.latency.ttft)
+            .setAttribute('llm.total_ms', result.latency.totalTime)
+            .setAttribute('llm.tokens_per_second', result.latency.tokensPerSecond)
             .setStatus('ok');
           telemetry.counter('llm.calls', { component }).add(1);
           telemetry
@@ -100,23 +108,36 @@ async function* instrumentStream(
 
   telemetry.enterActiveSpan(span);
   const started = performance.now();
+  let streamUsage: CompletionResult['usage'] | undefined;
   try {
     for await (const chunk of provider.stream(params)) {
       yield chunk;
-      if (chunk.type === 'done' && chunk.data && typeof chunk.data === 'object') {
-        const data = chunk.data as {
-          usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
-        };
-        if (data.usage) {
+      if (chunk.type === 'done') {
+        if (chunk.data.usage) {
+          streamUsage = chunk.data.usage;
           span
-            .setAttribute('llm.input_tokens', data.usage.inputTokens)
-            .setAttribute('llm.output_tokens', data.usage.outputTokens)
-            .setAttribute('llm.total_tokens', data.usage.totalTokens);
+            .setAttribute('llm.input_tokens', chunk.data.usage.inputTokens)
+            .setAttribute('llm.output_tokens', chunk.data.usage.outputTokens)
+            .setAttribute('llm.total_tokens', chunk.data.usage.totalTokens);
+        }
+        if (chunk.data.latency) {
+          span
+            .setAttribute('llm.ttft_ms', chunk.data.latency.ttft)
+            .setAttribute('llm.total_ms', chunk.data.latency.totalTime)
+            .setAttribute('llm.tokens_per_second', chunk.data.latency.tokensPerSecond);
         }
       }
     }
     span.setStatus('ok');
     telemetry.counter('llm.stream_calls', { component }).add(1);
+    if (streamUsage) {
+      telemetry
+        .histogram('llm.tokens', { component, kind: 'input' })
+        .record(streamUsage.inputTokens);
+      telemetry
+        .histogram('llm.tokens', { component, kind: 'output' })
+        .record(streamUsage.outputTokens);
+    }
     telemetry
       .histogram('llm.latency_ms', { component, mode: 'stream' })
       .record(performance.now() - started);

@@ -1,4 +1,9 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
+import type { MetricsCollector } from './metrics.js';
+import { logExporterError } from './exporters/shared.js';
+import { buildTraceData } from './exporters/trace-builder.js';
+import type { TraceExporter } from './exporters/types.js';
 
 /** Attribute value types supported on spans and metrics. */
 export type AttributeValue = string | number | boolean;
@@ -47,6 +52,52 @@ export interface TelemetryExporter {
 /** Options for {@link Telemetry}. */
 export interface TelemetryOptions {
   exporters?: TelemetryExporter[];
+  metricsCollector?: MetricsCollector;
+  retention?: TelemetryRetentionOptions;
+}
+
+/** In-memory retention limits for {@link Telemetry}. */
+export interface TelemetryRetentionOptions {
+  maxFinishedSpans?: number;
+  maxMetricPoints?: number;
+  maxHistogramSamples?: number;
+  maxMetricsCollectorSamples?: number;
+}
+
+/** Mutable span stack stored in async context. */
+export class SpanStack {
+  private readonly spans: Span[] = [];
+
+  get active(): Span | undefined {
+    return this.spans[this.spans.length - 1];
+  }
+
+  push(span: Span): void {
+    this.spans.push(span);
+  }
+
+  pop(): void {
+    this.spans.pop();
+  }
+
+  clear(): void {
+    this.spans.length = 0;
+  }
+}
+
+const activeSpanStorage = new AsyncLocalStorage<SpanStack>();
+const fallbackSpanStack = new SpanStack();
+
+function currentSpanStack(): SpanStack {
+  return activeSpanStorage.getStore() ?? fallbackSpanStack;
+}
+
+/** Run an async generator within an isolated active-span stack. */
+export function runInActiveSpanStack<T>(
+  stack: SpanStack,
+  factory: () => AsyncGenerator<T, void, undefined>,
+): AsyncGenerator<T, void, undefined> {
+  return activeSpanStorage.run(stack, factory);
 }
 
 /**
@@ -54,20 +105,49 @@ export interface TelemetryOptions {
  */
 export class Telemetry {
   private readonly exporters: TelemetryExporter[];
-  private readonly activeStack: Span[] = [];
+  private traceExporters: TraceExporter[] = [];
   private readonly spans: SpanData[] = [];
   private readonly metrics: MetricPoint[] = [];
   private readonly counters = new Map<string, Counter>();
   private readonly histograms = new Map<string, Histogram>();
   private readonly gauges = new Map<string, Gauge>();
+  private metricsCollector?: MetricsCollector;
+  private maxFinishedSpans?: number;
+  private maxMetricPoints?: number;
+  private maxHistogramSamples?: number;
 
   constructor(options: TelemetryOptions = {}) {
     this.exporters = options.exporters ?? [];
+    this.metricsCollector = options.metricsCollector;
+    if (options.retention) {
+      this.applyRetention(options.retention);
+    }
+  }
+
+  /** Attach or replace the linked {@link MetricsCollector}. */
+  linkMetricsCollector(collector: MetricsCollector): void {
+    this.metricsCollector = collector;
+  }
+
+  /** Configure in-memory retention limits. */
+  setRetention(options: TelemetryRetentionOptions): void {
+    this.applyRetention(options);
+    if (options.maxMetricsCollectorSamples !== undefined) {
+      this.metricsCollector?.setRetention(options.maxMetricsCollectorSamples);
+    }
+  }
+
+  private applyRetention(options: TelemetryRetentionOptions): void {
+    this.maxFinishedSpans = options.maxFinishedSpans;
+    this.maxMetricPoints = options.maxMetricPoints;
+    this.maxHistogramSamples = options.maxHistogramSamples;
+    this.trimFinishedSpans();
+    this.trimMetricPoints();
   }
 
   /** Currently active span, if any. */
   get activeSpan(): Span | undefined {
-    return this.activeStack[this.activeStack.length - 1];
+    return currentSpanStack().active;
   }
 
   /** Finished spans collected by this instance. */
@@ -80,9 +160,21 @@ export class Telemetry {
     return this.metrics;
   }
 
-  /** Register an exporter. */
-  addExporter(exporter: TelemetryExporter): void {
+  /** Register a legacy per-span exporter. */
+  addSpanExporter(exporter: TelemetryExporter): void {
     this.exporters.push(exporter);
+  }
+
+  /** Replace the active trace exporter (lazy no-op when unset). */
+  setExporter(exporter: TraceExporter): void {
+    const previous = this.traceExporters;
+    this.traceExporters = [exporter];
+    void Promise.allSettled(previous.map((existing) => existing.shutdown()));
+  }
+
+  /** Register an additional trace exporter for multi-export. */
+  addExporter(exporter: TraceExporter): void {
+    this.traceExporters.push(exporter);
   }
 
   /** Start a new span (child of the active span when present). */
@@ -99,22 +191,33 @@ export class Telemetry {
 
   /** Run `fn` with `span` set as the active span. */
   async withActiveSpan<T>(span: Span, fn: () => T | Promise<T>): Promise<T> {
-    this.enterActiveSpan(span);
+    const stack = currentSpanStack();
+    stack.push(span);
     try {
-      return await fn();
+      return await activeSpanStorage.run(stack, fn);
     } finally {
-      this.leaveActiveSpan();
+      stack.pop();
     }
   }
 
   /** Push a span onto the active stack (for sync code paths such as streaming). */
   enterActiveSpan(span: Span): void {
-    this.activeStack.push(span);
+    currentSpanStack().push(span);
   }
 
   /** Pop the active span from the stack. */
   leaveActiveSpan(): void {
-    this.activeStack.pop();
+    currentSpanStack().pop();
+  }
+
+  /** Flush and shut down all trace exporters. */
+  async shutdown(): Promise<void> {
+    await this.shutdownTraceExporters();
+  }
+
+  private async shutdownTraceExporters(): Promise<void> {
+    const exporters = this.traceExporters.splice(0, this.traceExporters.length);
+    await Promise.allSettled(exporters.map((exporter) => exporter.shutdown()));
   }
 
   /** Finished spans recorded since `startIndex` (for per-run export). */
@@ -157,7 +260,7 @@ export class Telemetry {
 
   /** @internal */
   recordSpan(span: SpanData): void {
-    this.spans.push(span);
+    this.appendSpan(span);
     for (const exporter of this.exporters) {
       try {
         exporter.exportSpan(span);
@@ -165,11 +268,24 @@ export class Telemetry {
         // Exporters must not break span lifecycle.
       }
     }
+
+    if (!span.parentSpanId && this.traceExporters.length > 0) {
+      const trace = buildTraceData(
+        span,
+        this.spans.filter((candidate) => candidate.traceId === span.traceId),
+      );
+      for (const exporter of this.traceExporters) {
+        void exporter.export(trace).catch((error) => {
+          logExporterError(exporter.name, 'Trace export failed', error);
+        });
+      }
+    }
   }
 
   /** @internal */
   recordMetric(point: MetricPoint): void {
-    this.metrics.push(point);
+    this.appendMetricPoint(point);
+    this.forwardMetricToCollector(point);
     for (const exporter of this.exporters) {
       try {
         exporter.exportMetric?.(point);
@@ -177,6 +293,49 @@ export class Telemetry {
         // Exporters must not break metric recording.
       }
     }
+  }
+
+  /** @internal */
+  getMaxHistogramSamples(): number | undefined {
+    return this.maxHistogramSamples;
+  }
+
+  private appendSpan(span: SpanData): void {
+    this.spans.push(span);
+    this.trimFinishedSpans();
+  }
+
+  private appendMetricPoint(point: MetricPoint): void {
+    this.metrics.push(point);
+    this.trimMetricPoints();
+  }
+
+  private trimFinishedSpans(): void {
+    if (this.maxFinishedSpans === undefined || this.spans.length <= this.maxFinishedSpans) {
+      return;
+    }
+    this.spans.splice(0, this.spans.length - this.maxFinishedSpans);
+  }
+
+  private trimMetricPoints(): void {
+    if (this.maxMetricPoints === undefined || this.metrics.length <= this.maxMetricPoints) {
+      return;
+    }
+    this.metrics.splice(0, this.metrics.length - this.maxMetricPoints);
+  }
+
+  private forwardMetricToCollector(point: MetricPoint): void {
+    if (!this.metricsCollector) {
+      return;
+    }
+
+    const labels = metricPointLabels(point.attributes);
+    if (point.type === 'counter') {
+      this.metricsCollector.record(`${point.name}.total`, point.value, labels);
+      return;
+    }
+
+    this.metricsCollector.record(point.name, point.value, labels);
   }
 
   /**
@@ -209,6 +368,10 @@ export class Telemetry {
     if (event.type === 'success') {
       this.counter('provider.chain_success', { provider: event.provider }).add(1);
     }
+
+    if (event.type === 'exhausted') {
+      this.counter('provider.chain_exhausted', { provider: event.provider }).add(1);
+    }
   }
 
   /** Increment per-provider error counters for error-rate tracking. */
@@ -226,7 +389,7 @@ export class Telemetry {
   reset(): void {
     this.spans.length = 0;
     this.metrics.length = 0;
-    this.activeStack.length = 0;
+    fallbackSpanStack.clear();
     this.counters.clear();
     this.histograms.clear();
     this.gauges.clear();
@@ -355,6 +518,10 @@ export class Histogram {
   /** Record an observation. */
   record(value: number): void {
     this.values.push(value);
+    const maxSamples = this.telemetry.getMaxHistogramSamples();
+    if (maxSamples !== undefined && this.values.length > maxSamples) {
+      this.values.splice(0, this.values.length - maxSamples);
+    }
     this.telemetry.recordMetric({
       name: this.name,
       type: 'histogram',
@@ -407,6 +574,20 @@ function metricKey(name: string, attributes?: Record<string, AttributeValue>): s
     sorted[key] = attributes[key]!;
   }
   return `${name}:${JSON.stringify(sorted)}`;
+}
+
+function metricPointLabels(
+  attributes?: Record<string, AttributeValue>,
+): Record<string, string> | undefined {
+  if (!attributes || Object.keys(attributes).length === 0) {
+    return undefined;
+  }
+
+  const labels: Record<string, string> = {};
+  for (const [key, value] of Object.entries(attributes)) {
+    labels[key] = String(value);
+  }
+  return labels;
 }
 
 /** Prints spans and metrics to the console. */

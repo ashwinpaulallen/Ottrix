@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url';
 
+import { loadConfig } from '../config.js';
 import { AGENTIC_FABRIC_VERSION } from '../index.js';
+import {
+  applyTelemetryRetention,
+  configureTraceExportFromConfig,
+  shutdownObservability,
+} from '../observability/index.js';
 import { serveMCP } from '../tools/serve.js';
 import { ToolRegistry } from '../tools/registry.js';
 
@@ -115,6 +121,15 @@ async function main(): Promise<void> {
     fileConfig = await loadConfigFile(args.config);
   }
 
+  const { config: agenticConfig } = loadConfig();
+  configureTraceExportFromConfig(agenticConfig.telemetry);
+  applyTelemetryRetention({
+    maxFinishedSpans: agenticConfig.telemetry.maxFinishedSpans ?? 10_000,
+    maxMetricPoints: agenticConfig.telemetry.maxMetricPoints ?? 50_000,
+    maxHistogramSamples: agenticConfig.telemetry.maxHistogramSamples ?? 1_000,
+    maxMetricsCollectorSamples: agenticConfig.telemetry.maxMetricsCollectorSamples ?? 1_000,
+  });
+
   const registry = new ToolRegistry();
   if (fileConfig.setup) {
     await fileConfig.setup({ registry });
@@ -133,6 +148,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     process.stderr.write(`agentic-serve: received ${signal}, shutting down\n`);
     await server.stop();
+    await shutdownObservability();
     process.exit(0);
   };
 

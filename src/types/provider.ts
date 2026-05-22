@@ -68,6 +68,16 @@ export interface CompletionParams<TModel extends string = string> {
   responseFormat?: 'json' | 'text';
 }
 
+/** Latency metrics for a single provider request. */
+export interface CompletionLatency {
+  /** Time to first token in milliseconds (equals {@link totalTime} for non-streaming). */
+  ttft: number;
+  /** Total request time in milliseconds. */
+  totalTime: number;
+  /** Output tokens per second (`outputTokens / (totalTime / 1000)`). */
+  tokensPerSecond: number;
+}
+
 /** Optional metadata attached to completion results. */
 export interface CompletionResultMetadata {
   /** Registry or logical provider name that served the request. */
@@ -92,40 +102,49 @@ export interface CompletionResult<TModel extends string = string> {
   usage: TokenUsage;
   /** Provider-specific stop reason (e.g. `end_turn`, `max_tokens`, `tool_use`). */
   stopReason: string;
+  /** Request latency breakdown. */
+  latency: CompletionLatency;
   /** Routing and observability metadata (e.g. which provider served the request). */
   metadata?: CompletionResultMetadata;
 }
 
+/** Common optional fields on streaming chunks. */
+export interface StreamChunkTiming {
+  /** High-resolution timestamp (`performance.now()`) when the chunk was produced. */
+  timestamp?: number;
+}
+
 /** Incremental text emitted during streaming. */
-export interface StreamTextDeltaChunk {
+export interface StreamTextDeltaChunk extends StreamChunkTiming {
   type: 'text_delta';
   data: { text: string };
 }
 
 /** Signals the start of a tool-use block in the stream. */
-export interface StreamToolUseStartChunk {
+export interface StreamToolUseStartChunk extends StreamChunkTiming {
   type: 'tool_use_start';
   data: { id: string; name: string };
 }
 
 /** Partial JSON or arguments for an in-flight tool call. */
-export interface StreamToolUseDeltaChunk {
+export interface StreamToolUseDeltaChunk extends StreamChunkTiming {
   type: 'tool_use_delta';
   data: { id: string; partialInput: string };
 }
 
 /** Signals a completed tool-use block in the stream. */
-export interface StreamToolUseEndChunk {
+export interface StreamToolUseEndChunk extends StreamChunkTiming {
   type: 'tool_use_end';
   data: { id: string; name: string; input: Record<string, unknown> };
 }
 
 /** Terminal chunk indicating the stream has finished. */
-export interface StreamDoneChunk {
+export interface StreamDoneChunk extends StreamChunkTiming {
   type: 'done';
   data: {
     stopReason: string;
     usage?: TokenUsage;
+    latency?: CompletionLatency;
   };
 }
 

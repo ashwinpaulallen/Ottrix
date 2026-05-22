@@ -5,6 +5,7 @@ import type {
   ToolResult,
 } from '../types/tools.js';
 import { runToolSpan } from '../observability/instrument.js';
+import { getMetricsCollector } from '../observability/global.js';
 import type { Telemetry } from '../observability/telemetry.js';
 import { ConfigurationError } from './errors.js';
 import { BaseTool } from './tool.js';
@@ -246,11 +247,22 @@ export class ToolRegistry {
       return tool.execute(effectiveInput);
     };
 
+    const recordMetrics = async (): Promise<ToolResult> => {
+      const started = performance.now();
+      try {
+        return await run();
+      } finally {
+        getMetricsCollector().record('tool_execution_ms', performance.now() - started, {
+          tool: name,
+        });
+      }
+    };
+
     if (!this.telemetry) {
-      return run();
+      return recordMetrics();
     }
 
-    return runToolSpan(this.telemetry, this.telemetryComponent, name, run);
+    return runToolSpan(this.telemetry, this.telemetryComponent, name, recordMetrics);
   }
 
   /**

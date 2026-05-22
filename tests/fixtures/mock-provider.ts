@@ -6,6 +6,7 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '../../src/types/provider.js';
+import { computeCompletionLatency, ensureCompletionLatency } from '../../src/providers/latency.js';
 
 const DEFAULT_USAGE: TokenUsage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
@@ -48,7 +49,7 @@ export class MockCompletionProvider implements CompletionProvider {
     if (!next) {
       throw new Error('MockCompletionProvider: no more complete() responses queued');
     }
-    return next;
+    return ensureCompletionLatency(next);
   }
 
   async *stream(params: CompletionParams): AsyncIterable<StreamChunk> {
@@ -88,6 +89,11 @@ export function textCompletion(text: string, usage: TokenUsage = DEFAULT_USAGE):
     model: 'mock-model',
     usage,
     stopReason: 'end_turn',
+    latency: computeCompletionLatency({
+      ttftMs: 1,
+      totalTimeMs: 10,
+      outputTokens: usage.outputTokens,
+    }),
   };
 }
 
@@ -107,6 +113,11 @@ export function toolUseCompletion(
     model: 'mock-model',
     usage,
     stopReason: 'tool_use',
+    latency: computeCompletionLatency({
+      ttftMs: 1,
+      totalTimeMs: 10,
+      outputTokens: usage.outputTokens,
+    }),
   };
 }
 
@@ -128,5 +139,10 @@ export function mixedCompletion(
     model: 'mock-model',
     usage,
     stopReason: tools.length > 0 ? 'tool_use' : 'end_turn',
+    latency: computeCompletionLatency({
+      ttftMs: 1,
+      totalTimeMs: 10,
+      outputTokens: usage.outputTokens,
+    }),
   };
 }

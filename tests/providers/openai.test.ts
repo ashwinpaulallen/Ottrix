@@ -339,7 +339,9 @@ describe('OpenAIProvider.stream', () => {
       chunks.push(chunk);
     }
 
-    expect(chunks).toContainEqual({ type: 'text_delta', data: { text: 'Hello' } });
+    expect(chunks).toContainEqual(
+      expect.objectContaining({ type: 'text_delta', data: { text: 'Hello' } }),
+    );
     expect(chunks.at(-1)).toMatchObject({
       type: 'done',
       data: { stopReason: 'stop' },
@@ -393,14 +395,18 @@ describe('OpenAIProvider.stream', () => {
       chunks.push(chunk);
     }
 
-    expect(chunks).toContainEqual({
-      type: 'tool_use_start',
-      data: { id: 'call_1', name: 'get_weather' },
-    });
-    expect(chunks).toContainEqual({
-      type: 'tool_use_end',
-      data: { id: 'call_1', name: 'get_weather', input: { city: 'LA' } },
-    });
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_use_start',
+        data: { id: 'call_1', name: 'get_weather' },
+      }),
+    );
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_use_end',
+        data: { id: 'call_1', name: 'get_weather', input: { city: 'LA' } },
+      }),
+    );
   });
 });
 

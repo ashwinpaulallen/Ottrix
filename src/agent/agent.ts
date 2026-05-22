@@ -17,6 +17,7 @@ import type {
   CompletionParams,
   CompletionProvider,
   CompletionResult,
+  CompletionLatency,
   StreamChunk,
   TokenUsage,
 } from '../types/provider.js';
@@ -41,10 +42,12 @@ import {
 } from './messages.js';
 import type { Plan, PlanStep, PlanValidationResult } from './planner.js';
 import { instrumentProvider, instrumentAgentToolRegistry } from '../observability/instrument.js';
+import { getMetricsCollector } from '../observability/global.js';
 import { ProviderRegistry } from '../providers/registry.js';
-import type { Telemetry } from '../observability/telemetry.js';
+import { runInActiveSpanStack, Span, SpanStack, type Telemetry } from '../observability/telemetry.js';
 import type { RunRecorder } from '../observability/replay.js';
 import { OpenAIProvider } from '../providers/openai.js';
+import { unknownCompletionLatency } from '../providers/latency.js';
 import {
   StructuredOutputError,
   appendStructuredOutputToSystemPrompt,
@@ -125,21 +128,25 @@ export class Agent {
 
     const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
     telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+    let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
 
     try {
-      return await telemetry.withActiveSpan(rootSpan, async () => {
+      const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
         try {
-          return (await this.runCore(input, options, telemetry)) as AgentResult<
+          result = (await this.runCore(input, options, telemetry)) as AgentResult<
             AgentRunMetadata,
             z.infer<TSchema>
           >;
+          return result;
         } catch (error) {
           rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
           telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
           throw error;
         }
       });
+      return runResult;
     } finally {
+      this.annotateRootTrace(rootSpan, input, result?.response);
       rootSpan.end();
       telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
     }
@@ -168,6 +175,7 @@ export class Agent {
     telemetry: Telemetry | undefined,
     spanStart: number,
   ): Promise<AgentResult> {
+    const runStarted = performance.now();
     const outputSchema = options?.outputSchema ?? this.config.outputSchema;
     const structuredOutput = outputSchema
       ? createStructuredOutputContext(
@@ -356,9 +364,28 @@ export class Agent {
       metadata,
     };
 
+    const runDuration = performance.now() - runStarted;
+    const metrics = getMetricsCollector();
+    metrics.record('agent_run_ms', runDuration, { agent: this.getName() });
+    metrics.record('agent_steps_count', steps.length, { agent: this.getName() });
+
     this.scheduleObservationalExtraction(messages);
     this.syncRecorder(telemetry, result, spanStart);
     return result;
+  }
+
+  private annotateRootTrace(
+    span: Span | undefined,
+    input: string,
+    output?: string,
+  ): void {
+    if (!span) {
+      return;
+    }
+    span.setAttribute('trace.input', input);
+    if (output !== undefined) {
+      span.setAttribute('trace.output', output);
+    }
   }
 
   private scheduleObservationalExtraction(messages: ChatMessage[]): void {
@@ -400,21 +427,35 @@ export class Agent {
     }
 
     const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
+    const spanStack = new SpanStack();
+    spanStack.push(rootSpan);
+    rootSpan.setAttribute('trace.input', input);
     telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+    let streamOutput: string | undefined;
 
     try {
-      telemetry.enterActiveSpan(rootSpan);
-      try {
-        yield* this.streamCore(input);
-        rootSpan.setStatus('ok');
-      } catch (error) {
-        rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-        telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-        throw error;
-      }
+      yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
+        try {
+          for await (const event of this.streamCore(input)) {
+            if (event.type === 'done') {
+              const doneData = event.data as { response?: string };
+              streamOutput = doneData.response;
+            }
+            yield event;
+          }
+          rootSpan.setStatus('ok');
+        } catch (error) {
+          rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+          telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+          throw error;
+        }
+      }.bind(this));
     } finally {
-      telemetry.leaveActiveSpan();
+      if (streamOutput !== undefined) {
+        rootSpan.setAttribute('trace.output', streamOutput);
+      }
       rootSpan.end();
+      spanStack.pop();
       telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
     }
   }
@@ -1289,6 +1330,7 @@ export class Agent {
 
     let stopReason = 'end_turn';
     let usage: TokenUsage | undefined;
+    let streamLatency = unknownCompletionLatency();
     let model = 'stream';
     const contentBlocks: ContentBlock[] = [];
 
@@ -1301,10 +1343,11 @@ export class Agent {
         toolUses,
         toolInputs,
         contentBlocks,
-        setMeta: (sr, u, m) => {
+        setMeta: (sr, u, m, latency) => {
           stopReason = sr;
           if (u) usage = u;
           if (m) model = m;
+          if (latency) streamLatency = latency;
         },
       });
     }
@@ -1322,6 +1365,7 @@ export class Agent {
       model,
       usage: usage ?? EMPTY_USAGE,
       stopReason,
+      latency: streamLatency,
     };
 
     if (middleware) {
@@ -1359,7 +1403,12 @@ export class Agent {
       toolUses: ToolUseBlock[];
       toolInputs: Map<string, { name: string; partial: string }>;
       contentBlocks: ContentBlock[];
-      setMeta: (stopReason: string, usage?: TokenUsage, model?: string) => void;
+      setMeta: (
+        stopReason: string,
+        usage?: TokenUsage,
+        model?: string,
+        latency?: CompletionLatency,
+      ) => void;
     },
   ): void {
     switch (chunk.type) {
@@ -1402,7 +1451,12 @@ export class Agent {
         break;
       }
       case 'done':
-        ctx.setMeta(chunk.data.stopReason, chunk.data.usage, undefined);
+        ctx.setMeta(
+          chunk.data.stopReason,
+          chunk.data.usage,
+          undefined,
+          chunk.data.latency,
+        );
         break;
       default:
         break;

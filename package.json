@@ -65,6 +65,11 @@
       "types": "./dist/agent/index.d.ts",
       "import": "./dist/agent/index.js",
       "require": "./dist/agent/index.cjs"
+    },
+    "./evals": {
+      "types": "./dist/evals/index.d.ts",
+      "import": "./dist/evals/index.js",
+      "require": "./dist/evals/index.cjs"
     }
   },
   "scripts": {

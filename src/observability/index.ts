@@ -11,6 +11,8 @@ export {
 export {
   Telemetry,
   Span,
+  SpanStack,
+  runInActiveSpanStack,
   Counter,
   Histogram,
   Gauge,
@@ -24,6 +26,7 @@ export {
   type SpanStatusCode,
   type TelemetryExporter,
   type TelemetryOptions,
+  type TelemetryRetentionOptions,
 } from './telemetry.js';
 
 export {
@@ -41,4 +44,35 @@ export {
   type RunRecorderOptions,
 } from './replay.js';
 
-export { getLogger, getTelemetry, setLogger, setTelemetry } from './global.js';
+export {
+  getLogger,
+  getTelemetry,
+  setLogger,
+  setTelemetry,
+  getMetricsCollector,
+  setMetricsCollector,
+  applyTelemetryRetention,
+  shutdownObservability,
+  resetGlobalObservability,
+} from './global.js';
+
+export { MetricsCollector, type MetricStats, type MetricsCollectorOptions } from './metrics.js';
+
+export {
+  LangfuseExporter,
+  BraintrustExporter,
+  WebhookExporter,
+  TraceConsoleExporter,
+  InMemoryTraceExporter,
+  MultiExporter,
+  buildTraceData,
+  createTraceExporterFromConfig,
+  configureTraceExportFromConfig,
+  applyTelemetryRetentionFromConfig,
+  type TraceExporter,
+  type TraceData,
+  type SpanData as ExportSpanData,
+  type LangfuseExporterOptions,
+  type BraintrustExporterOptions,
+  type WebhookExporterOptions,
+} from './exporters/index.js';

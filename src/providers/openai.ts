@@ -5,6 +5,7 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '../types/provider.js';
+import { stampStreamChunk, unknownCompletionLatency } from './latency.js';
 import type { JSONSchema, ToolDefinition } from '../types/tools.js';
 import { BaseProvider, type BaseProviderConfig } from './base.js';
 import { ProviderError } from './errors.js';
@@ -312,6 +313,7 @@ export class OpenAIProvider extends BaseProvider<OpenAIModel> {
       model: response.model ?? model,
       usage: mapUsage(response.usage),
       stopReason: mapFinishReason(choice.finish_reason),
+      latency: unknownCompletionLatency(),
     };
   }
 
@@ -328,6 +330,7 @@ export class OpenAIProvider extends BaseProvider<OpenAIModel> {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        const arrivedAt = performance.now();
         buffer += decoder.decode(value, { stream: true });
 
         const lines = buffer.split('\n');
@@ -352,13 +355,13 @@ export class OpenAIProvider extends BaseProvider<OpenAIModel> {
             stopReason = mapFinishReason(choice.finish_reason);
             if (choice.finish_reason === 'tool_calls') {
               for (const endChunk of closeOpenToolCalls(toolCalls)) {
-                yield endChunk;
+                yield stampStreamChunk(endChunk, arrivedAt);
               }
             }
           }
 
           for (const streamChunk of mapStreamDelta(choice.delta, toolCalls)) {
-            yield streamChunk;
+            yield stampStreamChunk(streamChunk, arrivedAt);
           }
         }
       }
@@ -366,10 +369,10 @@ export class OpenAIProvider extends BaseProvider<OpenAIModel> {
       reader.releaseLock();
     }
 
-    yield {
+    yield stampStreamChunk({
       type: 'done',
       data: { stopReason, usage },
-    };
+    });
   }
 }
 

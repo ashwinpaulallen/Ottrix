@@ -12,7 +12,35 @@ import type { LogLevel } from './observability/logger.js';
 export type AgenticLogLevel = LogLevel | 'silent';
 
 /** Telemetry exporter identifier. */
-export type AgenticTelemetryExporter = 'console' | 'memory' | 'none' | (string & {});
+export type AgenticTelemetryExporter =
+  | 'console'
+  | 'memory'
+  | 'none'
+  | 'langfuse'
+  | 'braintrust'
+  | 'webhook'
+  | (string & {});
+
+/** Langfuse exporter settings. */
+export interface AgenticLangfuseConfig {
+  publicKey: string;
+  secretKey: string;
+  baseUrl?: string;
+}
+
+/** Braintrust exporter settings. */
+export interface AgenticBraintrustConfig {
+  apiKey: string;
+  projectName: string;
+  baseUrl?: string;
+  projectId?: string;
+}
+
+/** Webhook exporter settings. */
+export interface AgenticWebhookConfig {
+  url: string;
+  headers?: Record<string, string>;
+}
 
 /** Provider connection settings in config files and {@link AgenticConfig}. */
 export interface AgenticProviderConfig {
@@ -35,6 +63,17 @@ export type ProviderConfig = AgenticProviderConfig;
 export interface AgenticTelemetryConfig {
   enabled: boolean;
   exporter: AgenticTelemetryExporter;
+  langfuse?: AgenticLangfuseConfig;
+  braintrust?: AgenticBraintrustConfig;
+  webhook?: AgenticWebhookConfig;
+  /** Max finished spans retained in memory (oldest dropped). Omit for unbounded. */
+  maxFinishedSpans?: number;
+  /** Max metric points retained in memory (oldest dropped). Omit for unbounded. */
+  maxMetricPoints?: number;
+  /** Max samples per telemetry histogram series. @defaultValue 1000 when retention is configured */
+  maxHistogramSamples?: number;
+  /** Max values per MetricsCollector series. @defaultValue 1000 when retention is configured */
+  maxMetricsCollectorSamples?: number;
 }
 
 /** Guardrails section of {@link AgenticConfig}. */
@@ -127,7 +166,14 @@ export function isBuiltInProviderName(name: string): name is BuiltInProviderName
   return KNOWN_PROVIDERS.has(name.toLowerCase());
 }
 const LOG_LEVELS = new Set<AgenticLogLevel>(['debug', 'info', 'warn', 'error', 'silent']);
-const TELEMETRY_EXPORTERS = new Set<string>(['console', 'memory', 'none']);
+const TELEMETRY_EXPORTERS = new Set<string>([
+  'console',
+  'memory',
+  'none',
+  'langfuse',
+  'braintrust',
+  'webhook',
+]);
 
 const DEPRECATED_ROOT_KEYS: Record<string, keyof AgenticConfigInput> = {
   provider: 'defaultProvider',
@@ -549,7 +595,7 @@ function validateAgenticConfig(
   if (!TELEMETRY_EXPORTERS.has(config.telemetry.exporter)) {
     warnings.push({
       code: 'unknown_exporter',
-      message: `telemetry.exporter "${config.telemetry.exporter}" is not a built-in exporter (console, memory, none)`,
+      message: `telemetry.exporter "${config.telemetry.exporter}" is not a built-in exporter (console, memory, none, langfuse, braintrust, webhook)`,
       path: 'telemetry.exporter',
     });
   }

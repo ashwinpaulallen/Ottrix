@@ -237,6 +237,17 @@ export {
   getGlobalLogLevel,
   ConsoleExporter,
   InMemoryExporter,
+  LangfuseExporter,
+  BraintrustExporter,
+  WebhookExporter,
+  TraceConsoleExporter,
+  InMemoryTraceExporter,
+  MultiExporter,
+  buildTraceData,
+  createTraceExporterFromConfig,
+  configureTraceExportFromConfig,
+  type TraceExporter,
+  type TraceData,
 } from './observability/index.js';
 
 // --- Remaining shared types (tools, memory, guardrails, etc.) ---

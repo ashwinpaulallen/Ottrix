@@ -6,6 +6,13 @@ import type {
   ProviderConfig,
   StreamChunk,
 } from '../types/provider.js';
+import { getMetricsCollector } from '../observability/global.js';
+import {
+  attachStreamLatency,
+  computeCompletionLatency,
+  ensureCompletionLatency,
+  outputTokensFromStreamDone,
+} from './latency.js';
 import { CircuitBreaker, CircuitOpenError, type CircuitState } from './circuit-breaker.js';
 import { ProviderError, type ProviderErrorCode } from './errors.js';
 
@@ -434,10 +441,36 @@ export abstract class BaseProvider<TModel extends string = string>
       let receivedChunk = false;
       try {
         await this.rateLimiter.acquire();
-        const chunks = this._rawStream(params);
-        for await (const chunk of chunks) {
+        const startTime = performance.now();
+        let firstTokenTime: number | undefined;
+        let outputTokens = 0;
+
+        for await (const chunk of this._rawStream(params)) {
           receivedChunk = true;
-          yield chunk;
+          if (firstTokenTime === undefined) {
+            firstTokenTime = performance.now();
+          }
+          if (chunk.type === 'done') {
+            outputTokens = outputTokensFromStreamDone(chunk.data.usage);
+          }
+
+          const enriched =
+            chunk.type === 'done'
+              ? attachStreamLatency(
+                  chunk,
+                  computeCompletionLatency({
+                    ttftMs: (firstTokenTime ?? performance.now()) - startTime,
+                    totalTimeMs: performance.now() - startTime,
+                    outputTokens,
+                  }),
+                )
+              : chunk;
+
+          if (chunk.type === 'done') {
+            this.recordProviderMetrics(enriched, true);
+          }
+
+          yield enriched;
         }
         return;
       } catch (error) {
@@ -449,6 +482,7 @@ export abstract class BaseProvider<TModel extends string = string>
           !this.isConnectionError(normalized) ||
           attempt >= this.maxRetries
         ) {
+          this.recordProviderMetrics(undefined, false);
           throw normalized;
         }
         await this.delay(this.backoffMs(attempt));
@@ -462,9 +496,22 @@ export abstract class BaseProvider<TModel extends string = string>
     params: CompletionParams<TModel>,
   ): Promise<CompletionResult<TModel>> {
     await this.rateLimiter.acquire();
+    const startTime = performance.now();
     try {
-      return await this._rawComplete(params);
+      const result = ensureCompletionLatency(await this._rawComplete(params));
+      const totalTimeMs = performance.now() - startTime;
+      const enriched = {
+        ...result,
+        latency: computeCompletionLatency({
+          ttftMs: totalTimeMs,
+          totalTimeMs,
+          outputTokens: result.usage.outputTokens,
+        }),
+      } as CompletionResult<TModel>;
+      this.recordProviderMetrics(enriched, true);
+      return enriched;
     } catch (error) {
+      this.recordProviderMetrics(undefined, false);
       if (CircuitOpenError.isCircuitOpenError(error)) throw error;
       throw this.normalizeError(error);
     }
@@ -497,6 +544,41 @@ export abstract class BaseProvider<TModel extends string = string>
   /** Promise-based sleep helper. */
   private delay(ms: number): Promise<void> {
     return sleep(ms);
+  }
+
+  private recordProviderMetrics(
+    result: CompletionResult<TModel> | StreamChunk | undefined,
+    success: boolean,
+  ): void {
+    const provider = this.config.providerId ?? 'provider';
+    const metrics = getMetricsCollector();
+    metrics.record('requests_total', 1, { provider, status: success ? 'success' : 'failure' });
+
+    const latency =
+      result && typeof result === 'object' && 'latency' in result
+        ? result.latency
+        : result && 'type' in result && result.type === 'done'
+          ? result.data.latency
+          : undefined;
+    const usage =
+      result && typeof result === 'object' && 'usage' in result
+        ? result.usage
+        : result && 'type' in result && result.type === 'done'
+          ? result.data.usage
+          : undefined;
+
+    if (!success || !latency) {
+      return;
+    }
+
+    metrics.record('ttft_ms', latency.ttft, { provider });
+    metrics.record('total_latency_ms', latency.totalTime, { provider });
+    metrics.record('tokens_per_second', latency.tokensPerSecond, { provider });
+
+    if (usage) {
+      metrics.record('token_usage_input', usage.inputTokens, { provider });
+      metrics.record('token_usage_output', usage.outputTokens, { provider });
+    }
   }
 }
 

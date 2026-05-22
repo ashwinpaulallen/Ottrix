@@ -4,6 +4,7 @@ import type {
   CompletionProvider,
   CompletionResult,
 } from '../../src/types/provider.js';
+import { ensureCompletionLatency } from '../../src/providers/latency.js';
 import { BaseProvider, type BaseProviderConfig } from '../../src/providers/base.js';
 import { CircuitOpenError } from '../../src/providers/circuit-breaker.js';
 import {
@@ -19,13 +20,13 @@ import type { StreamChunk } from '../../src/types/provider.js';
 import { Telemetry } from '../../src/observability/telemetry.js';
 
 function mockResult(overrides: Partial<CompletionResult> = {}): CompletionResult {
-  return {
+  return ensureCompletionLatency({
     content: [{ type: 'text', text: 'ok' }],
     model: 'test-model',
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     stopReason: 'stop',
     ...overrides,
-  };
+  });
 }
 
 function createMockProvider(

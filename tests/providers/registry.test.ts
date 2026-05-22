@@ -13,15 +13,16 @@ import {
   estimateCost,
   shouldTryFallback,
 } from '../../src/providers/registry.js';
+import { ensureCompletionLatency } from '../../src/providers/latency.js';
 
 function mockResult(overrides: Partial<CompletionResult> = {}): CompletionResult {
-  return {
+  return ensureCompletionLatency({
     content: [{ type: 'text', text: 'ok' }],
     model: 'test-model',
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
     stopReason: 'stop',
     ...overrides,
-  };
+  });
 }
 
 function createMockProvider(

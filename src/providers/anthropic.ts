@@ -5,6 +5,7 @@ import type {
   StreamChunk,
   TokenUsage,
 } from '../types/provider.js';
+import { stampStreamChunk, unknownCompletionLatency } from './latency.js';
 import type { JSONSchema, ToolDefinition } from '../types/tools.js';
 import { BaseProvider, type BaseProviderConfig } from './base.js';
 import { ProviderError } from './errors.js';
@@ -250,6 +251,7 @@ export class AnthropicProvider extends BaseProvider<AnthropicModel> {
       model: response.model ?? model,
       usage: mapUsage(response.usage),
       stopReason: response.stop_reason ?? 'end_turn',
+      latency: unknownCompletionLatency(),
     };
   }
 
@@ -269,6 +271,7 @@ export class AnthropicProvider extends BaseProvider<AnthropicModel> {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        const arrivedAt = performance.now();
         buffer += decoder.decode(value, { stream: true });
 
         const lines = buffer.split('\n');
@@ -285,7 +288,7 @@ export class AnthropicProvider extends BaseProvider<AnthropicModel> {
           const eventType = (data.type as string | undefined) ?? currentEvent;
 
           for (const chunk of mapStreamEvent(eventType, data, toolBlocks)) {
-            yield chunk;
+            yield stampStreamChunk(chunk, arrivedAt);
           }
 
           if (eventType === 'message_delta') {
@@ -311,10 +314,10 @@ export class AnthropicProvider extends BaseProvider<AnthropicModel> {
       reader.releaseLock();
     }
 
-    yield {
+    yield stampStreamChunk({
       type: 'done',
       data: { stopReason, usage },
-    };
+    });
   }
 }
 

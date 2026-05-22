@@ -274,8 +274,12 @@ describe('OllamaProvider.stream', () => {
       chunks.push(chunk);
     }
 
-    expect(chunks).toContainEqual({ type: 'text_delta', data: { text: 'Hel' } });
-    expect(chunks).toContainEqual({ type: 'text_delta', data: { text: 'lo' } });
+    expect(chunks).toContainEqual(
+      expect.objectContaining({ type: 'text_delta', data: { text: 'Hel' } }),
+    );
+    expect(chunks).toContainEqual(
+      expect.objectContaining({ type: 'text_delta', data: { text: 'lo' } }),
+    );
     expect(chunks.at(-1)).toMatchObject({
       type: 'done',
       data: {

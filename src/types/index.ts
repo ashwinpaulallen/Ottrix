@@ -14,6 +14,7 @@ export type {
   ProviderConfig,
   CompletionParams,
   CompletionResult,
+  CompletionLatency,
   StreamTextDeltaChunk,
   StreamToolUseStartChunk,
   StreamToolUseDeltaChunk,
