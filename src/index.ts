@@ -10,6 +10,18 @@ export const AGENTIC_FABRIC_VERSION = OTTRIX_VERSION;
 /** @deprecated Use {@link OTTRIX_VERSION}. */
 export const AGENT_FABRIC_VERSION = OTTRIX_VERSION;
 
+// --- Run context (AsyncLocalStorage propagation) ---
+export {
+  runWith,
+  runGeneratorWith,
+  getRunContext,
+  requireRunContext,
+  withStep,
+  invokeWithRunContext,
+  ContextNotAvailableError,
+  RunContext,
+} from './context/index.js';
+
 // --- Core types (explicit exports avoid bundler type collisions) ---
 export type {
   AgentConfig,

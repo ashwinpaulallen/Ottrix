@@ -1,4 +1,5 @@
 import { BaseTool, type BaseToolConfig } from './tool.js';
+import { invokeWithRunContext, type RunContext } from '../context/run-context.js';
 
 /** Zod-validated tools — see {@link ZodTool} and {@link createTool} in `./zod-tool.js`. */
 export {
@@ -11,8 +12,12 @@ export {
 
 /**
  * Function invoked by {@link FunctionTool} after input validation.
+ * When the function accepts a second argument, {@link RunContext} is passed explicitly
+ * (also available via {@link getRunContext} from AsyncLocalStorage).
  */
-export type ToolExecuteFn = (input: Record<string, unknown>) => Promise<unknown>;
+export type ToolExecuteFn =
+  | ((input: Record<string, unknown>) => Promise<unknown>)
+  | ((input: Record<string, unknown>, ctx: RunContext | undefined) => Promise<unknown>);
 
 /**
  * Configuration for {@link FunctionTool}.
@@ -52,6 +57,6 @@ export class FunctionTool extends BaseTool {
 
   /** @inheritdoc */
   protected _execute(input: Record<string, unknown>): Promise<unknown> {
-    return this.executeFn(input);
+    return invokeWithRunContext(this.executeFn, input);
   }
 }

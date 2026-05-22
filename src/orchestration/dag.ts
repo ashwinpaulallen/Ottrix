@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent/agent.js';
 import type { AgentResult } from '../types/agent.js';
+import { getRunContext, runWith, withStep } from '../context/run-context.js';
 import {
   buildDependentsMap,
   buildFinalOutput,
@@ -98,12 +99,18 @@ export class DAGWorkflow {
     options?: { workflowId?: string },
   ): Promise<DAGResult> {
     const workflowInput = input ?? this.config.input;
-    const snapshot = createInitialSnapshot(
-      options?.workflowId ?? randomUUID(),
-      workflowInput,
-      [...this.steps.keys()],
+    const workflowId = options?.workflowId ?? randomUUID();
+    const existing = getRunContext();
+    return runWith(
+      {
+        ...existing,
+        runId: (existing?.runId as string | undefined) ?? workflowId,
+      },
+      () =>
+        this.execute(
+          createInitialSnapshot(workflowId, workflowInput, [...this.steps.keys()]),
+        ),
     );
-    return this.execute(snapshot);
   }
 
   /**
@@ -134,7 +141,14 @@ export class DAGWorkflow {
     }
 
     const snapshot = rehydrateSnapshot(state, input, [...this.steps.keys()]);
-    return this.execute(snapshot);
+    const existing = getRunContext();
+    return runWith(
+      {
+        ...existing,
+        runId: (existing?.runId as string | undefined) ?? state.workflowId,
+      },
+      () => this.execute(snapshot),
+    );
   }
 
   /** Validate workflow graph structure. */
@@ -425,22 +439,24 @@ export class DAGWorkflow {
         timeoutId.unref?.();
       }
 
-      const context: StepContext = {
-        workflowInput,
-        stepId: step.id,
-        attempt,
-        signal: controller.signal,
-      };
-
       const mappedInput = mapStepInput(step, workflowInput, depOutputs);
 
       try {
-        const output = await executeWithAbort(
-          step.execute.bind(step),
-          mappedInput,
-          context,
-          DAGWorkflowCancelledError,
-        );
+        const output = await runWith(withStep(step.id), async () => {
+          const context: StepContext = {
+            workflowInput,
+            stepId: step.id,
+            attempt,
+            signal: controller.signal,
+            runContext: getRunContext(),
+          };
+          return executeWithAbort(
+            step.execute.bind(step),
+            mappedInput,
+            context,
+            DAGWorkflowCancelledError,
+          );
+        });
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
@@ -555,10 +571,16 @@ export function parallelStep<TInput = unknown>(
     execute: async (input, context) => {
       throwIfAborted(context.signal, DAGWorkflowCancelledError);
       const results = await Promise.all(
-        subSteps.map(async (subStep) => {
-          const subContext: StepContext = { ...context, stepId: subStep.id };
-          return subStep.execute(input, subContext);
-        }),
+        subSteps.map(async (subStep) =>
+          runWith(withStep(subStep.id), async () => {
+            const subContext: StepContext = {
+              ...context,
+              stepId: subStep.id,
+              runContext: getRunContext(),
+            };
+            return subStep.execute(input, subContext);
+          }),
+        ),
       );
       return Object.fromEntries(subSteps.map((subStep, index) => [subStep.id, results[index]]));
     },

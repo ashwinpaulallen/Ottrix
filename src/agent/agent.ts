@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { getRunContext, runGeneratorWith, runWith, withStep } from '../context/run-context.js';
 import type {
   AgentConfig,
   AgentErrorAction,
@@ -119,37 +121,51 @@ export class Agent {
     input: string,
     options?: AgentRunOptions<TSchema>,
   ): Promise<AgentResult<AgentRunMetadata, z.infer<TSchema>>> {
-    const telemetry = this.telemetry;
-    if (!telemetry) {
-      return this.runCore(input, options) as Promise<
-        AgentResult<AgentRunMetadata, z.infer<TSchema>>
-      >;
-    }
+    return this.runInAgentContext(async () => {
+      const telemetry = this.telemetry;
+      if (!telemetry) {
+        return this.runCore(input, options) as Promise<
+          AgentResult<AgentRunMetadata, z.infer<TSchema>>
+        >;
+      }
 
-    const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
-    telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
-    let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
+      const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
+      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+      let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
 
-    try {
-      const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
-        try {
-          result = (await this.runCore(input, options, telemetry)) as AgentResult<
-            AgentRunMetadata,
-            z.infer<TSchema>
-          >;
-          return result;
-        } catch (error) {
-          rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-          telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-          throw error;
-        }
-      });
-      return runResult;
-    } finally {
-      this.annotateRootTrace(rootSpan, input, result?.response);
-      rootSpan.end();
-      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
-    }
+      try {
+        const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
+          try {
+            result = (await this.runCore(input, options, telemetry)) as AgentResult<
+              AgentRunMetadata,
+              z.infer<TSchema>
+            >;
+            return result;
+          } catch (error) {
+            rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+            telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+            throw error;
+          }
+        });
+        return runResult;
+      } finally {
+        this.annotateRootTrace(rootSpan, input, result?.response);
+        rootSpan.end();
+        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
+      }
+    });
+  }
+
+  private runInAgentContext<T>(fn: () => Promise<T>): Promise<T> {
+    const existing = getRunContext();
+    return runWith(
+      {
+        ...existing,
+        runId: (existing?.runId as string | undefined) ?? randomUUID(),
+        agentName: this.getName(),
+      },
+      fn,
+    );
   }
 
   private async runCore(
@@ -200,13 +216,14 @@ export class Agent {
     let parsedOutput: unknown;
 
     for (let iteration = 0; iteration < this.maxSteps; iteration++) {
+      const loopControl = await runWith(withStep(`step_${iteration}`), async (): Promise<'break' | 'continue' | 'next'> => {
       await this.contextManager.maybeSummarize(messages);
 
       const providerCall = await this.callProvider(messages, structuredOutput);
       if (providerCall.blocked) {
         stopReason = mapGuardrailBlockCode(providerCall.code);
         warning = providerCall.reason;
-        break;
+        return 'break';
       }
 
       const completion = providerCall.result;
@@ -243,13 +260,13 @@ export class Agent {
           );
           if (reflectionStop) {
             stopReason = 'completed';
-            break;
+            return 'break';
           }
-          continue;
+          return 'continue';
         }
 
         stopReason = 'completed';
-        break;
+        return 'break';
       }
 
       const toolUses = extractToolUses(completion.content);
@@ -259,7 +276,7 @@ export class Agent {
         stopReason = toolOutcome.stopReason;
         warning = toolOutcome.warning;
         finalResponse = toolOutcome.partialResponse ?? finalResponse;
-        break;
+        return 'break';
       }
 
       if (this.config.reflector) {
@@ -276,7 +293,7 @@ export class Agent {
             finalResponse ||
             this.getLastResponseText(steps) ||
             extractTextFromContent(completion.content);
-          break;
+          return 'break';
         }
       }
 
@@ -295,7 +312,17 @@ export class Agent {
         stopReason = toStopReason(guard.stopReason);
         warning = guard.message;
         finalResponse = extractTextFromContent(completion.content) || finalResponse;
+        return 'break';
+      }
+
+      return 'next';
+      });
+
+      if (loopControl === 'break') {
         break;
+      }
+      if (loopControl === 'continue') {
+        continue;
       }
     }
 
@@ -418,44 +445,53 @@ export class Agent {
    * Run the agent and yield real-time {@link AgentEvent}s.
    */
   async *stream(input: string): AsyncIterable<AgentEvent> {
-    const telemetry = this.telemetry;
-    if (!telemetry) {
-      yield* this.streamCore(input);
-      return;
-    }
+    const existing = getRunContext();
+    const ctx = {
+      ...existing,
+      runId: (existing?.runId as string | undefined) ?? randomUUID(),
+      agentName: this.getName(),
+    };
 
-    const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
-    const spanStack = new SpanStack();
-    spanStack.push(rootSpan);
-    rootSpan.setAttribute('trace.input', input);
-    telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
-    let streamOutput: string | undefined;
-
-    try {
-      yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
-        try {
-          for await (const event of this.streamCore(input)) {
-            if (event.type === 'done') {
-              const doneData = event.data as { response?: string };
-              streamOutput = doneData.response;
-            }
-            yield event;
-          }
-          rootSpan.setStatus('ok');
-        } catch (error) {
-          rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-          telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-          throw error;
-        }
-      }.bind(this));
-    } finally {
-      if (streamOutput !== undefined) {
-        rootSpan.setAttribute('trace.output', streamOutput);
+    yield* runGeneratorWith(ctx, async function* (this: Agent) {
+      const telemetry = this.telemetry;
+      if (!telemetry) {
+        yield* this.streamCore(input);
+        return;
       }
-      rootSpan.end();
-      spanStack.pop();
-      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
-    }
+
+      const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
+      const spanStack = new SpanStack();
+      spanStack.push(rootSpan);
+      rootSpan.setAttribute('trace.input', input);
+      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+      let streamOutput: string | undefined;
+
+      try {
+        yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
+          try {
+            for await (const event of this.streamCore(input)) {
+              if (event.type === 'done') {
+                const doneData = event.data as { response?: string };
+                streamOutput = doneData.response;
+              }
+              yield event;
+            }
+            rootSpan.setStatus('ok');
+          } catch (error) {
+            rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+            telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+            throw error;
+          }
+        }.bind(this));
+      } finally {
+        if (streamOutput !== undefined) {
+          rootSpan.setAttribute('trace.output', streamOutput);
+        }
+        rootSpan.end();
+        spanStack.pop();
+        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
+      }
+    }.bind(this));
   }
 
   private async *streamCore(input: string): AsyncIterable<AgentEvent> {
@@ -485,13 +521,18 @@ export class Agent {
     yield { type: 'thinking', data: { status: 'started' } };
 
     for (let iteration = 0; iteration < this.maxSteps; iteration++) {
+      const loopState = { break: false, abortStream: false };
+      yield* runGeneratorWith(withStep(`step_${iteration}`), async function* (
+        this: Agent,
+      ): AsyncGenerator<AgentEvent, void, undefined> {
       await this.contextManager.maybeSummarize(messages);
 
       const streamCall = await this.streamProvider(messages, undefined);
       if ('blocked' in streamCall && streamCall.blocked) {
         stopReason = mapGuardrailBlockCode(streamCall.code);
         warning = streamCall.reason;
-        break;
+        loopState.break = true;
+        return;
       }
 
       const { result, textParts, toolUses } = streamCall;
@@ -507,7 +548,8 @@ export class Agent {
         if (isTextOnlyResponse(result.content)) {
           finalResponse = extractTextFromContent(result.content);
           stopReason = 'completed';
-          break;
+          loopState.break = true;
+          return;
         }
 
         const streamedToolUses =
@@ -578,6 +620,7 @@ export class Agent {
             const aborted = this.buildStreamResult(finalResponse, stopReason, warning, usages);
             this.scheduleObservationalExtraction(messages);
             this.syncRecorder(this.telemetry, aborted, spanStart);
+            loopState.abortStream = true;
             yield {
               type: 'done',
               data: {
@@ -604,8 +647,17 @@ export class Agent {
         if (guard.shouldStop) {
           stopReason = toStopReason(guard.stopReason);
           warning = guard.message;
-          break;
+          loopState.break = true;
+          return;
         }
+      }
+      }.bind(this));
+
+      if (loopState.abortStream) {
+        return;
+      }
+      if (loopState.break) {
+        break;
       }
     }
 

@@ -8,6 +8,8 @@ export interface StepContext {
   attempt: number;
   /** Aborted when the step times out or the workflow is cancelled. */
   signal: AbortSignal;
+  /** Active {@link RunContext} from AsyncLocalStorage, when available. */
+  runContext?: import('../context/run-context.js').RunContext;
 }
 
 /**

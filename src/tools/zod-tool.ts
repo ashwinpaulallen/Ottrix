@@ -1,5 +1,6 @@
 import type { ZodType, ZodTypeAny } from 'zod';
 import type { ToolMetadata, ToolResult } from '../types/tools.js';
+import { invokeWithRunContext, type RunContext } from '../context/run-context.js';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema.js';
 import {
   BaseTool,
@@ -19,7 +20,7 @@ export interface ZodToolConfig<TInput, TOutput = unknown> {
   /** Optional Zod schema for validating tool output. */
   output?: ZodType<TOutput>;
   /** Typed implementation invoked after input validation. */
-  execute: (input: TInput) => Promise<TOutput>;
+  execute: ((input: TInput) => Promise<TOutput>) | ((input: TInput, ctx: RunContext | undefined) => Promise<TOutput>);
   /** Optional operational metadata. */
   metadata?: ToolMetadata;
   /** Execution timeout in milliseconds. */
@@ -40,7 +41,10 @@ export class ZodTool<TInput, TOutput = unknown> extends BaseTool {
   /** Optional Zod output schema. */
   readonly zodOutputSchema?: ZodType<TOutput>;
 
-  private readonly executeFn: (input: TInput) => Promise<TOutput>;
+  private readonly executeFn: (
+    input: TInput,
+    ctx?: RunContext,
+  ) => Promise<TOutput>;
 
   /**
    * @param config - Tool metadata, Zod schemas, and typed executor.
@@ -69,7 +73,9 @@ export class ZodTool<TInput, TOutput = unknown> extends BaseTool {
     }
 
     try {
-      const rawOutput = await this.runWithTimeout(() => this.executeFn(parsedInput.data));
+      const rawOutput = await this.runWithTimeout(() =>
+        invokeWithRunContext(this.executeFn, parsedInput.data),
+      );
 
       if (this.zodOutputSchema) {
         const parsedOutput = this.zodOutputSchema.safeParse(rawOutput);
