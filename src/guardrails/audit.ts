@@ -8,7 +8,8 @@ export type AuditLogType =
   | 'llm_post'
   | 'tool_pre'
   | 'tool_post'
-  | 'guardrail_decision';
+  | 'guardrail_decision'
+  | 'injection_scan';
 
 /** Single audit log record. */
 export interface AuditLogEntry {
@@ -127,6 +128,34 @@ export class AuditLogger implements GuardrailHandler {
         action: decision.action,
         reason: decision.reason,
         flags: decision.flags,
+      },
+    });
+  }
+
+  /** Log a prompt injection scan (stores hash, not raw content). */
+  async logInjectionScan(details: {
+    agentName: string;
+    phase: 'input' | 'output' | 'tool_output';
+    inputHash: string;
+    detected: boolean;
+    severity: string;
+    category: string;
+    action: string;
+    matchedPatterns: string[];
+    confidence: number;
+  }): Promise<void> {
+    await this.record({
+      type: 'injection_scan',
+      agentName: details.agentName,
+      details: {
+        phase: details.phase,
+        inputHash: details.inputHash,
+        detected: details.detected,
+        severity: details.severity,
+        category: details.category,
+        action: details.action,
+        matchedPatterns: details.matchedPatterns,
+        confidence: details.confidence,
       },
     });
   }

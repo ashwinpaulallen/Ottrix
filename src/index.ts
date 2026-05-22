@@ -1,5 +1,5 @@
 /** Matches `package.json` version — update both when releasing. */
-export const AGENTIC_FABRIC_VERSION = '1.0.0' as const;
+export const AGENTIC_FABRIC_VERSION = '2.0.0' as const;
 
 /** @deprecated Use {@link AGENTIC_FABRIC_VERSION}. */
 export const AGENT_FABRIC_VERSION = AGENTIC_FABRIC_VERSION;
@@ -220,8 +220,11 @@ export {
 export {
   createGuardrails,
   GuardrailMiddleware,
+  PromptInjectionGuardrail,
   type CreateGuardrailsConfig,
   type CreateGuardrailsResult,
+  type InjectionDetection,
+  type PromptInjectionGuardrailOptions,
 } from './guardrails/index.js';
 
 // --- Observability ---
@@ -249,6 +252,34 @@ export {
   type TraceExporter,
   type TraceData,
 } from './observability/index.js';
+
+// --- Evals ---
+export {
+  evaluate,
+  EvalRunner,
+  EvalReporter,
+  computeAggregates,
+  aggregateScores,
+  ExactMatchScorer,
+  ContainsScorer,
+  JsonValidityScorer,
+  SchemaMatchScorer,
+  RelevanceScorer,
+  CorrectnessScorer,
+  HelpfulnessScorer,
+  type EvalRunnerOptions,
+  type EvalReporterOptions,
+  type Scorer,
+} from './evals/index.js';
+
+export type {
+  EvalDatasetEntry,
+  EvalResult,
+  ScoreResult,
+  EvalReport,
+  AggregateScore,
+  EvalRunConfig,
+} from './evals/index.js';
 
 // --- Remaining shared types (tools, memory, guardrails, etc.) ---
 export type {

@@ -10,7 +10,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const require = createRequire(join(root, 'package.json'));
 
-/** Subpaths to smoke-test (including provider wildcard targets). */
+/** Subpaths to smoke-test (including wildcard targets). */
 const SUBPATHS = [
   '.',
   './types',
@@ -25,6 +25,11 @@ const SUBPATHS = [
   './guardrails',
   './observability',
   './agent',
+  './evals',
+  './mcp-server',
+  './exporters/langfuse',
+  './exporters/braintrust',
+  './exporters/webhook',
 ];
 
 function resolveExport(subpath) {
@@ -32,6 +37,14 @@ function resolveExport(subpath) {
   if (subpath.startsWith('./providers/') && subpath !== './providers') {
     const name = subpath.replace('./providers/', '');
     const pattern = pkg.exports['./providers/*'];
+    return {
+      import: pattern.import.replace('*', name),
+      require: pattern.require.replace('*', name),
+    };
+  }
+  if (subpath.startsWith('./exporters/')) {
+    const name = subpath.replace('./exporters/', '');
+    const pattern = pkg.exports['./exporters/*'];
     return {
       import: pattern.import.replace('*', name),
       require: pattern.require.replace('*', name),

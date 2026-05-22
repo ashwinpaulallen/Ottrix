@@ -100,7 +100,7 @@ Runtime guardrail **handlers** and middleware types live in `src/guardrails/type
 
 ```ts
 import { AGENTIC_FABRIC_VERSION } from 'agentic-fabric';
-// '1.0.0' — matches package.json
+// '2.0.0' — matches package.json
 ```
 
 `AGENT_FABRIC_VERSION` is a deprecated alias for the same value.

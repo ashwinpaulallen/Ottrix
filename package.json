@@ -1,6 +1,6 @@
 {
   "name": "agentic-fabric",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "TypeScript LLM agent framework: ReAct loop, tool calling, MCP, multi-agent workflows, memory, guardrails. Anthropic Claude, OpenAI, Ollama via fetch — vendor-neutral, zero SDK deps.",
   "license": "MIT",
   "type": "module",
@@ -70,6 +70,16 @@
       "types": "./dist/evals/index.d.ts",
       "import": "./dist/evals/index.js",
       "require": "./dist/evals/index.cjs"
+    },
+    "./mcp-server": {
+      "types": "./dist/tools/mcp-server.d.ts",
+      "import": "./dist/tools/mcp-server.js",
+      "require": "./dist/tools/mcp-server.cjs"
+    },
+    "./exporters/*": {
+      "types": "./dist/observability/exporters/*.d.ts",
+      "import": "./dist/observability/exporters/*.js",
+      "require": "./dist/observability/exporters/*.cjs"
     }
   },
   "scripts": {
@@ -96,6 +106,10 @@
     "framework",
     "multi-agent",
     "mcp",
+    "eval",
+    "dag",
+    "supervisor",
+    "structured-output",
     "vendor-agnostic"
   ],
   "repository": {

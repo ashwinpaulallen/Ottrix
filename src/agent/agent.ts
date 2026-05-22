@@ -1135,6 +1135,7 @@ export class Agent {
 
       let toolMessage =
         exec.result?.success === false ? exec.result.error : undefined;
+      let toolOutput: unknown = exec.result?.output ?? null;
 
       if (this.config.guardrailMiddleware) {
         const post = await this.config.guardrailMiddleware.afterTool({
@@ -1147,12 +1148,16 @@ export class Agent {
           error: exec.result?.error,
           durationMs: Date.now() - toolStarted,
         });
-        if (post.toolResultMessage) {
+        if (!post.proceed) {
+          toolMessage = post.reason ?? 'Tool output blocked by guardrail';
+          toolOutput = null;
+        } else if (post.toolResultMessage) {
           toolMessage = post.toolResultMessage;
+          toolOutput = post.toolResultMessage;
         }
       }
 
-      const block = buildToolResultBlock(toolUse.id, exec.result?.output ?? null, toolMessage);
+      const block = buildToolResultBlock(toolUse.id, toolOutput, toolMessage);
       resultBlocks.push(block);
 
       this.recordStep(steps, {

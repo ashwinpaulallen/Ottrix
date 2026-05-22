@@ -45,3 +45,12 @@ export {
 } from './audit.js';
 
 export { createGuardrails, type CreateGuardrailsConfig, type CreateGuardrailsResult } from './factory.js';
+
+export {
+  PromptInjectionGuardrail,
+  type InjectionDetection,
+  type InjectionGuardrailMode,
+  type InjectionSeverity,
+  type InjectionStrictness,
+  type PromptInjectionGuardrailOptions,
+} from './injection.js';

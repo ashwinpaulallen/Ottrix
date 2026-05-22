@@ -13,8 +13,30 @@
 
 ---
 
+## What's New in v2
+
+**agentic-fabric v2** adds structured output, Zod tools, provider fallbacks, MCP server hosting, observational memory, supervisor and DAG orchestration, evals, trace exporters, and **prompt injection protection enabled by default**.
+
+| Feature | Import | Highlights |
+|---------|--------|--------------|
+| Structured output | `agentic-fabric` | Zod schemas on `agent.run()` with retries |
+| Zod tools | `createTool`, `ZodTool` | Typed tool I/O, auto JSON Schema |
+| Provider fallback | `agentic-fabric/providers` | `setFallbackChain()` + circuit breaker |
+| MCP server | `agentic-fabric/mcp-server` | `serveMCP()` stdio/SSE + `agentic-serve` CLI |
+| Observational memory | `agentic-fabric/memory` | LLM fact extraction + dedup |
+| Supervisor | `createSupervisor` | Delegate to worker agents |
+| DAG workflows | `DAGBuilder` | Parallel steps, suspend/resume |
+| Evals | `agentic-fabric/evals` | `evaluate()` + scorers + reports |
+| Trace exporters | `agentic-fabric/exporters/*` | Langfuse, Braintrust, webhook |
+| Prompt injection | built-in | On by default — block / flag / sanitize |
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release notes.
+
+---
+
 ## Table of contents
 
+- [What's New in v2](#whats-new-in-v2)
 - [Why agentic-fabric](#why-agentic-fabric)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -25,6 +47,7 @@
 - [Providers](#providers)
 - [Configuration](#configuration)
 - [Package exports](#package-exports)
+- [Upgrading from v1](#upgrading-from-v1)
 - [Documentation & examples](#documentation--examples)
 - [Comparison](#comparison)
 - [Development](#development)
@@ -43,7 +66,7 @@ Use **agentic-fabric** when you need a **small, explicit TypeScript library** to
 | **MCP integration** | Connect MCP servers over stdio or SSE and expose tools to agents |
 | **Multi-agent workflows** | Sequential, parallel, router, and hierarchical pipelines |
 | **Memory** | Working, semantic (RAG), and episodic memory modules |
-| **Guardrails** | PII detection, token/cost budgets, content filters, human approval |
+| **Guardrails** | PII detection, token/cost budgets, content filters, human approval, **prompt injection (default)** |
 | **Observability** | Structured logging, OpenTelemetry-style spans, run replay |
 | **Zero vendor SDKs** | Built-in providers use HTTP APIs only — smaller installs, full control |
 
@@ -119,7 +142,151 @@ console.log(answer);
 
 ## Implementation examples
 
-Copy-paste examples below match the **published API** (`v1.0.0`). Use `provider: 'openai'` or `'ollama'` by swapping config (see [Providers](#providers)).
+Copy-paste examples below match the **published API** (`v2.0.0`). Use `provider: 'openai'` or `'ollama'` by swapping config (see [Providers](#providers)).
+
+### v2 feature examples
+
+#### Structured output (Zod)
+
+```ts
+import { createAgent } from 'agentic-fabric';
+import { z } from 'zod';
+
+const schema = z.object({ name: z.string(), age: z.number() });
+const agent = createAgent({ provider: 'anthropic' });
+const { parsedOutput } = await agent.run('Introduce Ada Lovelace', { outputSchema: schema });
+```
+
+#### Zod tools
+
+```ts
+import { createAgent, createTool } from 'agentic-fabric';
+import { z } from 'zod';
+
+const weather = createTool({
+  name: 'get_weather',
+  description: 'Get weather for a city',
+  input: z.object({ city: z.string() }),
+  execute: async ({ city }) => ({ city, tempF: 72 }),
+});
+
+const agent = createAgent({ provider: 'anthropic', tools: [weather] });
+```
+
+#### Provider fallback chain
+
+```ts
+import { ProviderRegistry, createAnthropicProvider, createOpenAIProvider } from 'agentic-fabric/providers';
+
+const registry = new ProviderRegistry()
+  .register('anthropic', createAnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY! }))
+  .register('openai', createOpenAIProvider({ apiKey: process.env.OPENAI_API_KEY! }))
+  .setFallbackChain(['anthropic', 'openai']);
+
+await registry.complete({ messages: [{ role: 'user', content: 'Hello' }] });
+```
+
+#### MCP server
+
+```ts
+import { serveMCP, ToolRegistry } from 'agentic-fabric/mcp-server';
+
+const registry = new ToolRegistry();
+registry.register(myTool);
+await serveMCP({ name: 'my-tools', version: '1.0.0', toolRegistry: registry, transport: 'stdio' });
+```
+
+Or use the CLI: `npx agentic-serve --transport stdio`
+
+#### Supervisor pattern
+
+```ts
+import { createSupervisor } from 'agentic-fabric';
+
+const pipeline = createSupervisor({
+  provider,
+  workers: {
+    researcher: { systemPrompt: 'You research.', description: 'Finds facts' },
+    writer: { systemPrompt: 'You write.', description: 'Drafts prose' },
+  },
+});
+
+await pipeline.run('Write a blog post about RLHF');
+```
+
+#### DAG workflows
+
+```ts
+import { DAGBuilder } from 'agentic-fabric';
+
+const workflow = new DAGBuilder()
+  .addStep('fetch', { name: 'Fetch', execute: async () => 'raw-data' })
+  .addStep('analyze', { name: 'Analyze', execute: async () => ({ score: 10 }), dependencies: ['fetch'] })
+  .build();
+
+const result = await workflow.run('start');
+console.log(result.finalOutput);
+```
+
+#### Workflow suspend / resume
+
+```ts
+import { DAGBuilder } from 'agentic-fabric';
+
+const workflow = new DAGBuilder()
+  .addStep('draft', { name: 'Draft', execute: async (input) => `Draft: ${input}` })
+  .addStep('review', { name: 'Review', suspend: true, execute: async (input) => input, dependencies: ['draft'] })
+  .build();
+
+const suspended = await workflow.run('Quarterly update');
+const done = await workflow.resume(suspended.suspendedState!, {
+  workflowId: suspended.suspendedState!.workflowId,
+  stepOutput: { approved: true, edits: 'Updated subject' },
+});
+```
+
+#### Evals
+
+```ts
+import { evaluate, ExactMatchScorer, ContainsScorer } from 'agentic-fabric/evals';
+
+const report = await evaluate({
+  agent,
+  dataset: [{ input: 'Capital of France?', expectedOutput: 'Paris' }],
+  scorers: [new ExactMatchScorer(), new ContainsScorer(['Paris'])],
+});
+console.log(report.aggregates.exact_match?.mean);
+```
+
+#### Observability (Langfuse)
+
+```ts
+import { getTelemetry, LangfuseExporter } from 'agentic-fabric';
+// or: import { LangfuseExporter } from 'agentic-fabric/exporters/langfuse';
+
+getTelemetry().setExporter(
+  new LangfuseExporter({
+    publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+    secretKey: process.env.LANGFUSE_SECRET_KEY!,
+  }),
+);
+```
+
+#### Prompt injection (enabled by default)
+
+```ts
+import { createAgent } from 'agentic-fabric';
+
+// No extra config — injection attempts are blocked automatically
+const agent = createAgent({ provider: 'anthropic' });
+
+// Opt out or customize
+const custom = createAgent({
+  guardrails: { promptInjection: { mode: 'flag', strictness: 'high' } },
+});
+```
+
+---
 
 ### 1. Streaming responses
 
@@ -341,20 +508,23 @@ Example `.agenticrc.json`:
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│           Your application (API, CLI, workers)               │
-├──────────────────────────────────────────────────────────────┤
-│  Orchestration — Sequential · Parallel · Router · YAML     │
-├──────────────────────────────────────────────────────────────┤
-│  Agent — ReAct loop · Planner · Reflector · Context manager  │
-├────────────┬─────────────┬──────────────┬──────────────────┤
-│   Tools    │   Memory    │  Guardrails  │  Observability   │
-│  + MCP     │  RAG / episodic │ PII · budget │ Traces · replay │
-├────────────┴─────────────┴──────────────┴──────────────────┤
-│  Providers — Anthropic · OpenAI-compatible · Ollama · fetch  │
-├──────────────────────────────────────────────────────────────┤
-│  Config — loadConfig() · .agenticrc · AGENTIC_* env vars     │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│              Your application (API, CLI, workers, MCP clients)       │
+├──────────────────────────────────────────────────────────────────────┤
+│  Orchestration — Sequential · Parallel · Router · Supervisor · DAG │
+│                  YAML loader · suspend/resume                        │
+├──────────────────────────────────────────────────────────────────────┤
+│  Agent — ReAct loop · structured output (Zod) · Planner · Reflector  │
+├────────────┬─────────────┬──────────────┬─────────────┬────────────┤
+│   Tools    │   Memory    │  Guardrails  │ Observability│   Evals    │
+│  + MCP     │  RAG · epis.│ PII · budget │ Langfuse ·  │  Scorers · │
+│  client &  │  observational│ injection* │ Braintrust  │  reports   │
+│  server    │             │  (default)   │ webhook     │            │
+├────────────┴─────────────┴──────────────┴─────────────┴────────────┤
+│  Providers — Anthropic · OpenAI · Ollama · fallback chain · breaker  │
+├──────────────────────────────────────────────────────────────────────┤
+│  Config — loadConfig() · .agenticrc · AGENTIC_* env vars             │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -363,13 +533,14 @@ Example `.agenticrc.json`:
 
 | Module | What it does |
 |--------|----------------|
-| **[Agent](docs/agent.md)** | ReAct loop, `run()` and `stream()`, planners, reflectors |
-| **[Providers](docs/providers.md)** | Claude, GPT, Ollama; retries; `ProviderRegistry` fallbacks |
-| **[Tools](docs/tools.md)** | `FunctionTool`, validation, **MCP** stdio/SSE client |
-| **[Memory](docs/memory.md)** | Working buffer, semantic RAG, episodic recall |
-| **[Guardrails](docs/guardrails.md)** | PII, budgets, filters, human-in-the-loop, audit log |
-| **[Observability](docs/observability.md)** | Logger, telemetry spans, run recorder / replay |
-| **[Orchestration](docs/orchestration.md)** | Multi-agent workflows + YAML/JSON loader |
+| **[Agent](docs/agent.md)** | ReAct loop, `run()` and `stream()`, structured output (Zod), planners |
+| **[Providers](docs/providers.md)** | Claude, GPT, Ollama; retries; fallback chain; circuit breaker |
+| **[Tools](docs/tools.md)** | `FunctionTool`, `createTool` (Zod), **MCP** client + server |
+| **[Memory](docs/memory.md)** | Working buffer, semantic RAG, episodic recall, observational memory |
+| **[Guardrails](docs/guardrails.md)** | PII, budgets, filters, human-in-the-loop, **prompt injection (default)** |
+| **[Observability](docs/observability.md)** | Logger, telemetry spans, Langfuse/Braintrust/webhook exporters |
+| **[Orchestration](docs/orchestration.md)** | Sequential, supervisor, DAG workflows + YAML loader |
+| **[Evals](docs/evals.md)** | `evaluate()`, scorers, CSV/Markdown reports |
 | **[Configuration](docs/configuration.md)** | `createAgent`, env vars, layered config files |
 
 Full implementation docs: **[docs/README.md](docs/README.md)**
@@ -418,16 +589,29 @@ Tree-shakeable subpath imports:
 
 | Import | Use case |
 |--------|----------|
-| `agentic-fabric` | Main API — `Agent`, `createAgent`, config |
-| `agentic-fabric/providers` | Provider classes and factories |
-| `agentic-fabric/tools` | Tools, MCP, `ToolRegistry` |
-| `agentic-fabric/memory` | Memory modules |
-| `agentic-fabric/orchestration` | Workflows, `WorkflowLoader` |
+| `agentic-fabric` | Main API — `Agent`, `createAgent`, evals, guardrails, orchestration |
+| `agentic-fabric/providers` | Provider classes, registry, fallback chain |
+| `agentic-fabric/tools` | Tools, MCP client, `ToolRegistry` |
+| `agentic-fabric/mcp-server` | `MCPServer`, `serveMCP` (lightweight MCP hosting) |
+| `agentic-fabric/memory` | Memory modules + observational memory |
+| `agentic-fabric/orchestration` | Workflows, supervisor, DAG, `WorkflowLoader` |
 | `agentic-fabric/guardrails` | Middleware and validators |
 | `agentic-fabric/observability` | Logger, telemetry, replay |
+| `agentic-fabric/evals` | `evaluate()`, scorers, `EvalReporter` |
+| `agentic-fabric/exporters/langfuse` | Langfuse trace exporter (also Braintrust, webhook) |
 | `agentic-fabric/types` | TypeScript types only |
 
 **ESM-first** (`"type": "module"`) with CommonJS builds (`.cjs`) for `require()`.
+
+---
+
+## Upgrading from v1
+
+1. **Bump the package:** `npm install agentic-fabric@2`
+2. **Prompt injection is now on by default.** Suspicious inputs are blocked before reaching the LLM. Opt out with `guardrails: { promptInjection: false }` if needed.
+3. **New subpath imports** are available for tree-shaking (`agentic-fabric/evals`, `agentic-fabric/mcp-server`, `agentic-fabric/exporters/langfuse`).
+4. **Structured output** uses Zod via `outputSchema` on `agent.run()` — install the optional `zod` peer dependency.
+5. **Breaking changes:** none intended for v1 APIs; new features are additive. See [CHANGELOG.md](CHANGELOG.md) and [MIGRATION.md](MIGRATION.md) for details.
 
 ---
 

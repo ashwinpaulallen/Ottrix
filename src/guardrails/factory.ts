@@ -12,6 +12,11 @@ import {
   type PiiMode,
 } from './validators.js';
 import type { GuardrailHandler } from './types.js';
+import {
+  DEFAULT_PROMPT_INJECTION_OPTIONS,
+  PromptInjectionGuardrail,
+  type PromptInjectionGuardrailOptions,
+} from './injection.js';
 
 /** Configuration for {@link createGuardrails}. */
 export interface CreateGuardrailsConfig {
@@ -35,6 +40,7 @@ export interface CreateGuardrailsConfig {
   };
   humanApproval?: HumanApprovalGuardrailOptions;
   audit?: AuditLoggerOptions;
+  promptInjection?: false | Omit<PromptInjectionGuardrailOptions, 'auditLogger' | 'agentName'>;
 }
 
 /** Result of {@link createGuardrails}. */
@@ -100,6 +106,17 @@ export function createGuardrails(options: CreateGuardrailsConfig = {}): CreateGu
 
   if (options.humanApproval) {
     handlers.push(new HumanApprovalGuardrail(options.humanApproval));
+  }
+
+  if (options.promptInjection !== false) {
+    handlers.push(
+      new PromptInjectionGuardrail({
+        ...DEFAULT_PROMPT_INJECTION_OPTIONS,
+        ...(options.promptInjection ?? {}),
+        agentName,
+        auditLogger: audit,
+      }),
+    );
   }
 
   const middleware = new GuardrailMiddleware(handlers);
