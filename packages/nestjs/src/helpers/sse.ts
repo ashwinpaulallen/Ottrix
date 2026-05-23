@@ -39,17 +39,15 @@ export function createSseHandler(
     new Observable<SseMessageEvent>((subscriber) => {
       const abortController = new AbortController();
       const combinedSignal = mergeAbortSignals(options.signal, signal, abortController.signal);
-      let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
       let closed = false;
+      let clearKeepalive = (): void => {};
 
       const cleanup = (): void => {
         if (closed) {
           return;
         }
         closed = true;
-        if (keepaliveTimer) {
-          clearInterval(keepaliveTimer);
-        }
+        clearKeepalive();
         abortController.abort();
       };
 
@@ -63,10 +61,13 @@ export function createSseHandler(
         subscriber.complete();
       });
 
-      keepaliveTimer = setInterval(() => {
+      const keepaliveTimer = setInterval(() => {
         subscriber.next({ data: ': keepalive\n\n', type: 'keepalive' });
       }, keepaliveMs);
       keepaliveTimer.unref?.();
+      clearKeepalive = (): void => {
+        clearInterval(keepaliveTimer);
+      };
 
       void (async () => {
         try {

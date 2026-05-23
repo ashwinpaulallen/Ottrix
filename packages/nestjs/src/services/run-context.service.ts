@@ -26,7 +26,7 @@ export class RunContextService {
   /** Run `fn` inside the given {@link RunContext}. */
   runWith<T>(ctx: RunContext, fn: () => Promise<T> | T): Promise<T> {
     if (!this.enabled) {
-      return Promise.resolve(fn());
+      return Promise.resolve().then(() => fn());
     }
     return runWith(ctx, fn);
   }

@@ -1,7 +1,7 @@
 # Overview
 
 **Package name:** `ottrix`  
-**Version constant:** `OTTRIX_VERSION` → `'1.0.0'` (deprecated aliases: `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, `AGENT_FABRIC_VERSION`)  
+**Version constant:** `OTTRIX_VERSION` → `'2.0.0'` (deprecated aliases: `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, `AGENT_FABRIC_VERSION`)  
 **Node.js:** `>=20` (20.x, 22.x, 24.x; CI tests 20, 22, and 24)  
 **Module format:** ESM (`"type": "module"`); CommonJS builds ship as `.cjs` alongside `.js`.
 
@@ -32,7 +32,7 @@ Source (`src/`), tests, and examples are not included in the tarball.
 | `ottrix/evals` | `dist/evals/index.js` | Evaluation framework |
 | `ottrix/exporters/*` | `dist/observability/exporters/*.js` | Langfuse, Braintrust, webhook, **OTEL** exporters |
 | `ottrix/exporters/otel` | `dist/observability/exporters/otel.js` | Native OTLP/HTTP exporter |
-| `@ottrix/nestjs` | `packages/nestjs` | NestJS DI adapter (monorepo workspace) |
+| `@ottrix/nestjs` | *(separate npm package)* | NestJS DI adapter — install alongside `ottrix` |
 
 CLI bin: **`ottrix-serve`** → `dist/cli/serve.js` (MCP server hosting).
 

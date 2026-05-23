@@ -1,0 +1,54 @@
+{
+  "name": "@ottrix/nextjs",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Next.js API route handlers for ottrix agents",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "echo 'No tests yet'",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "ottrix": ">=2.0.0",
+    "next": ">=14.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "ottrix": "*",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ashwinpaulallen/ottrix.git",
+    "directory": "packages/nextjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -8,6 +8,65 @@ _No breaking changes yet._
 
 ---
 
+## 2.0.0
+
+Release date: 2026-05-23. See [CHANGELOG](CHANGELOG.md) for the full feature list.
+
+### Upgrade from 1.x
+
+```bash
+npm install ottrix@2
+```
+
+If you use the NestJS adapter:
+
+```bash
+npm install @ottrix/nestjs ottrix@2 @nestjs/common @nestjs/core rxjs
+```
+
+`@ottrix/nestjs` requires **`ottrix` ≥2.0.0** as a peer dependency.
+
+### Version constant
+
+```ts
+import { OTTRIX_VERSION } from 'ottrix';
+// '2.0.0'
+```
+
+### New capabilities (additive)
+
+| Feature | Doc |
+|---------|-----|
+| Run context (AsyncLocalStorage) | [context.md](docs/context.md) |
+| Tool safety envelope + idempotent execution | [tools.md](docs/tools.md) |
+| Redis/Postgres workflow state stores | [orchestration.md](docs/orchestration.md) |
+| DAG human approval gates | [orchestration.md](docs/orchestration.md) |
+| Native OTEL exporter (`ottrix/exporters/otel`) | [observability.md](docs/observability.md) |
+| Multi-scope budget (USD) + `configureBudgets()` | [guardrails.md](docs/guardrails.md) |
+| `AuditEmitter` SOC2 audit trail | [guardrails.md](docs/guardrails.md) |
+| `@ottrix/nestjs` adapter | [nestjs.md](docs/nestjs.md) |
+
+### Changed behavior
+
+- Agent-scope budget keys include `runId` to prevent cross-run budget leakage
+- `createGuardrails()` merges global `configureBudgets()` when no per-agent budget is set
+- `GuardrailAction` includes `'suspend'` for budget approval-required breaches
+- OTEL exporter: Datadog default endpoint is `https://otlp.datadoghq.com`; permanent 4xx batches are dropped
+
+### Breaking / migration notes
+
+Most 2.0 features are opt-in. Notable changes when upgrading:
+
+| Change | Action |
+|--------|--------|
+| `@ottrix/nestjs` peer | Upgrade `ottrix` to 2.x before installing or updating the NestJS package |
+| `AuditLogger` location | Moved internally; still re-exported from `ottrix/guardrails` for compatibility |
+| Budget scopes | If you rely on agent-level budgets across concurrent runs, scopes now isolate by `runId` |
+
+Prompt injection guardrails remain **on by default** when guardrails are enabled (unchanged from 1.0).
+
+---
+
 ## Package renamed: `agentic-fabric` → `ottrix`
 
 The npm package is now **`ottrix`**. Legacy names remain as deprecated aliases where noted below.
@@ -28,7 +87,7 @@ Subpath imports use the new package name: `ottrix/evals`, `ottrix/mcp-server`, `
 
 ## 1.0.0
 
-Release date: 2026-05-19. See [CHANGELOG](../CHANGELOG.md) for the full feature list.
+Release date: 2026-05-19. See [CHANGELOG](CHANGELOG.md) for the full feature list.
 
 ### Install
 

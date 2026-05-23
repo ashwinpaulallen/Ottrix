@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0]
+## [2.0.0] - 2026-05-23
 
 ### Added
 
@@ -307,4 +307,5 @@ const open = createAgent({ guardrails: { promptInjection: false } });
 - Anthropic/OpenAI missing API key throws `ProviderError` with `code: 'auth'`
 - MCP JSON-RPC parse failures throw `MCPProtocolError` instead of generic `Error`
 
+[2.0.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v2.0.0
 [1.0.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v1.0.0

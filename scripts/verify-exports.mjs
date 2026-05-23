@@ -7,8 +7,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-const require = createRequire(join(root, 'package.json'));
+const coreDir = join(root, 'packages/core');
+const pkg = JSON.parse(readFileSync(join(coreDir, 'package.json'), 'utf8'));
+const require = createRequire(join(coreDir, 'package.json'));
 
 /** Subpaths to smoke-test (including wildcard targets). */
 const SUBPATHS = [
@@ -61,8 +62,8 @@ let failed = 0;
 
 for (const subpath of SUBPATHS) {
   const { import: esmRel, require: cjsRel } = resolveExport(subpath);
-  const esmPath = join(root, esmRel);
-  const cjsPath = join(root, cjsRel);
+  const esmPath = join(coreDir, esmRel);
+  const cjsPath = join(coreDir, cjsRel);
 
   if (!existsSync(esmPath)) {
     console.error(`✗ ${subpath} — missing ESM: ${esmRel}`);

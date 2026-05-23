@@ -25,7 +25,7 @@ export class OttrixHealthIndicator {
   /** Run all Ottrix health checks. */
   async check(key = 'ottrix'): Promise<OttrixHealthIndicatorResult> {
     const providers = await this.providerRegistry.pingProviders();
-    const mcp = await this.checkMcpConnections();
+    const mcp = this.checkMcpConnections();
 
     const providerHealthy = Object.values(providers).every((entry) => entry.healthy);
     const mcpHealthy = Object.values(mcp).every((entry) => entry.connected);
@@ -49,9 +49,7 @@ export class OttrixHealthIndicator {
     return result;
   }
 
-  private async checkMcpConnections(): Promise<
-    Record<string, { connected: boolean; state?: string }>
-  > {
+  private checkMcpConnections(): Record<string, { connected: boolean; state?: string }> {
     const registry = this.toolRegistry.getMcpRegistry();
     const results: Record<string, { connected: boolean; state?: string }> = {};
 

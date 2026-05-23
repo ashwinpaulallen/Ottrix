@@ -26,8 +26,46 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
 
-  test:
+  quality:
     runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-node-22-turbo-${{ hashFiles('package-lock.json', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-turbo-${{ hashFiles('package-lock.json', 'turbo.json') }}-
+            ${{ runner.os }}-node-22-turbo-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  test:
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
     strategy:
       matrix:
@@ -43,17 +81,20 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
+      - name: Cache Turborepo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-turbo-${{ hashFiles('package-lock.json', 'turbo.json') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-turbo-${{ hashFiles('package-lock.json', 'turbo.json') }}-
+            ${{ runner.os }}-node-${{ matrix.node-version }}-turbo-
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
+      - name: Build
+        run: npm run build
 
       - name: Test
         run: npm test
-
-      - name: Build
-        run: npm run build

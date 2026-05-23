@@ -8,6 +8,8 @@ First-party NestJS integration for [Ottrix](https://github.com/ashwinpaulallen/o
 npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs
 ```
 
+Requires **`ottrix` ≥2.0.0** as a peer dependency.
+
 Optional peers:
 
 - `@nestjs/terminus` — health check registration

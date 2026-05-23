@@ -1,20 +1,12 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
-    "strict": true,
-    "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "noEmit": true,
-    "rootDir": ".",
-    "types": ["node"]
+    "verbatimModuleSyntax": false,
+    "rootDir": "."
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

@@ -5,6 +5,7 @@ import {
   Injectable,
   PayloadTooLargeException,
 } from '@nestjs/common';
+import type { PromptInjectionGuardrail } from 'ottrix/guardrails';
 import { GuardrailService } from '../services/guardrail.service.js';
 
 const MAX_BODY_SCAN_BYTES = 256_000;
@@ -15,8 +16,21 @@ export class InjectionGuard implements CanActivate {
   constructor(private readonly guardrails: GuardrailService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<{ body?: unknown }>();
-    const text = extractRequestText(request.body);
+    const request = context.switchToHttp().getRequest<{
+      body?: unknown;
+      ottrixInjectionDetected?: boolean;
+    }>();
+    const body = request.body;
+    if (!body) {
+      return true;
+    }
+
+    const mode = this.guardrails.getInjectionMode();
+    if (typeof body === 'object' && Array.isArray((body as Record<string, unknown>).messages)) {
+      return evaluateMessagesBody(request, body as Record<string, unknown>, mode, this.guardrails.getInjectionGuardrail());
+    }
+
+    const text = extractRequestText(body);
     if (!text) {
       return true;
     }
@@ -30,10 +44,8 @@ export class InjectionGuard implements CanActivate {
       return true;
     }
 
-    const mode = this.guardrails.getInjectionMode();
-
-    if (mode === 'sanitize' && detection.sanitizedContent !== undefined && request.body) {
-      const applied = applySanitizedBody(request.body, detection.sanitizedContent);
+    if (mode === 'sanitize' && detection.sanitizedContent !== undefined) {
+      const applied = applySanitizedBody(body, detection.sanitizedContent);
       if (!applied) {
         throw new ForbiddenException(
           `Prompt injection detected (${detection.category}, severity: ${detection.severity})`,
@@ -111,13 +123,53 @@ function applySanitizedBody(body: unknown, sanitized: string): boolean {
     record.input = sanitized;
     return true;
   }
-  if (Array.isArray(record.messages)) {
-    for (const entry of record.messages) {
-      if (entry && typeof entry === 'object' && typeof (entry as { content?: unknown }).content === 'string') {
-        (entry as { content: string }).content = sanitized;
-        return true;
-      }
-    }
-  }
   return false;
+}
+
+async function evaluateMessagesBody(
+  request: { ottrixInjectionDetected?: boolean },
+  body: Record<string, unknown>,
+  mode: 'block' | 'flag' | 'sanitize',
+  guardrail: PromptInjectionGuardrail,
+): Promise<boolean> {
+  const messages = body.messages as unknown[];
+  let flagged = false;
+
+  for (const entry of messages) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const message = entry as { content?: unknown };
+    if (typeof message.content !== 'string') {
+      continue;
+    }
+
+    if (message.content.length > MAX_BODY_SCAN_BYTES) {
+      throw new PayloadTooLargeException('Request body too large for injection scan');
+    }
+
+    const detection = await guardrail.checkInput(message.content);
+    if (!detection.detected) {
+      continue;
+    }
+
+    if (mode === 'sanitize' && detection.sanitizedContent !== undefined) {
+      message.content = detection.sanitizedContent;
+      continue;
+    }
+
+    if (mode === 'flag') {
+      flagged = true;
+      continue;
+    }
+
+    throw new ForbiddenException(
+      `Prompt injection detected (${detection.category}, severity: ${detection.severity})`,
+    );
+  }
+
+  if (flagged) {
+    request.ottrixInjectionDetected = true;
+  }
+  return true;
 }

@@ -2,15 +2,15 @@
   "$schema": "https://typedoc.org/schema.json",
   "name": "ottrix",
   "entryPoints": [
-    "src/index.ts",
-    "src/agent/index.ts",
-    "src/types/index.ts",
-    "src/providers/index.ts",
-    "src/tools/index.ts",
-    "src/memory/index.ts",
-    "src/orchestration/index.ts",
-    "src/guardrails/index.ts",
-    "src/observability/index.ts"
+    "packages/core/src/index.ts",
+    "packages/core/src/agent/index.ts",
+    "packages/core/src/types/index.ts",
+    "packages/core/src/providers/index.ts",
+    "packages/core/src/tools/index.ts",
+    "packages/core/src/memory/index.ts",
+    "packages/core/src/orchestration/index.ts",
+    "packages/core/src/guardrails/index.ts",
+    "packages/core/src/observability/index.ts"
   ],
   "entryPointStrategy": "resolve",
   "out": "docs/api",
@@ -18,5 +18,5 @@
   "excludePrivate": true,
   "excludeInternal": true,
   "skipErrorChecking": true,
-  "exclude": ["**/*.test.ts", "tests/**", "examples/**"]
+  "exclude": ["**/*.test.ts", "packages/core/tests/**", "examples/**"]
 }

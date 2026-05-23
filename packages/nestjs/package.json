@@ -1,5 +1,6 @@
 {
   "name": "@ottrix/nestjs",
+  "private": false,
   "version": "0.1.0",
   "description": "First-party NestJS integration for Ottrix — DI, lifecycle, guards, interceptors, and SSE streaming.",
   "license": "MIT",
@@ -22,8 +23,10 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint src/ tests/",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
   },
   "keywords": [
     "ottrix",
@@ -39,13 +42,14 @@
     "directory": "packages/nestjs"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "peerDependencies": {
     "@nestjs/common": ">=10.0.0",
     "@nestjs/core": ">=10.0.0",
     "@nestjs/terminus": ">=10.0.0",
-    "ottrix": ">=1.0.0",
+    "ottrix": ">=2.0.0",
     "rxjs": "^7.0.0"
   },
   "peerDependenciesMeta": {
@@ -61,7 +65,7 @@
     "@nestjs/core": "^11.1.0",
     "@nestjs/testing": "^11.1.0",
     "@types/node": "25.9.0",
-    "ottrix": "file:../..",
+    "ottrix": "*",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "tsup": "8.5.1",
