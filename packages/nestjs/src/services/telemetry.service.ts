@@ -1,6 +1,7 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { OtelExporter } from 'ottrix/exporters/otel';
 import {
+  getLogger,
   getTelemetry,
   setTelemetry,
   shutdownObservability,
@@ -18,6 +19,7 @@ import { OTTRIX_MODULE_OPTIONS } from '../tokens.js';
 export class TelemetryService implements OnModuleInit, OnModuleDestroy {
   private telemetry: Telemetry;
   private traceExporters: TraceExporter[] = [];
+  private readonly logger = getLogger().child({ integration: 'nestjs', service: 'telemetry' });
 
   constructor(@Inject(OTTRIX_MODULE_OPTIONS) private readonly options: OttrixModuleOptions) {
     this.telemetry = getTelemetry();
@@ -64,7 +66,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
         return new TraceConsoleExporter();
       case 'langfuse': {
         if (!config.langfuse?.publicKey || !config.langfuse.secretKey) {
-          console.warn('[ottrix/nestjs] Langfuse exporter requires publicKey and secretKey');
+          this.logger.warn('Langfuse exporter requires publicKey and secretKey');
           return undefined;
         }
         return new LangfuseExporter({
@@ -75,7 +77,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
       }
       case 'otel': {
         if (!config.otel?.endpoint) {
-          console.warn('[ottrix/nestjs] OTEL exporter requires otel.endpoint');
+          this.logger.warn('OTEL exporter requires otel.endpoint');
           return undefined;
         }
         return new OtelExporter({
@@ -87,7 +89,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
       }
       case 'webhook': {
         if (!config.webhook?.url) {
-          console.warn('[ottrix/nestjs] Webhook exporter requires webhook.url');
+          this.logger.warn('Webhook exporter requires webhook.url');
           return undefined;
         }
         return new WebhookExporter({
@@ -96,7 +98,9 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
         });
       }
       default:
-        console.warn(`[ottrix/nestjs] Unknown telemetry exporter: ${String(config.exporter)}`);
+        this.logger.warn('Unknown telemetry exporter configured', {
+          exporter: String(config.exporter),
+        });
         return undefined;
     }
   }

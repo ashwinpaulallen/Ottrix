@@ -1,6 +1,5 @@
 import {
   DynamicModule,
-  Global,
   Module,
   Provider,
 } from '@nestjs/common';
@@ -15,6 +14,7 @@ import type {
 } from './interfaces.js';
 import {
   agentToken,
+  featureToolsToken,
   OTTRIX_GUARDRAIL_SERVICE,
   OTTRIX_MODULE_OPTIONS,
   OTTRIX_MCP_REGISTRY,
@@ -52,7 +52,6 @@ const CORE_SERVICES = [
 /**
  * Global NestJS module integrating Ottrix agents, tools, telemetry, and guardrails.
  */
-@Global()
 @Module({})
 export class OttrixModule {
   /** Register Ottrix with synchronous configuration. */
@@ -126,11 +125,12 @@ export class OttrixModule {
 
   /** Register feature-scoped agents, tools, and workflows. */
   static forFeature(options: OttrixFeatureOptions): DynamicModule {
+    const toolsToken = featureToolsToken();
     return {
       module: OttrixModule,
       providers: [
-        ...createToolProviders(options),
-        ...createAgentProviders(options),
+        ...createToolProviders(options, toolsToken),
+        ...createAgentProviders(options, toolsToken),
         ...createWorkflowProviders(options),
       ],
       exports: [
@@ -181,14 +181,14 @@ function createProviderTokens(): Provider[] {
   }));
 }
 
-function createToolProviders(options: OttrixFeatureOptions): Provider[] {
+function createToolProviders(options: OttrixFeatureOptions, toolsToken: symbol): Provider[] {
   if (!options.tools?.length) {
     return [];
   }
 
   return [
     {
-      provide: 'OTTRIX_FEATURE_TOOLS',
+      provide: toolsToken,
       useFactory: (toolRegistryService: ToolRegistryService) => {
         for (const definition of options.tools ?? []) {
           toolRegistryService.getRegistry().register(definition.tool);
@@ -200,9 +200,8 @@ function createToolProviders(options: OttrixFeatureOptions): Provider[] {
   ];
 }
 
-function createAgentProviders(options: OttrixFeatureOptions): Provider[] {
-  const toolProviders = createToolProviders(options);
-  const hasTools = toolProviders.length > 0;
+function createAgentProviders(options: OttrixFeatureOptions, toolsToken: symbol): Provider[] {
+  const hasTools = (options.tools?.length ?? 0) > 0;
 
   return (options.agents ?? []).map((definition) => ({
     provide: agentToken(definition.name),
@@ -234,7 +233,7 @@ function createAgentProviders(options: OttrixFeatureOptions): Provider[] {
           ToolRegistryService,
           GuardrailService,
           TelemetryService,
-          'OTTRIX_FEATURE_TOOLS',
+          toolsToken,
         ]
       : [ProviderRegistryService, ToolRegistryService, GuardrailService, TelemetryService],
   }));

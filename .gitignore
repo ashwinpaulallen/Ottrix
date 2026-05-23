@@ -54,6 +54,9 @@ web_modules/
 # Optional eslint cache
 .eslintcache
 
+# Turborepo cache
+.turbo
+
 # Optional stylelint cache
 .stylelintcache
 

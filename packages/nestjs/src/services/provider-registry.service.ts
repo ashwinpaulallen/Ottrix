@@ -142,7 +142,7 @@ export class ProviderRegistryService implements OnModuleInit, OnModuleDestroy {
         throw new Error('OttrixModule: fallback chain configured but no providers registered');
       }
     } else if (configured.length > 0) {
-      this.registry.setDefault(configured[0]!);
+      this.registry.setDefault(configured[0]);
     }
   }
 }

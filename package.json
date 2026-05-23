@@ -1,157 +1,28 @@
 {
-  "name": "ottrix",
-  "version": "2.0.0",
-  "description": "TypeScript LLM agent framework: ReAct loop, tool calling, MCP, multi-agent workflows, memory, guardrails. Anthropic Claude, OpenAI, Ollama via fetch — vendor-neutral, zero SDK deps.",
-  "license": "MIT",
+  "name": "ottrix-monorepo",
+  "private": true,
   "type": "module",
-  "sideEffects": false,
-  "bin": {
-    "ottrix-serve": "./dist/cli/serve.js"
-  },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
-    },
-    "./types": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/types/index.js",
-      "require": "./dist/types/index.cjs"
-    },
-    "./providers": {
-      "types": "./dist/providers/index.d.ts",
-      "import": "./dist/providers/index.js",
-      "require": "./dist/providers/index.cjs"
-    },
-    "./providers/*": {
-      "types": "./dist/providers/*.d.ts",
-      "import": "./dist/providers/*.js",
-      "require": "./dist/providers/*.cjs"
-    },
-    "./tools": {
-      "types": "./dist/tools/index.d.ts",
-      "import": "./dist/tools/index.js",
-      "require": "./dist/tools/index.cjs"
-    },
-    "./memory": {
-      "types": "./dist/memory/index.d.ts",
-      "import": "./dist/memory/index.js",
-      "require": "./dist/memory/index.cjs"
-    },
-    "./orchestration": {
-      "types": "./dist/orchestration/index.d.ts",
-      "import": "./dist/orchestration/index.js",
-      "require": "./dist/orchestration/index.cjs"
-    },
-    "./guardrails": {
-      "types": "./dist/guardrails/index.d.ts",
-      "import": "./dist/guardrails/index.js",
-      "require": "./dist/guardrails/index.cjs"
-    },
-    "./observability": {
-      "types": "./dist/observability/index.d.ts",
-      "import": "./dist/observability/index.js",
-      "require": "./dist/observability/index.cjs"
-    },
-    "./agent": {
-      "types": "./dist/agent/index.d.ts",
-      "import": "./dist/agent/index.js",
-      "require": "./dist/agent/index.cjs"
-    },
-    "./evals": {
-      "types": "./dist/evals/index.d.ts",
-      "import": "./dist/evals/index.js",
-      "require": "./dist/evals/index.cjs"
-    },
-    "./mcp-server": {
-      "types": "./dist/tools/mcp-server.d.ts",
-      "import": "./dist/tools/mcp-server.js",
-      "require": "./dist/tools/mcp-server.cjs"
-    },
-    "./exporters/*": {
-      "types": "./dist/observability/exporters/*.d.ts",
-      "import": "./dist/observability/exporters/*.js",
-      "require": "./dist/observability/exporters/*.cjs"
-    },
-    "./exporters/otel": {
-      "types": "./dist/observability/exporters/otel.d.ts",
-      "import": "./dist/observability/exporters/otel.js",
-      "require": "./dist/observability/exporters/otel.cjs"
-    }
-  },
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.tools.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck && tsc -p tsconfig.tools.json --noEmit",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "dev": "npm run dev --workspace=packages/core",
     "audit": "npm audit --audit-level=moderate",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint:fix": "eslint packages --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "verify:exports": "node scripts/verify-exports.mjs",
     "verify:pack": "node scripts/verify-pack.mjs",
-    "prepublish:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:exports && npm run verify:pack",
-    "prepublishOnly": "npm run prepublish:check"
-  },
-  "keywords": [
-    "ai",
-    "agent",
-    "ottrix",
-    "llm",
-    "framework",
-    "multi-agent",
-    "mcp",
-    "eval",
-    "dag",
-    "supervisor",
-    "structured-output",
-    "vendor-agnostic"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ashwinpaulallen/ottrix.git"
-  },
-  "homepage": "https://github.com/ashwinpaulallen/ottrix#readme",
-  "bugs": {
-    "url": "https://github.com/ashwinpaulallen/ottrix/issues"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "peerDependencies": {
-    "ioredis": "^5.4.0",
-    "js-yaml": "^4.1.1",
-    "pg": "^8.11.0",
-    "zod": "^4.0.0"
-  },
-  "peerDependenciesMeta": {
-    "ioredis": {
-      "optional": true
-    },
-    "js-yaml": {
-      "optional": true
-    },
-    "pg": {
-      "optional": true
-    },
-    "zod": {
-      "optional": true
-    }
+    "prepublish:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:exports && npm run verify:pack"
   },
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "npm@10.9.4",
   "workspaces": [
     "packages/*"
   ],
@@ -162,11 +33,9 @@
     "eslint-config-prettier": "^10.1.8",
     "jiti": "2.7.0",
     "prettier": "3.8.3",
-    "tsup": "8.5.1",
+    "turbo": "^2.9.14",
     "typedoc": "^0.28.0",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.59.4",
-    "vitest": "4.1.6",
-    "zod": "4.4.3"
+    "typescript-eslint": "8.59.4"
   }
 }

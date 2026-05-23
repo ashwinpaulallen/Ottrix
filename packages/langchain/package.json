@@ -1,0 +1,54 @@
+{
+  "name": "@ottrix/langchain",
+  "private": true,
+  "version": "0.0.1",
+  "description": "LangChain.js adapter for ottrix",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "echo 'No tests yet'",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "ottrix": ">=2.0.0",
+    "langchain": ">=0.3.0"
+  },
+  "peerDependenciesMeta": {
+    "langchain": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "ottrix": "*",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ashwinpaulallen/ottrix.git",
+    "directory": "packages/langchain"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

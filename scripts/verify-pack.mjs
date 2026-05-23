@@ -4,15 +4,20 @@
 import { execSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const coreDir = join(root, 'packages/core');
 const FORBIDDEN_TOP_LEVEL = new Set(['examples', 'docs', 'src', 'tests', '.github', 'scripts']);
 
-const filename = execSync('npm pack --silent', { encoding: 'utf8' }).trim();
+const filename = execSync('npm pack --silent', { encoding: 'utf8', cwd: coreDir }).trim();
+
+const tarball = join(coreDir, filename);
 
 const tempDir = mkdtempSync(join(tmpdir(), 'agentic-pack-'));
 try {
-  execSync(`tar -xzf ${JSON.stringify(filename)} -C ${JSON.stringify(tempDir)}`, {
+  execSync(`tar -xzf ${JSON.stringify(tarball)} -C ${JSON.stringify(tempDir)}`, {
     stdio: 'pipe',
   });
 
@@ -41,5 +46,5 @@ try {
   console.log('✓ npm pack contains only:', entries.sort().join(', '));
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
-  rmSync(filename, { force: true });
+  rmSync(tarball, { force: true });
 }

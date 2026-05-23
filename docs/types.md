@@ -116,7 +116,7 @@ Runtime guardrail **handlers** and middleware types live in `src/guardrails/type
 
 ```ts
 import { OTTRIX_VERSION } from 'ottrix';
-// '1.0.0' — matches package.json
+// '2.0.0' — matches package.json
 ```
 
 `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, and `AGENT_FABRIC_VERSION` are deprecated aliases.

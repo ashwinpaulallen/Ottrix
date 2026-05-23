@@ -1,16 +1,16 @@
 # NestJS integration (`@ottrix/nestjs`)
 
-Source: `packages/nestjs/`
+Separate npm package — first-party NestJS adapter for Ottrix: dependency injection, lifecycle hooks, guards, interceptors, SSE streaming, and health checks.
 
-First-party NestJS adapter for Ottrix — dependency injection, lifecycle hooks, guards, interceptors, SSE streaming, and health checks.
-
-Full package README: [`packages/nestjs/README.md`](../packages/nestjs/README.md)
+Package README: [`packages/nestjs/README.md`](../packages/nestjs/README.md)
 
 ## Install
 
 ```bash
 npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs
 ```
+
+Requires **`ottrix` ≥2.0.0** as a peer dependency.
 
 Optional peer: `@nestjs/terminus` (health indicator registration).
 
@@ -98,4 +98,4 @@ Missing required exporter fields log a warning at startup.
 
 ## Feature module tool registration
 
-When `forFeature({ tools: [...], agents: [...] })` registers tools and agents together, agent factories depend on `OTTRIX_FEATURE_TOOLS` to guarantee tools are registered before agents are constructed. Unknown tool names in agent config throw at startup.
+When `forFeature({ tools: [...], agents: [...] })` registers tools and agents together, agent factories depend on a **per-feature** registration token so tools are registered before agents are constructed. Each `forFeature()` call gets its own token, so multiple feature modules can register tools in parallel without DI collisions. Unknown tool names in agent config throw at startup.
