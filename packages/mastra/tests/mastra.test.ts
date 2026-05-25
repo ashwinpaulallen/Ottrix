@@ -57,7 +57,10 @@ describe('tool conversion', () => {
           properties: { message: { type: 'string' } },
           required: ['message'],
         },
-        execute: async (input: { message: string }) => ({ echoed: input.message }),
+        execute: async (inputData: unknown) => {
+          const input = inputData as { message: string };
+          return { echoed: input.message };
+        },
       }),
     ]);
 

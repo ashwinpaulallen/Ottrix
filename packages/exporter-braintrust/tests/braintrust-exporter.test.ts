@@ -23,8 +23,8 @@ function sampleTrace(overrides: Partial<TraceData> = {}): TraceData {
       },
     ],
     metadata: {},
-    input: { prompt: 'hello' },
-    output: { text: 'world' },
+    input: 'hello',
+    output: 'world',
     ...overrides,
   };
 }

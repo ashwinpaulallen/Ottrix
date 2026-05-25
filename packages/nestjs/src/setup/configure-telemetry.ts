@@ -1,4 +1,5 @@
-import { configureTraceExportFromConfig, getTelemetry, OtelExporter, type TraceExporter } from 'ottrix';
+import { OtelExporter } from '@ottrix/exporter-otel';
+import { configureTraceExportFromConfig, getTelemetry, type TraceExporter } from 'ottrix';
 import type { OttrixTelemetryConfig } from '../interfaces.js';
 
 /** Wire Ottrix telemetry exporters from NestJS module options. */
@@ -13,7 +14,6 @@ export function configureTelemetry(config?: OttrixTelemetryConfig): TraceExporte
     }
     const exporter = new OtelExporter({
       endpoint: config.otel.endpoint,
-      protocol: config.otel.protocol ?? 'http',
       headers: config.otel.headers,
       serviceName: config.otel.serviceName,
     });

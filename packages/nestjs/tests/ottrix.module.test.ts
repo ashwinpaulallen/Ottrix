@@ -12,6 +12,7 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { lastValueFrom, Observable, of } from 'rxjs';
 import { Agent, FunctionTool } from 'ottrix';
 import type { AgentEvent } from 'ottrix';
+import { OtelExporter } from '@ottrix/exporter-otel';
 import {
   getRunContext,
   getTelemetry,
@@ -19,7 +20,6 @@ import {
   ProviderRegistry,
   resetGlobalObservability,
   TraceConsoleExporter,
-  OtelExporter,
 } from 'ottrix';
 import { OttrixModule } from '../src/ottrix.module.js';
 import { InjectAgent, InjectToolRegistry } from '../src/decorators.js';
@@ -178,7 +178,7 @@ describe('OttrixModule', () => {
     expect(registry.get('anthropic')).toBeDefined();
   });
 
-  it('wires otel telemetry through core OtelExporter', async () => {
+  it('wires otel telemetry through @ottrix/exporter-otel', async () => {
     const addExporter = vi.spyOn(getTelemetry(), 'addExporter');
 
     const module = await Test.createTestingModule({
