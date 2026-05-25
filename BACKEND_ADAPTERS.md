@@ -297,7 +297,7 @@ NestJS: set `http: { cors: false }` on `OttrixModule.forRoot` / `forRootAsync`. 
 Every adapter runs the shared contract tests from `ottrix/testing`:
 
 ```ts
-import { runAdapterContractTests } from 'ottrix/testing';
+import { runAdapterContractTests } from 'ottrix/testing/contract';
 ```
 
 Cross-adapter **parity tests** live in [`packages/integration-tests/tests/adapter-parity.test.ts`](packages/integration-tests/tests/adapter-parity.test.ts) (`@ottrix/integration-tests`).

@@ -79,6 +79,10 @@
       "import": "./dist/testing/index.js",
       "require": "./dist/testing/index.cjs"
     },
+    "./testing/contract": {
+      "types": "./dist/testing/contract.d.ts",
+      "import": "./dist/testing/contract.js"
+    },
     "./exporters/*": {
       "types": "./dist/observability/exporters/*.d.ts",
       "import": "./dist/observability/exporters/*.js",

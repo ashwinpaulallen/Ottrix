@@ -4,8 +4,8 @@ import type { SseEvent } from 'ottrix/http';
 import {
   createMockAgent,
   createMockProviderRegistry,
-  runAdapterContractTests,
 } from 'ottrix/testing';
+import { runAdapterContractTests } from 'ottrix/testing/contract';
 import { agentRoutes, ottrixPlugin } from '../src/index.js';
 
 function parseSseEvents(body: string): SseEvent[] {

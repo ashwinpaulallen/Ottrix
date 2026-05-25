@@ -29,6 +29,7 @@ const SUBPATHS = [
   './evals',
   './http',
   './testing',
+  './testing/contract',
   './exporters/webhook',
 ];
 
@@ -62,14 +63,14 @@ let failed = 0;
 for (const subpath of SUBPATHS) {
   const { import: esmRel, require: cjsRel } = resolveExport(subpath);
   const esmPath = join(coreDir, esmRel);
-  const cjsPath = join(coreDir, cjsRel);
+  const cjsPath = cjsRel ? join(coreDir, cjsRel) : null;
 
   if (!existsSync(esmPath)) {
     console.error(`✗ ${subpath} — missing ESM: ${esmRel}`);
     failed += 1;
     continue;
   }
-  if (!existsSync(cjsPath)) {
+  if (cjsRel && !existsSync(cjsPath)) {
     console.error(`✗ ${subpath} — missing CJS: ${cjsRel}`);
     failed += 1;
     continue;
@@ -77,8 +78,10 @@ for (const subpath of SUBPATHS) {
 
   try {
     await import(pathToFileURL(esmPath).href);
-    require(cjsPath);
-    console.log(`✓ ${subpath}`);
+    if (cjsRel) {
+      require(cjsPath);
+    }
+    console.log(`✓ ${subpath}${cjsRel ? '' : ' (ESM only)'}`);
   } catch (error) {
     console.error(`✗ ${subpath}`, error);
     failed += 1;

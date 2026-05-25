@@ -113,7 +113,7 @@ See [BACKEND_ADAPTERS.md](../../BACKEND_ADAPTERS.md) for request/response/SSE/er
 ## Contract tests
 
 ```ts
-import { runAdapterContractTests } from 'ottrix/testing';
+import { runAdapterContractTests } from 'ottrix/testing/contract';
 ```
 
 See `tests/contract.test.ts` for a full Fastify harness example.

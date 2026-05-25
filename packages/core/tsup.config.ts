@@ -22,6 +22,7 @@ export default defineConfig({
     'observability/exporters/webhook': 'src/observability/exporters/webhook.ts',
     'http/index': 'src/http/index.ts',
     'testing/index': 'src/testing/index.ts',
+    'testing/contract': 'src/testing/contract-entry.ts',
   },
   format: ['esm', 'cjs'],
   platform: 'node',

@@ -1,8 +1,4 @@
-export {
-  runAdapterContractTests,
-  type AdapterTestHarness,
-  type AdapterTestConfig,
-} from './contract.js';
+export type { AdapterTestHarness, AdapterTestConfig } from './contract.js';
 export {
   createMockAgent,
   createMockProviderRegistry,

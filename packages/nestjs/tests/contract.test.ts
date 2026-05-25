@@ -32,8 +32,8 @@ import { checkHealth, corsHeaders, extractMessage } from 'ottrix/http';
 import {
   createMockAgent,
   createMockProviderRegistry,
-  runAdapterContractTests,
 } from 'ottrix/testing';
+import { runAdapterContractTests } from 'ottrix/testing/contract';
 import { InjectAgent } from '../src/decorators.js';
 import { OttrixExceptionFilter } from '../src/filters/ottrix-exception.filter.js';
 import { InjectionGuard } from '../src/guards/injection.guard.js';
