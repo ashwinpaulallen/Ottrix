@@ -124,6 +124,7 @@ Optional peers: `zod`, `js-yaml`, `ioredis`, `pg` — see [Installation](#instal
 | **`@ottrix/express`** | `npm install @ottrix/express ottrix express` | Implemented — [README](packages/express/README.md) |
 | **`@ottrix/fastify`** | `npm install @ottrix/fastify ottrix fastify` | Implemented — [README](packages/fastify/README.md) |
 | **`@ottrix/hono`** | `npm install @ottrix/hono ottrix hono` | Implemented — [README](packages/hono/README.md) |
+| **`@ottrix/nextjs`** | `npm install @ottrix/nextjs ottrix next` | Published — [README](packages/nextjs/README.md) |
 
 ### Framework bridges
 

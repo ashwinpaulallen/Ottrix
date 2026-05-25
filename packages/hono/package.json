@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/hono",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Hono middleware and handlers for ottrix agents",
   "license": "MIT",

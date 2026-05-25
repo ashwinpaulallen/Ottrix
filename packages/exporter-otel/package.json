@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/exporter-otel",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "OTLP/HTTP trace exporter for ottrix — Jaeger, Tempo, Datadog, Honeycomb, and custom collectors",
   "license": "MIT",

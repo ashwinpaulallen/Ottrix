@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/exporter-braintrust",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Braintrust trace exporter for ottrix",
   "license": "MIT",

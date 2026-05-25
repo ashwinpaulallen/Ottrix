@@ -1,10 +1,11 @@
 {
   "name": "@ottrix/nextjs",
-  "private": true,
-  "version": "0.0.1",
+  "private": false,
+  "version": "0.1.0",
   "description": "Next.js API route handlers for ottrix agents",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,9 +22,9 @@
   ],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint src/",
-    "test": "echo 'No tests yet'",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
@@ -39,9 +40,13 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@types/node": "25.9.0",
+    "next": "^15.3.1",
     "ottrix": "*",
     "tsup": "8.5.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.6",
+    "zod": "^4.4.3"
   },
   "repository": {
     "type": "git",

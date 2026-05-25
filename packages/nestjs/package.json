@@ -47,8 +47,7 @@
     "directory": "packages/nestjs"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "peerDependencies": {
     "@nestjs/common": ">=10.0.0",

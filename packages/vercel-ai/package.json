@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/vercel-ai",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Bridge ottrix providers into the Vercel AI SDK",
   "license": "MIT",

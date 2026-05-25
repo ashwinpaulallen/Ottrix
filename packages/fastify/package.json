@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/fastify",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Fastify plugin for ottrix agents",
   "license": "MIT",

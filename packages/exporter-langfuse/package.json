@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/exporter-langfuse",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Langfuse trace exporter for ottrix",
   "license": "MIT",

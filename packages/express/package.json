@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/express",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Express middleware and router for ottrix agents",
   "license": "MIT",

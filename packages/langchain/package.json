@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/langchain",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "LangChain.js bridge for ottrix providers and memory",
   "license": "MIT",

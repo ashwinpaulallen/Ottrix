@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/mcp-server",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Expose ottrix tools as an MCP server (stdio or SSE)",
   "license": "MIT",
