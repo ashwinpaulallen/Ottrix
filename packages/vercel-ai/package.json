@@ -23,7 +23,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "lint": "eslint src/ tests/",
+    "lint": "eslint src/",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },

@@ -4,7 +4,7 @@ import {
   createOpenAIProvider,
   ProviderRegistry,
 } from 'ottrix';
-import type { Telemetry, TraceExporter } from 'ottrix';
+import type { Telemetry } from 'ottrix';
 import type { OttrixModuleOptions } from '../interfaces.js';
 
 /** Create and configure a {@link ProviderRegistry} from module options. */

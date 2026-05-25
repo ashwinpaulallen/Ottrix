@@ -23,9 +23,11 @@ export class RunContextInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const request = context.switchToHttp().getRequest<{
-      headers?: Record<string, string | string[] | undefined>;
-    }>();
+    const request = context.switchToHttp().getRequest<
+      Record<string, unknown> & {
+        headers?: Record<string, string | string[] | undefined>;
+      }
+    >();
 
     const runContext = buildRunContext(request, this.options);
 
@@ -34,23 +36,23 @@ export class RunContextInterceptor implements NestInterceptor {
 }
 
 function buildRunContext(
-  request: { headers?: Record<string, string | string[] | undefined> },
+  request: Record<string, unknown> & {
+    headers?: Record<string, string | string[] | undefined>;
+  },
   options?: RunContextInterceptorOptions,
 ): RunContext {
   const headers = request.headers ?? {};
   const runId = readHeader(headers, 'x-request-id') ?? randomUUID();
-  const ctx: RunContext = { runId };
+  const ctx: RunContext & { orgId?: string; userId?: string } = { runId };
 
-  const orgId = options?.orgId?.(request as Record<string, unknown>) ??
-    readHeader(headers, 'x-org-id');
+  const orgId = options?.orgId?.(request) ?? readHeader(headers, 'x-org-id');
   if (orgId) {
-    (ctx as RunContext & { orgId: string }).orgId = orgId;
+    ctx.orgId = orgId;
   }
 
-  const userId = options?.userId?.(request as Record<string, unknown>) ??
-    readHeader(headers, 'x-user-id');
+  const userId = options?.userId?.(request) ?? readHeader(headers, 'x-user-id');
   if (userId) {
-    (ctx as RunContext & { userId: string }).userId = userId;
+    ctx.userId = userId;
   }
 
   return ctx;

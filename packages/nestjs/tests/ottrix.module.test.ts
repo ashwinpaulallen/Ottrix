@@ -27,7 +27,6 @@ import {
   agentToken,
   OTTRIX_INJECTION_GUARD_OPTIONS,
   OTTRIX_PROVIDER_REGISTRY,
-  OTTRIX_TOOL_REGISTRY,
 } from '../src/tokens.js';
 import { InjectionGuard } from '../src/guards/injection.guard.js';
 import { TelemetryInterceptor } from '../src/interceptors/telemetry.interceptor.js';
