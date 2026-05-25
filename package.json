@@ -22,29 +22,33 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "npm@10.9.4",
+  "packageManager": "npm@10.9.8",
   "workspaces": [
     "packages/*",
     "examples/http-agents/*"
   ],
   "overrides": {
-    "@ai-sdk/provider": "3.0.10"
+    "@ai-sdk/provider": "3.0.10",
+    "postcss": "8.5.15",
+    "next": {
+      "postcss": "8.5.15"
+    }
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@types/node": "25.9.0",
+    "@types/node": "25.9.1",
     "eslint": "10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "jiti": "2.7.0",
     "prettier": "3.8.3",
     "turbo": "^2.9.14",
-    "typedoc": "^0.28.0",
+    "typedoc": "^0.28.19",
     "typescript": "6.0.3",
     "typescript-eslint": "8.59.4"
   },
   "dependencies": {
     "@langchain/core": "^1.1.48",
     "@mastra/core": "^1.36.0",
-    "zod": "^3.25.76"
+    "zod": "4.4.3"
   }
 }

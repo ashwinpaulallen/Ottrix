@@ -35,13 +35,13 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@langchain/core": "1.1.48",
-    "@types/node": "25.9.0",
+    "@langchain/core": "^1.1.48",
+    "@types/node": "25.9.1",
     "ottrix": "*",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.6",
-    "zod": "3.25.76"
+    "vitest": "4.1.7",
+    "zod": "4.4.3"
   },
   "repository": {
     "type": "git",

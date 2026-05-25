@@ -44,12 +44,12 @@
     "@ai-sdk/provider": "3.0.10",
     "@mastra/core": "^1.36.0",
     "@ottrix/vercel-ai": "*",
-    "@types/node": "25.9.0",
+    "@types/node": "25.9.1",
     "ottrix": "*",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.6",
-    "zod": "3.25.76"
+    "vitest": "4.1.7",
+    "zod": "4.4.3"
   },
   "repository": {
     "type": "git",
