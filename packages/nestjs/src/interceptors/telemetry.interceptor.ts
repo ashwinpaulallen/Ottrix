@@ -30,7 +30,7 @@ export class TelemetryInterceptor implements NestInterceptor {
       from(
         (async () => {
           try {
-            const result = await lastValueFrom(next.handle());
+            const result: unknown = await lastValueFrom(next.handle());
             span.setStatus('ok');
             return result;
           } catch (error) {

@@ -28,3 +28,8 @@ export function agentToken(name: string): string {
 export function providerToken(name: string): string {
   return `OTTRIX_PROVIDER_${name}`;
 }
+
+/** Unique per {@link OttrixModule.forFeature} call — serializes tool registration for that feature. */
+export function featureToolsToken(): symbol {
+  return Symbol('OTTRIX_FEATURE_TOOLS');
+}
