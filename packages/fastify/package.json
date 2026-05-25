@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/fastify",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Fastify plugin for ottrix agents",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "fastify": ">=4.0.0",
+    "fastify": ">=4.28.0 || >=5.0.0",
     "ottrix": ">=2.0.0"
   },
   "dependencies": {

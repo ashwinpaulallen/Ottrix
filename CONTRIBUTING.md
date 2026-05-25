@@ -112,12 +112,25 @@ Consumers implement `BaseProvider` and pass the instance to `new Agent({ provide
 
 ## Publishing (maintainers)
 
+From the repo root, after bumping versions:
+
 ```bash
 npm run prepublish:check
-npm publish
+npm publish -w ottrix --access public
+npm publish -w @ottrix/nestjs --access public
 ```
 
-The `prepublishOnly` script runs lint, typecheck, tests, build, export verification, and `npm pack --dry-run`.
+**Provenance:** Do not set `"provenance": true` in `publishConfig` — npm then requires a supported CI
+provider (GitHub Actions OIDC) and local `npm publish` fails with
+`Automatic provenance generation not supported for provider: null`.
+
+For npm provenance badges, publish from GitHub Actions instead:
+
+```bash
+npm publish -w ottrix --access public --provenance
+```
+
+Pass `--provenance=false` only if an older `publishConfig` still enables it locally.
 
 ## Questions
 

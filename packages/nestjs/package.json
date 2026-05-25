@@ -47,8 +47,7 @@
     "directory": "packages/nestjs"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "peerDependencies": {
     "@nestjs/common": ">=10.0.0",
@@ -73,12 +72,12 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@nestjs/common": "^11.1.0",
-    "@nestjs/core": "^11.1.0",
-    "@nestjs/platform-express": "^11.1.0",
-    "@nestjs/testing": "^11.1.0",
+    "@nestjs/common": "^11.1.24",
+    "@nestjs/core": "^11.1.24",
+    "@nestjs/platform-express": "^11.1.24",
+    "@nestjs/testing": "^11.1.24",
     "@ottrix/exporter-otel": "*",
-    "@types/node": "25.9.0",
+    "@types/node": "25.9.1",
     "@types/supertest": "^7.2.0",
     "ottrix": "*",
     "reflect-metadata": "^0.2.2",
@@ -86,6 +85,6 @@
     "supertest": "^7.2.2",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.6"
+    "vitest": "4.1.7"
   }
 }

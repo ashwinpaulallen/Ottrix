@@ -268,7 +268,7 @@ Use **`ottrix`** directly in any Node.js HTTP framework, or install a first-part
 | Express | `@ottrix/express` | Implemented — [README](../express/README.md) · [docs](../express/docs/) |
 | Fastify | `@ottrix/fastify` | Implemented — [README](../fastify/README.md) · [docs](../fastify/docs/) |
 | Hono | `@ottrix/hono` | Implemented — [README](../hono/README.md) · [docs](../hono/docs/) |
-| Next.js | `@ottrix/nextjs` | Planned — [docs](../nextjs/docs/) |
+| Next.js | `@ottrix/nextjs` | Published — [README](../nextjs/README.md) |
 
 ---
 

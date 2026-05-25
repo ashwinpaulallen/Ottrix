@@ -1,6 +1,6 @@
 {
   "name": "@ottrix/vercel-ai",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "description": "Bridge ottrix providers into the Vercel AI SDK",
   "license": "MIT",
@@ -36,13 +36,13 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "3.0.10",
-    "@types/node": "25.9.0",
-    "ai": "6.0.191",
+    "@types/node": "25.9.1",
+    "ai": "^6.0.191",
     "ottrix": "*",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.6",
-    "zod": "3.25.76"
+    "vitest": "4.1.7",
+    "zod": "4.4.3"
   },
   "repository": {
     "type": "git",
