@@ -41,7 +41,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@ai-sdk/provider": "1.1.3",
+    "@ai-sdk/provider": "3.0.10",
     "@mastra/core": "^1.36.0",
     "@ottrix/vercel-ai": "*",
     "@types/node": "25.9.0",

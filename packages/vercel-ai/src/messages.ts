@@ -1,52 +1,44 @@
 import type {
-  LanguageModelV1CallOptions,
-  LanguageModelV1FunctionTool,
-  LanguageModelV1Prompt,
+  LanguageModelV2CallOptions,
+  LanguageModelV2FunctionTool,
+  LanguageModelV2Prompt,
+  LanguageModelV2ToolResultOutput,
 } from '@ai-sdk/provider';
 import type { ChatMessage, ContentBlock, JSONSchema, ToolDefinition } from 'ottrix';
 
 /** Convert a Vercel AI SDK prompt to ottrix {@link ChatMessage} list. */
-export function vercelPromptToOttrixMessages(prompt: LanguageModelV1Prompt): ChatMessage[] {
+export function vercelPromptToOttrixMessages(prompt: LanguageModelV2Prompt): ChatMessage[] {
   return prompt.map(convertMessage);
 }
 
 /** Extract ottrix tool definitions from Vercel call options. */
 export function vercelToolsToOttrixDefinitions(
-  options: LanguageModelV1CallOptions,
+  options: LanguageModelV2CallOptions,
 ): ToolDefinition[] | undefined {
-  const mode = options.mode;
-  if (mode.type === 'regular' && mode.tools?.length) {
-    return mode.tools
-      .filter((tool): tool is LanguageModelV1FunctionTool => tool.type === 'function')
-      .map((tool) => ({
-        name: tool.name,
-        description: tool.description ?? '',
-        inputSchema: tool.parameters as JSONSchema,
-      }));
+  if (!options.tools?.length) {
+    return undefined;
   }
-  if (mode.type === 'object-tool') {
-    return [
-      {
-        name: mode.tool.name,
-        description: mode.tool.description ?? '',
-        inputSchema: mode.tool.parameters as JSONSchema,
-      },
-    ];
-  }
-  return undefined;
+
+  return options.tools
+    .filter((tool): tool is LanguageModelV2FunctionTool => tool.type === 'function')
+    .map((tool) => ({
+      name: tool.name,
+      description: tool.description ?? '',
+      inputSchema: tool.inputSchema as JSONSchema,
+    }));
 }
 
 /** Resolve ottrix response format from Vercel call options. */
 export function vercelResponseFormat(
-  options: LanguageModelV1CallOptions,
+  options: LanguageModelV2CallOptions,
 ): 'json' | 'text' | undefined {
-  if (options.mode.type === 'object-json') {
+  if (options.responseFormat?.type === 'json') {
     return 'json';
   }
   return undefined;
 }
 
-function convertMessage(message: LanguageModelV1Prompt[number]): ChatMessage {
+function convertMessage(message: LanguageModelV2Prompt[number]): ChatMessage {
   switch (message.role) {
     case 'system':
       return { role: 'system', content: message.content };
@@ -57,10 +49,7 @@ function convertMessage(message: LanguageModelV1Prompt[number]): ChatMessage {
           if (part.type === 'text') {
             return { type: 'text' as const, text: part.text };
           }
-          if (part.type === 'image') {
-            return imagePartToBlock(part.image, part.mimeType);
-          }
-          return filePartToText(part.data, part.mimeType, part.filename);
+          return filePartToText(part.data, part.mediaType, part.filename);
         }),
       };
     case 'assistant': {
@@ -73,14 +62,18 @@ function convertMessage(message: LanguageModelV1Prompt[number]): ChatMessage {
             type: 'tool_use',
             id: part.toolCallId,
             name: part.toolName,
-            input: normalizeToolArgs(part.args),
+            input: normalizeToolArgs(part.input),
           });
         } else if (part.type === 'reasoning') {
           content.push({ type: 'text', text: part.text });
-        } else if (part.type === 'redacted-reasoning') {
-          content.push({ type: 'text', text: '[redacted]' });
-        } else {
-          content.push({ type: 'text', text: `[unsupported part: ${part.type}]` });
+        } else if (part.type === 'file') {
+          content.push(filePartToText(part.data, part.mediaType, part.filename));
+        } else if (part.type === 'tool-result') {
+          content.push({
+            type: 'tool_result',
+            tool_use_id: part.toolCallId,
+            content: serializeToolResultOutput(part.output),
+          });
         }
       }
       return { role: 'assistant', content };
@@ -91,7 +84,7 @@ function convertMessage(message: LanguageModelV1Prompt[number]): ChatMessage {
         content: message.content.map((part) => ({
           type: 'tool_result' as const,
           tool_use_id: part.toolCallId,
-          content: serializeToolResult(part.result, part.isError),
+          content: serializeToolResultOutput(part.output),
         })),
       };
     default:
@@ -99,31 +92,15 @@ function convertMessage(message: LanguageModelV1Prompt[number]): ChatMessage {
   }
 }
 
-function imagePartToBlock(image: Uint8Array | URL, mimeType?: string): ContentBlock {
-  if (image instanceof URL) {
-    return {
-      type: 'image',
-      source: {
-        type: 'url',
-        media_type: mimeType ?? 'image/jpeg',
-        data: image.toString(),
-      },
-    };
-  }
-  return {
-    type: 'image',
-    source: {
-      type: 'base64',
-      media_type: mimeType ?? 'image/jpeg',
-      data: Buffer.from(image).toString('base64'),
-    },
-  };
-}
-
-function filePartToText(data: string | URL, mimeType: string, filename?: string): ContentBlock {
+function filePartToText(data: Uint8Array | string | URL, mimeType: string, filename?: string): ContentBlock {
   const label = filename ? `${filename} (${mimeType})` : mimeType;
-  const payload = data instanceof URL ? data.toString() : data;
-  return { type: 'text', text: `[file: ${label}] ${payload}` };
+  if (data instanceof URL) {
+    return { type: 'text', text: `[file: ${label}] ${data.toString()}` };
+  }
+  if (typeof data === 'string') {
+    return { type: 'text', text: `[file: ${label}] ${data}` };
+  }
+  return { type: 'text', text: `[file: ${label}] ${Buffer.from(data).toString('base64')}` };
 }
 
 function normalizeToolArgs(args: unknown): Record<string, unknown> {
@@ -143,12 +120,21 @@ function normalizeToolArgs(args: unknown): Record<string, unknown> {
   return {};
 }
 
-function serializeToolResult(result: unknown, isError?: boolean): string {
-  const prefix = isError ? 'Error: ' : '';
-  if (typeof result === 'string') {
-    return `${prefix}${result}`;
+function serializeToolResultOutput(output: LanguageModelV2ToolResultOutput): string {
+  switch (output.type) {
+    case 'text':
+    case 'error-text':
+      return output.value;
+    case 'json':
+    case 'error-json':
+      return JSON.stringify(output.value);
+    case 'content':
+      return output.value
+        .map((part) => (part.type === 'text' ? part.text : `[media:${part.mediaType}]`))
+        .join('');
+    default:
+      return JSON.stringify(output);
   }
-  return `${prefix}${JSON.stringify(result)}`;
 }
 
 /** Extract assistant text from ottrix content blocks. */
@@ -162,13 +148,12 @@ export function ottrixContentToText(content: ContentBlock[]): string {
 /** Extract tool calls from ottrix content blocks. */
 export function ottrixContentToToolCalls(
   content: ContentBlock[],
-): Array<{ toolCallType: 'function'; toolCallId: string; toolName: string; args: string }> {
+): Array<{ toolCallId: string; toolName: string; input: string }> {
   return content
     .filter((block): block is Extract<ContentBlock, { type: 'tool_use' }> => block.type === 'tool_use')
     .map((block) => ({
-      toolCallType: 'function' as const,
       toolCallId: block.id,
       toolName: block.name,
-      args: JSON.stringify(block.input ?? {}),
+      input: JSON.stringify(block.input ?? {}),
     }));
 }

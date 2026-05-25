@@ -141,7 +141,7 @@ describe('OttrixMemoryAdapter', () => {
     const history = new OttrixMemoryAdapter(memory);
 
     await history.addUserMessage('hello');
-    await history.addAIChatMessage('hi there');
+    await history.addAIMessage('hi there');
 
     const messages = await history.getMessages();
     expect(messages).toHaveLength(2);

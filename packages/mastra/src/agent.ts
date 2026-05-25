@@ -1,4 +1,5 @@
 import { Agent as MastraAgent } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import type { FullOutput } from '@mastra/core/stream';
 import type { Agent as OttrixAgent } from 'ottrix';
 
@@ -35,7 +36,7 @@ export function wrapOttrixAgent(ottrixAgent: OttrixAgent): MastraAgent {
     id: name,
     name,
     instructions: `Ottrix agent "${name}"`,
-    model: createOttrixMastraModel(STUB_PROVIDER, { modelId: 'stub' }),
+    model: createOttrixMastraModel(STUB_PROVIDER, { modelId: 'stub' }) as MastraModelConfig,
   });
 
   wrapped.generate = (async (messages: MessageListInput) => {

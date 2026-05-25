@@ -26,6 +26,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "overrides": {
+    "@ai-sdk/provider": "3.0.10"
+  },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "25.9.0",
@@ -39,7 +42,7 @@
     "typescript-eslint": "8.59.4"
   },
   "dependencies": {
-    "@langchain/core": "^0.3.66",
+    "@langchain/core": "^1.1.48",
     "@mastra/core": "^1.36.0",
     "zod": "^3.25.76"
   }

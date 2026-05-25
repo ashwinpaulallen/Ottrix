@@ -17,11 +17,14 @@ export function createOttrixProvider(registry: ProviderRegistry): OttrixProvider
     languageModel(modelId: string) {
       return createOttrixModel(registry, { modelId, providerName: 'ottrix' });
     },
-    textEmbeddingModel(modelId: string) {
-      throw new NoSuchModelError({ modelId, modelType: 'textEmbeddingModel' });
+    embeddingModel(modelId: string) {
+      throw new NoSuchModelError({ modelId, modelType: 'embeddingModel' });
     },
     imageModel(modelId: string) {
       throw new NoSuchModelError({ modelId, modelType: 'imageModel' });
+    },
+    rerankingModel(modelId: string) {
+      throw new NoSuchModelError({ modelId, modelType: 'rerankingModel' });
     },
   };
 

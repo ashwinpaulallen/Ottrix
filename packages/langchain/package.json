@@ -28,14 +28,14 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "@langchain/core": ">=0.3.0",
+    "@langchain/core": ">=1.0.0",
     "ottrix": ">=2.0.0"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "@langchain/core": "0.3.66",
+    "@langchain/core": "1.1.48",
     "@types/node": "25.9.0",
     "ottrix": "*",
     "tsup": "8.5.1",

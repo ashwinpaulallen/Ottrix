@@ -15,16 +15,14 @@ describe('createOttrixMastraModel', () => {
     const model = createOttrixMastraModel(provider, { modelId: 'test-model' });
 
     const result = await model.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Say hi' }] }],
     });
 
     expect(provider.completeCalls).toBe(1);
     expect(provider.lastCompleteParams?.model).toBe('test-model');
-    expect(result.text).toBe('hello mastra');
+    expect(result.content).toEqual([{ type: 'text', text: 'hello mastra' }]);
     expect(result.finishReason).toBe('stop');
-    expect(result.usage).toEqual({ promptTokens: 4, completionTokens: 3 });
+    expect(result.usage).toEqual({ inputTokens: 4, outputTokens: 3, totalTokens: 7 });
   });
 });
 

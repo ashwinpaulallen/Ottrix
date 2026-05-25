@@ -1,17 +1,16 @@
 import type { JSONSchema7 } from '@ai-sdk/provider';
-import type { CoreTool } from 'ai';
-import { jsonSchema } from 'ai';
+import { jsonSchema, tool, type Tool } from 'ai';
 import { BaseTool, FunctionTool } from 'ottrix';
 import type { JSONSchema } from 'ottrix';
 
-/** Convert ottrix tools to Vercel AI SDK {@link CoreTool} definitions. */
-export function ottrixToolsToVercel(tools: BaseTool[]): Record<string, CoreTool> {
-  const result: Record<string, CoreTool> = {};
+/** Convert ottrix tools to Vercel AI SDK tool definitions. */
+export function ottrixToolsToVercel(tools: BaseTool[]): Record<string, Tool<any, any>> {
+  const result: Record<string, Tool<any, any>> = {};
 
   for (const ottrixTool of tools) {
-    result[ottrixTool.name] = {
+    result[ottrixTool.name] = tool({
       description: ottrixTool.description,
-      parameters: jsonSchema(toJsonSchema7(ottrixTool.inputSchema)),
+      inputSchema: jsonSchema(toJsonSchema7(ottrixTool.inputSchema)),
       execute: async (args: Record<string, unknown>) => {
         const toolResult = await ottrixTool.execute(args);
         if (!toolResult.success) {
@@ -19,25 +18,25 @@ export function ottrixToolsToVercel(tools: BaseTool[]): Record<string, CoreTool>
         }
         return toolResult.output;
       },
-    };
+    });
   }
 
   return result;
 }
 
 /** Convert Vercel AI SDK tools into ottrix {@link BaseTool} instances. */
-export function vercelToolsToOttrix(tools: Record<string, CoreTool>): BaseTool[] {
-  return Object.entries(tools).map(([name, tool]) => {
-    const schema = extractJsonSchema(tool);
+export function vercelToolsToOttrix(tools: Record<string, Tool<any, any>>): BaseTool[] {
+  return Object.entries(tools).map(([name, ottrixTool]) => {
+    const schema = extractJsonSchema(ottrixTool);
     return new FunctionTool({
       name,
-      description: tool.description ?? name,
+      description: ottrixTool.description ?? name,
       inputSchema: schema,
       execute: async (input: Record<string, unknown>) => {
-        if (!tool.execute) {
+        if (!ottrixTool.execute) {
           throw new Error(`Tool "${name}" has no execute handler`);
         }
-        return tool.execute(input, {
+        return ottrixTool.execute(input, {
           toolCallId: `${name}-call`,
           messages: [],
         });
@@ -50,10 +49,10 @@ function toJsonSchema7(schema: JSONSchema): JSONSchema7 {
   return schema as JSONSchema7;
 }
 
-function extractJsonSchema(tool: CoreTool): JSONSchema {
-  const parameters = tool.parameters as { jsonSchema?: JSONSchema7 };
-  if (parameters && typeof parameters === 'object' && 'jsonSchema' in parameters && parameters.jsonSchema) {
-    return parameters.jsonSchema as JSONSchema;
+function extractJsonSchema(ottrixTool: Tool<any, any>): JSONSchema {
+  const inputSchema = ottrixTool.inputSchema as { jsonSchema?: JSONSchema7 };
+  if (inputSchema && typeof inputSchema === 'object' && inputSchema.jsonSchema) {
+    return inputSchema.jsonSchema as JSONSchema;
   }
   return { type: 'object', properties: {} };
 }

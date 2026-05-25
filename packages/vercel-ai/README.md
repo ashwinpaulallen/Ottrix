@@ -51,10 +51,10 @@ const ottrixTools = vercelToolsToOttrix(aiToolSet);
 
 | Export | Description |
 |--------|-------------|
-| `createOttrixModel` | `LanguageModelV1` adapter for a single ottrix provider |
+| `createOttrixModel` | `LanguageModelV2` adapter for a single ottrix provider |
 | `createOttrixProvider` | Callable Vercel `Provider` backed by `ProviderRegistry` |
-| `ottrixToolsToVercel` | `BaseTool[]` → Vercel `CoreTool` map |
-| `vercelToolsToOttrix` | Vercel `CoreTool` map → `BaseTool[]` |
+| `ottrixToolsToVercel` | `BaseTool[]` → Vercel `Tool` map |
+| `vercelToolsToOttrix` | Vercel `Tool` map → `BaseTool[]` |
 
 ## Related packages
 

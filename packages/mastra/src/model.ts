@@ -1,7 +1,12 @@
-import type { LanguageModelV1, LanguageModelV1CallOptions } from '@ai-sdk/provider';
+import type {
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2Content,
+} from '@ai-sdk/provider';
 import type { ChatMessage, CompletionProvider, ContentBlock } from 'ottrix';
+
 /** Mastra-compatible language model backed by an ottrix provider. */
-export type MastraModel = LanguageModelV1;
+export type MastraModel = LanguageModelV2;
 
 /** Options for {@link createOttrixMastraModel}. */
 export interface CreateOttrixMastraModelOptions {
@@ -12,9 +17,9 @@ export interface CreateOttrixMastraModelOptions {
 type CreateOttrixModel = (
   provider: CompletionProvider,
   options?: { modelId?: string; providerName?: string },
-) => LanguageModelV1;
+) => LanguageModelV2;
 
-/** Wrap an ottrix provider as a Mastra language model (Vercel AI SDK v1). */
+/** Wrap an ottrix provider as a Mastra language model (Vercel AI SDK v2). */
 export function createOttrixMastraModel(
   provider: CompletionProvider,
   options: CreateOttrixMastraModelOptions = {},
@@ -40,35 +45,46 @@ function loadVercelAiModelFactory(): CreateOttrixModel | undefined {
 function createDirectOttrixModel(
   provider: CompletionProvider,
   options: CreateOttrixMastraModelOptions,
-): LanguageModelV1 {
+): LanguageModelV2 {
   const modelId = options.modelId ?? 'default';
 
   return {
-    specificationVersion: 'v1',
+    specificationVersion: 'v2',
     provider: 'ottrix',
     modelId,
-    defaultObjectGenerationMode: 'json',
+    supportedUrls: {},
 
     async doGenerate(callOptions) {
       const params = {
         messages: promptToMessages(callOptions),
         model: modelId,
         temperature: callOptions.temperature,
-        maxTokens: callOptions.maxTokens,
+        maxTokens: callOptions.maxOutputTokens,
         stopSequences: callOptions.stopSequences,
       };
       const result = await provider.complete(params);
-      const text = contentToText(result.content);
+      const content = buildContent(result.content);
 
       return {
-        text: text || undefined,
+        content,
         finishReason: mapStopReason(result.stopReason),
         usage: {
-          promptTokens: result.usage.inputTokens,
-          completionTokens: result.usage.outputTokens,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          totalTokens: result.usage.totalTokens,
         },
-        rawCall: { rawPrompt: params.messages, rawSettings: { model: modelId } },
-        response: { modelId: result.model },
+        warnings: [],
+        response: {
+          modelId: result.model,
+        },
+        request: {
+          body: {
+            model: modelId,
+            temperature: params.temperature,
+            maxTokens: params.maxTokens,
+            stopSequences: params.stopSequences,
+          },
+        },
       };
     },
 
@@ -78,7 +94,7 @@ function createDirectOttrixModel(
   };
 }
 
-function promptToMessages(options: LanguageModelV1CallOptions): ChatMessage[] {
+function promptToMessages(options: LanguageModelV2CallOptions): ChatMessage[] {
   return options.prompt.map((message) => {
     if (message.role === 'system') {
       return { role: 'system' as const, content: message.content };
@@ -95,7 +111,7 @@ function promptToMessages(options: LanguageModelV1CallOptions): ChatMessage[] {
               return {
                 type: 'tool_result' as const,
                 tool_use_id: part.toolCallId,
-                content: part.result,
+                content: JSON.stringify(part.output),
               };
             }
             return { type: 'text' as const, text: JSON.stringify(part) };
@@ -103,6 +119,11 @@ function promptToMessages(options: LanguageModelV1CallOptions): ChatMessage[] {
 
     return { role: message.role, content } as ChatMessage;
   });
+}
+
+function buildContent(blocks: ContentBlock[]): LanguageModelV2Content[] {
+  const text = contentToText(blocks);
+  return text ? [{ type: 'text', text }] : [];
 }
 
 function contentToText(blocks: ContentBlock[]): string {

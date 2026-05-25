@@ -24,7 +24,7 @@ export class OttrixMemoryAdapter extends BaseChatMessageHistory {
     this.memory.addMessage({ role: 'user', content: message });
   }
 
-  async addAIChatMessage(message: string): Promise<void> {
+  async addAIMessage(message: string): Promise<void> {
     this.memory.addMessage({ role: 'assistant', content: message });
   }
 

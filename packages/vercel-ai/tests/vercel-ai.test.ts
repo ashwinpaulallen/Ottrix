@@ -1,5 +1,5 @@
 import { FunctionTool, ProviderError, ProviderRegistry } from 'ottrix';
-import { jsonSchema } from 'ai';
+import { jsonSchema, tool } from 'ai';
 import { describe, expect, it } from 'vitest';
 
 import { createOttrixModel } from '../src/model.js';
@@ -7,12 +7,19 @@ import { createOttrixProvider } from '../src/registry.js';
 import { ottrixToolsToVercel, vercelToolsToOttrix } from '../src/tools.js';
 import { MockCompletionProvider, textCompletion, toolUseCompletion } from './mock-provider.js';
 
+function textFromContent(content: Array<{ type: string; text?: string }>): string {
+  return content
+    .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+    .map((part) => part.text)
+    .join('');
+}
+
 describe('createOttrixModel', () => {
-  it('returns a valid LanguageModelV1', () => {
+  it('returns a valid LanguageModelV2', () => {
     const provider = new MockCompletionProvider();
     const model = createOttrixModel(provider, { modelId: 'test-model' });
 
-    expect(model.specificationVersion).toBe('v1');
+    expect(model.specificationVersion).toBe('v2');
     expect(model.provider).toBe('ottrix');
     expect(model.modelId).toBe('test-model');
     expect(typeof model.doGenerate).toBe('function');
@@ -26,8 +33,6 @@ describe('createOttrixModel', () => {
     const model = createOttrixModel(provider, { modelId: 'mock-model' });
 
     const result = await model.doGenerate({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
       prompt: [
         { role: 'system', content: 'You are helpful.' },
         {
@@ -43,9 +48,9 @@ describe('createOttrixModel', () => {
       { role: 'system', content: 'You are helpful.' },
       { role: 'user', content: [{ type: 'text', text: 'Say hi' }] },
     ]);
-    expect(result.text).toBe('hello world');
+    expect(textFromContent(result.content)).toBe('hello world');
     expect(result.finishReason).toBe('stop');
-    expect(result.usage).toEqual({ promptTokens: 3, completionTokens: 2 });
+    expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 2, totalTokens: 5 });
   });
 
   it('maps tool calls in doGenerate', async () => {
@@ -55,28 +60,24 @@ describe('createOttrixModel', () => {
     const model = createOttrixModel(provider);
 
     const result = await model.doGenerate({
-      inputFormat: 'messages',
-      mode: {
-        type: 'regular',
-        tools: [
-          {
-            type: 'function',
-            name: 'lookup',
-            description: 'Look things up',
-            parameters: { type: 'object', properties: { q: { type: 'string' } } },
-          },
-        ],
-      },
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'weather?' }] }],
+      tools: [
+        {
+          type: 'function',
+          name: 'lookup',
+          description: 'Look things up',
+          inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
+        },
+      ],
     });
 
     expect(result.finishReason).toBe('tool-calls');
-    expect(result.toolCalls).toEqual([
+    expect(result.content).toEqual([
       {
-        toolCallType: 'function',
+        type: 'tool-call',
         toolCallId: 'call_1',
         toolName: 'lookup',
-        args: JSON.stringify({ q: 'weather' }),
+        input: JSON.stringify({ q: 'weather' }),
       },
     ]);
   });
@@ -88,14 +89,12 @@ describe('createOttrixModel', () => {
     const model = createOttrixModel(provider);
 
     const { stream } = await model.doStream({
-      inputFormat: 'messages',
-      mode: { type: 'regular' },
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'go' }] }],
     });
 
     expect(provider.streamCalls).toBe(1);
 
-    const parts: Array<{ type: string }> = [];
+    const parts: Array<{ type: string; delta?: string }> = [];
     const reader = stream.getReader();
     while (true) {
       const { done, value } = await reader.read();
@@ -106,9 +105,9 @@ describe('createOttrixModel', () => {
     expect(parts.some((part) => part.type === 'text-delta')).toBe(true);
     expect(parts.some((part) => part.type === 'finish')).toBe(true);
     const textParts = parts.filter(
-      (part): part is { type: 'text-delta'; textDelta: string } => part.type === 'text-delta',
+      (part): part is { type: 'text-delta'; delta: string } => part.type === 'text-delta',
     );
-    expect(textParts.map((part) => part.textDelta).join('')).toBe('streamed');
+    expect(textParts.map((part) => part.delta).join('')).toBe('streamed');
   });
 });
 
@@ -130,12 +129,10 @@ describe('createOttrixProvider', () => {
     const ottrix = createOttrixProvider(registry);
     const model = ottrix('backup-model');
     const result = await model.doGenerate({
-      inputFormat: 'prompt',
-      mode: { type: 'regular' },
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
     });
 
-    expect(result.text).toBe('from backup');
+    expect(textFromContent(result.content)).toBe('from backup');
     expect(backup.completeCalls).toBe(1);
   });
 });
@@ -157,22 +154,22 @@ describe('tool conversion', () => {
     expect(vercelTools.echo).toBeDefined();
     expect(vercelTools.echo.description).toBe('Echo input');
 
-    const vercelResult = await vercelTools.echo.execute?.({ message: 'hi' }, {
-      toolCallId: '1',
-      messages: [],
-    });
+    const vercelResult = await vercelTools.echo.execute?.(
+      { message: 'hi' },
+      { toolCallId: '1', messages: [] },
+    );
     expect(vercelResult).toEqual({ echoed: 'hi' });
 
     const ottrixTools = vercelToolsToOttrix({
-      echo: {
+      echo: tool({
         description: 'Echo input',
-        parameters: jsonSchema({
+        inputSchema: jsonSchema({
           type: 'object',
           properties: { message: { type: 'string' } },
           required: ['message'],
         }),
         execute: async (args: { message: string }) => ({ echoed: args.message }),
-      },
+      }),
     });
 
     expect(ottrixTools).toHaveLength(1);

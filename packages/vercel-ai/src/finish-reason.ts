@@ -1,7 +1,7 @@
-import type { LanguageModelV1FinishReason } from '@ai-sdk/provider';
+import type { LanguageModelV2FinishReason } from '@ai-sdk/provider';
 
 /** Map ottrix stop reasons to Vercel AI SDK finish reasons. */
-export function mapStopReasonToFinishReason(stopReason: string): LanguageModelV1FinishReason {
+export function mapStopReasonToFinishReason(stopReason: string): LanguageModelV2FinishReason {
   switch (stopReason) {
     case 'end_turn':
     case 'stop':
