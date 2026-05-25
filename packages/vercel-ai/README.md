@@ -1,57 +1,65 @@
 # @ottrix/vercel-ai
 
-> **Status:** Planned — not yet published on npm.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-Adapter between Ottrix agents and the [Vercel AI SDK](https://sdk.vercel.ai/) — `streamText`-compatible streams, tool-call bridging, and UI message helpers.
+Bridge ottrix LLM providers into the [Vercel AI SDK](https://sdk.vercel.ai/) — use ottrix fallback chains, circuit breakers, and cost tracking with `generateText()`, `streamText()`, and UI hooks.
 
----
-
-## Planned features
-
-| Feature | Description |
-|---------|-------------|
-| `toVercelStream(agent, input)` | Convert `Agent.stream()` to Vercel AI SDK stream format |
-| `ottrixProvider()` | Expose Ottrix `ProviderRegistry` as a Vercel AI custom provider |
-| Tool bridge | Map Ottrix `ToolRegistry` tools to Vercel AI tool definitions |
-| React hooks helpers | Optional utilities for `useChat` with Ottrix-backed routes |
-
-**Peer dependencies (planned):** `ottrix` ≥2.0.0, `ai` (Vercel AI SDK) ≥3.
-
----
-
-## Use Ottrix with Vercel AI SDK today
-
-Run Ottrix on the server and adapt events manually until this package ships:
+## Install
 
 ```bash
-npm install ottrix ai
+npm install @ottrix/vercel-ai ottrix ai
 ```
 
-API route (`app/api/chat/route.ts`):
+## Usage
 
-```ts
-import { createAgent } from 'ottrix';
+```typescript
+import { generateText } from 'ai';
+import { ProviderRegistry } from 'ottrix';
+import { createOttrixProvider } from '@ottrix/vercel-ai';
 
-const agent = createAgent({
-  provider: 'anthropic',
-  apiKey: process.env.ANTHROPIC_API_KEY!,
+const registry = new ProviderRegistry();
+// registry.register('primary', primaryProvider);
+// registry.setFallbackChain([{ provider: 'primary' }, { provider: 'backup' }]);
+
+const ottrix = createOttrixProvider(registry);
+
+const { text } = await generateText({
+  model: ottrix('claude-sonnet-4-20250514'),
+  prompt: 'Hello!',
 });
-
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-  const lastUser = [...messages].reverse().find((m: { role: string }) => m.role === 'user');
-  const input = lastUser?.content ?? '';
-
-  const { response } = await agent.run(input);
-  return Response.json({ role: 'assistant', content: response });
-}
 ```
 
-For native Ottrix streaming without the Vercel AI SDK, use `agent.stream()` directly (see [nextjs adapter](../nextjs/README.md) patterns).
+### Direct model adapter
 
----
+```typescript
+import { createOttrixModel } from '@ottrix/vercel-ai';
 
-## Links
+const model = createOttrixModel(myProvider, { modelId: 'gpt-4o' });
+```
 
-- [ottrix core package](../core/README.md)
-- [Vercel AI SDK docs](https://sdk.vercel.ai/docs)
+### Tool conversion
+
+```typescript
+import { ottrixToolsToVercel, vercelToolsToOttrix } from '@ottrix/vercel-ai';
+
+const vercelTools = ottrixToolsToVercel(registry.listTools());
+const ottrixTools = vercelToolsToOttrix(aiToolSet);
+```
+
+## Exports
+
+| Export | Description |
+|--------|-------------|
+| `createOttrixModel` | `LanguageModelV1` adapter for a single ottrix provider |
+| `createOttrixProvider` | Callable Vercel `Provider` backed by `ProviderRegistry` |
+| `ottrixToolsToVercel` | `BaseTool[]` → Vercel `CoreTool` map |
+| `vercelToolsToOttrix` | Vercel `CoreTool` map → `BaseTool[]` |
+
+## Related packages
+
+| Package | Role |
+|---------|------|
+| **`ottrix`** | Providers, `ProviderRegistry`, `BaseTool` |
+| **`@ottrix/mastra`** | Optional — delegates model layer to this package |
+| **`@ottrix/langchain`** | Alternative LangChain.js bridge |

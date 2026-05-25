@@ -84,6 +84,7 @@ Consumers implement `BaseProvider` and pass the instance to `new Agent({ provide
 ## Documentation
 
 - Update `README.md` for user-facing API or env changes
+- Update implementation guides in `packages/*/docs/` when behavior changes (core modules in `packages/core/docs/`)
 - Add an entry to `CHANGELOG.md` under `[Unreleased]` (or the target version)
 - Run `npm run docs` to regenerate API docs (`docs/api/` — not published to npm)
 

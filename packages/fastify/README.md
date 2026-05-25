@@ -1,55 +1,55 @@
 # @ottrix/fastify
 
-> **Status:** Planned — not yet published on npm.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-Fastify plugin for Ottrix agents — hooks for run context and telemetry, JSON-schema-friendly route helpers, and SSE streaming.
+Thin Fastify adapter for Ottrix — plugin, agent routes, hooks, and error mapping. All agent logic lives in **`ottrix`** core.
 
----
+Documentation: [docs/README.md](./docs/README.md)
 
-## Planned features
-
-| Feature | Description |
-|---------|-------------|
-| `fastifyOttrix` plugin | Register Ottrix on a Fastify instance with shared agent config |
-| `createChatRoute(agent)` | Typed `POST /chat` handler with guardrails |
-| `onRequest` hook | Establish `RunContext` from headers |
-| `streamReply(agent, input)` | SSE helper using Fastify reply API |
-
-**Peer dependencies (planned):** `ottrix` ≥2.0.0, `fastify` ≥4.
+**Peer dependencies:** `ottrix` ≥2.0.0, `fastify` ≥4.0.0
 
 ---
 
-## Use Ottrix with Fastify today
-
-```bash
-npm install ottrix fastify
-```
+## Quick start
 
 ```ts
 import Fastify from 'fastify';
-import { randomUUID } from 'node:crypto';
-import { createAgent, runWith } from 'ottrix';
+import { ottrixPlugin, agentRoutes } from '@ottrix/fastify';
 
-const fastify = Fastify();
-const agent = createAgent({
-  provider: 'anthropic',
-  apiKey: process.env.ANTHROPIC_API_KEY!,
+const app = Fastify();
+
+await app.register(ottrixPlugin, {
+  agents: {
+    assistant: { provider: 'anthropic', systemPrompt: 'You are helpful.' },
+  },
 });
 
-fastify.post<{ Body: { message: string } }>('/chat', async (request, reply) => {
-  const { message } = request.body;
-  const runId = (request.headers['x-run-id'] as string | undefined) ?? randomUUID();
-
-  const result = await runWith({ runId }, () => agent.run(message));
-  return { response: result.response, runId };
+await app.register(agentRoutes, {
+  agent: app.ottrix.agents.get('assistant')!,
+  prefix: '/chat',
 });
 
-await fastify.listen({ port: 3000 });
+await app.listen({ port: 3000 });
 ```
+
+`POST /chat` runs the agent; `GET /chat/stream?message=...` streams SSE events.
+
+---
+
+## Exports
+
+| API | Purpose |
+|-----|---------|
+| `ottrixPlugin` | Providers, agents, RunContext / injection / telemetry hooks |
+| `agentRoutes` | `POST /` + `GET /stream` with schema validation |
+| `mapOttrixError()` | Map Ottrix errors → HTTP status codes |
+| `registerOttrixErrorHandler()` | Standalone error handler registration |
 
 ---
 
 ## Links
 
-- [ottrix core package](../core/README.md)
-- [NestJS adapter](../nestjs/README.md) (published alternative)
+- [Integration docs](./docs/README.md)
+- [ottrix core](../core/README.md)
+- [@ottrix/express](../express/README.md)

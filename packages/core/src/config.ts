@@ -610,7 +610,7 @@ function validateAgenticConfig(
   if (!TELEMETRY_EXPORTERS.has(config.telemetry.exporter)) {
     warnings.push({
       code: 'unknown_exporter',
-      message: `telemetry.exporter "${config.telemetry.exporter}" is not a built-in exporter (console, memory, none, langfuse, braintrust, webhook)`,
+      message: `telemetry.exporter "${config.telemetry.exporter}" is not a built-in exporter (console, memory, none, webhook). Langfuse, Braintrust, and OTel require standalone @ottrix/exporter-* packages — see MIGRATION.md`,
       path: 'telemetry.exporter',
     });
   }

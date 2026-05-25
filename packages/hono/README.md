@@ -1,55 +1,50 @@
 # @ottrix/hono
 
-> **Status:** Planned — not yet published on npm.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-Hono middleware for Ottrix agents — lightweight edge and Node.js handlers with run context, guardrails, and streaming.
+Thin Hono adapter for Ottrix — middleware, agent handlers, and error mapping. Works on Node, Bun, Deno, and edge runtimes. All agent logic lives in **`ottrix`** core.
 
----
+Documentation: [docs/README.md](./docs/README.md)
 
-## Planned features
-
-| Feature | Description |
-|---------|-------------|
-| `ottrixMiddleware()` | Hono middleware for ALS run context and telemetry |
-| `createChatHandler(agent)` | `POST` handler returning JSON or SSE |
-| Edge-compatible exports | Works on Cloudflare Workers and Node with minimal deps |
-
-**Peer dependencies (planned):** `ottrix` ≥2.0.0, `hono` ≥4.
+**Peer dependencies:** `ottrix` ≥2.0.0, `hono` ≥4.0.0
 
 ---
 
-## Use Ottrix with Hono today
-
-```bash
-npm install ottrix hono @hono/node-server
-```
+## Quick start
 
 ```ts
 import { Hono } from 'hono';
-import { serve } from '@hono/node-server';
-import { randomUUID } from 'node:crypto';
-import { createAgent, runWith } from 'ottrix';
+import { createAgent } from 'ottrix';
+import { ottrixContext, ottrixInjection, agentHandler, agentStreamHandler } from '@ottrix/hono';
 
 const app = new Hono();
-const agent = createAgent({
-  provider: 'anthropic',
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+const agent = createAgent({ provider: 'anthropic', systemPrompt: 'You are helpful.' });
 
-app.post('/chat', async (c) => {
-  const { message } = await c.req.json<{ message: string }>();
-  const runId = c.req.header('x-run-id') ?? randomUUID();
+app.use('*', ottrixContext());
+app.post('/chat', ottrixInjection(), agentHandler(agent));
+app.get('/chat/stream', agentStreamHandler(agent));
 
-  const result = await runWith({ runId }, () => agent.run(message));
-  return c.json({ response: result.response, runId });
-});
-
-serve({ fetch: app.fetch, port: 3000 });
+export default app;
 ```
+
+---
+
+## Exports
+
+| API | Purpose |
+|-----|---------|
+| `ottrixContext()` | `runWith()` per request (ALS) |
+| `ottrixInjection()` | Prompt injection scan on JSON bodies |
+| `ottrixTelemetry()` | HTTP spans via `getTelemetry()` |
+| `agentHandler()` | POST handler — `agent.run()` → JSON |
+| `agentStreamHandler()` | GET handler — `agent.stream()` → SSE |
+| `ottrixErrorHandler()` | Map Ottrix errors → HTTP status codes |
 
 ---
 
 ## Links
 
-- [ottrix core package](../core/README.md)
-- [Run context docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/context.md)
+- [Integration docs](./docs/README.md)
+- [ottrix core](../core/README.md)
+- [@ottrix/express](../express/README.md)

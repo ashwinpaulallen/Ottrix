@@ -1,15 +1,18 @@
 # @ottrix/exporter-otel
 
-> **Status:** Not published as a standalone package. OpenTelemetry export ships in **`ottrix`**.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-Use the built-in OTLP/HTTP exporter from the core package — no separate install required.
+Standalone OTLP/HTTP trace exporter for Ottrix — send spans to **Jaeger**, **Grafana Tempo**, **Datadog**, **Honeycomb**, or any OTLP-compatible collector.
+
+**Peer dependency:** `ottrix` ≥2.0.0 · **Zero runtime dependencies** (uses native `fetch`)
 
 ---
 
 ## Install
 
 ```bash
-npm install ottrix
+npm install @ottrix/exporter-otel ottrix
 ```
 
 ---
@@ -18,60 +21,32 @@ npm install ottrix
 
 ```ts
 import { getTelemetry } from 'ottrix';
-import { OtelExporter, createOtelExporter } from 'ottrix/exporters/otel';
+import { OtelExporter, createOtelExporter } from '@ottrix/exporter-otel';
 
-// Preset backends: 'jaeger' | 'tempo' | 'datadog' | 'honeycomb' | 'custom'
 getTelemetry().addExporter(
-  createOtelExporter('jaeger', { serviceName: 'my-agent' }),
+  new OtelExporter({
+    endpoint: 'http://localhost:4318',
+    serviceName: 'my-agent',
+    headers: { Authorization: 'Bearer token' },
+  }),
 );
 
-// Or configure manually
-getTelemetry().addExporter(new OtelExporter({
-  endpoint: 'http://localhost:4318/v1/traces',
-  serviceName: 'my-agent',
-  headers: { Authorization: 'Bearer ...' },
-}));
+// Or use a backend preset:
+getTelemetry().addExporter(createOtelExporter('jaeger', { serviceName: 'my-agent' }));
 ```
 
-### Backend presets
-
-| Backend | Factory call |
-|---------|--------------|
-| Jaeger / local collector | `createOtelExporter('jaeger', { serviceName })` |
-| Grafana Tempo | `createOtelExporter('tempo', { endpoint, serviceName })` |
-| Datadog OTLP | `createOtelExporter('datadog', { apiKey, serviceName })` |
-| Honeycomb | `createOtelExporter('honeycomb', { apiKey, serviceName })` |
-
-### With NestJS
-
-```ts
-OttrixModule.forRoot({
-  telemetry: {
-    exporter: 'otel',
-    otel: {
-      endpoint: 'http://localhost:4318',
-      serviceName: 'my-api',
-    },
-  },
-});
-```
-
-See [`@ottrix/nestjs`](../nestjs/README.md).
+Spans are batched (default 50) and flushed every 5s to `{endpoint}/v1/traces` as OTLP/HTTP JSON, with GenAI semantic conventions and ottrix-specific attributes (`ottrix.run.id`, `ottrix.cost.usd`, etc.).
 
 ---
 
-## Features (in `ottrix`)
+## Also available in core
 
-| Feature | Description |
-|---------|-------------|
-| OTLP/HTTP JSON | Native exporter — no OpenTelemetry SDK dependency |
-| GenAI semantic conventions | Span attributes for LLM calls, tools, and workflows |
-| RunContext grouping | Resource attributes from ALS at export time |
-| Batching and retry | Configurable batch size with exponential backoff |
+Core no longer ships `ottrix/exporters/otel` — see [MIGRATION.md](../../MIGRATION.md).
 
----
+## Related packages
 
-## Links
-
-- [Observability docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/observability.md#otelexporter)
-- [ottrix core package](../core/README.md)
+| Package | Role |
+|---------|------|
+| **`ottrix`** | `getTelemetry()`, GenAI span attributes |
+| **`@ottrix/exporter-langfuse`** | Langfuse export |
+| **`@ottrix/nestjs`** | Auto-wires OTel when configured in `OttrixModule.forRoot` |

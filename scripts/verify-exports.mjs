@@ -27,9 +27,6 @@ const SUBPATHS = [
   './observability',
   './agent',
   './evals',
-  './mcp-server',
-  './exporters/langfuse',
-  './exporters/braintrust',
   './exporters/webhook',
 ];
 

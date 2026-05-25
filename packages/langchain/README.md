@@ -1,57 +1,67 @@
 # @ottrix/langchain
 
-> **Status:** Planned — not yet published on npm.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-LangChain.js interoperability layer for Ottrix — use Ottrix agents as LangChain runnables, bridge tools, and share memory providers.
+Bridge ottrix LLM providers and memory into [LangChain.js](https://js.langchain.com/).
 
----
-
-## Planned features
-
-| Feature | Description |
-|---------|-------------|
-| `OttrixAgentRunnable` | Wrap an Ottrix `Agent` as a LangChain `Runnable` |
-| `toLangChainTools(registry)` | Convert `ToolRegistry` entries to LangChain `StructuredTool` |
-| `fromLangChainTool(tool)` | Import LangChain tools into Ottrix |
-| Provider bridge | Route LangChain model calls through Ottrix `ProviderRegistry` (fallback, circuit breaker) |
-
-**Peer dependencies (planned):** `ottrix` ≥2.0.0, `langchain` ≥0.3.
-
----
-
-## Use Ottrix without LangChain today
-
-Ottrix is a standalone framework — you do not need LangChain.js for agents, tools, or workflows:
+## Install
 
 ```bash
-npm install ottrix
+npm install @ottrix/langchain ottrix @langchain/core
 ```
 
-```ts
-import { createAgent, createTool } from 'ottrix';
-import { z } from 'zod';
+## Chat model
 
-const search = createTool({
-  name: 'search',
-  description: 'Search documents',
-  input: z.object({ query: z.string() }),
-  execute: async ({ query }) => ({ hits: [] }),
+```typescript
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { OttrixChatModel } from '@ottrix/langchain';
+
+const model = new OttrixChatModel({
+  provider: myOttrixProvider,
+  modelId: 'claude-sonnet-4-20250514',
 });
 
-const agent = createAgent({
-  provider: 'anthropic',
-  tools: [search],
-});
-
-const { response } = await agent.run('Find docs about budgets');
+const result = await model.invoke([
+  new SystemMessage('You are helpful.'),
+  new HumanMessage('Hello!'),
+]);
 ```
 
-Multi-agent orchestration is built in — see `SequentialWorkflow`, `SupervisorWorkflow`, and `DAGBuilder` in [orchestration docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/orchestration.md).
+Use with a `ProviderRegistry` for fallback chains and circuit breakers — pass the registry as the `provider` (it implements `CompletionProvider`).
 
----
+## Tools
 
-## Links
+```typescript
+import { ottrixToolsToLangChain, langChainToolsToOttrix } from '@ottrix/langchain';
 
-- [ottrix core package](../core/README.md)
-- [Tools docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/tools.md)
-- [Orchestration docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/orchestration.md)
+const lcTools = ottrixToolsToLangChain(registryTools);
+const bound = model.bindTools(lcTools);
+```
+
+## Memory
+
+```typescript
+import { WorkingMemory } from 'ottrix';
+import { OttrixMemoryAdapter } from '@ottrix/langchain';
+
+const memory = new WorkingMemory();
+const history = new OttrixMemoryAdapter(memory);
+```
+
+## Exports
+
+| Export | Description |
+|--------|-------------|
+| `OttrixChatModel` | `BaseChatModel` adapter with streaming |
+| `ottrixToolsToLangChain` / `langChainToolsToOttrix` | Tool conversion |
+| `OttrixMemoryAdapter` | `WorkingMemory` ↔ LangChain history |
+| Message helpers | `langChainMessagesToOttrix`, `ottrixMessagesToLangChain`, etc. |
+
+## Related packages
+
+| Package | Role |
+|---------|------|
+| **`ottrix`** | Providers, tools, `WorkingMemory` |
+| **`@ottrix/vercel-ai`** | Vercel AI SDK bridge |
+| **`@ottrix/exporter-*`** | Trace export while using LangChain chains |

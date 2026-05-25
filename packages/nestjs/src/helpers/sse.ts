@@ -1,6 +1,6 @@
 import { Observable } from 'rxjs';
-import type { Agent } from 'ottrix/agent';
-import type { AgentEvent } from 'ottrix/types';
+import type { Agent } from 'ottrix';
+import type { AgentEvent } from 'ottrix';
 
 /** NestJS SSE {@link MessageEvent} shape. */
 export interface SseMessageEvent {
@@ -10,8 +10,8 @@ export interface SseMessageEvent {
   retry?: number;
 }
 
-/** Options for {@link createSseHandler}. */
-export interface SseHandlerOptions {
+/** Options for {@link createSseStream}. */
+export interface CreateSseStreamOptions {
   /** Keepalive interval in milliseconds. @defaultValue 15000 */
   keepaliveMs?: number;
   /** Optional abort signal from the HTTP request (client disconnect). */
@@ -19,78 +19,66 @@ export interface SseHandlerOptions {
 }
 
 /**
- * Create an SSE handler compatible with NestJS `@Sse()` decorators.
- *
- * @example
- * ```ts
- * @Sse('stream')
- * stream(@Query('message') message: string, @Req() req: Request) {
- *   return createSseHandler(this.researcher, { signal: req.signal })(message);
- * }
- * ```
+ * Bridge {@link Agent.stream} to NestJS `@Sse()` as an `Observable<MessageEvent>`.
  */
-export function createSseHandler(
+export function createSseStream(
   agent: Agent,
-  options: SseHandlerOptions = {},
-): (input: string, signal?: AbortSignal) => Observable<SseMessageEvent> {
+  message: string,
+  options: CreateSseStreamOptions = {},
+): Observable<SseMessageEvent> {
   const keepaliveMs = options.keepaliveMs ?? 15_000;
 
-  return (input: string, signal?: AbortSignal) =>
-    new Observable<SseMessageEvent>((subscriber) => {
-      const abortController = new AbortController();
-      const combinedSignal = mergeAbortSignals(options.signal, signal, abortController.signal);
-      let closed = false;
-      let clearKeepalive = (): void => {};
+  return new Observable<SseMessageEvent>((subscriber) => {
+    const abortController = new AbortController();
+    const signal = mergeAbortSignals(options.signal, abortController.signal);
+    let closed = false;
 
-      const cleanup = (): void => {
-        if (closed) {
-          return;
-        }
-        closed = true;
-        clearKeepalive();
-        abortController.abort();
-      };
-
-      if (combinedSignal.aborted) {
-        subscriber.complete();
-        return cleanup;
+    const cleanup = (): void => {
+      if (closed) {
+        return;
       }
+      closed = true;
+      clearInterval(keepaliveTimer);
+      abortController.abort();
+    };
 
-      combinedSignal.addEventListener('abort', () => {
-        cleanup();
-        subscriber.complete();
-      });
-
-      const keepaliveTimer = setInterval(() => {
-        subscriber.next({ data: ': keepalive\n\n', type: 'keepalive' });
-      }, keepaliveMs);
-      keepaliveTimer.unref?.();
-      clearKeepalive = (): void => {
-        clearInterval(keepaliveTimer);
-      };
-
-      void (async () => {
-        try {
-          for await (const event of agent.stream(input)) {
-            if (closed || combinedSignal.aborted) {
-              break;
-            }
-            subscriber.next(toMessageEvent(event));
-          }
-          if (!closed) {
-            subscriber.complete();
-          }
-        } catch (error) {
-          if (!closed) {
-            subscriber.error(error);
-          }
-        } finally {
-          cleanup();
-        }
-      })();
-
+    if (signal.aborted) {
+      subscriber.complete();
       return cleanup;
+    }
+
+    signal.addEventListener('abort', () => {
+      cleanup();
+      subscriber.complete();
     });
+
+    const keepaliveTimer = setInterval(() => {
+      subscriber.next({ data: ': keepalive\n\n', type: 'keepalive' });
+    }, keepaliveMs);
+    keepaliveTimer.unref?.();
+
+    void (async () => {
+      try {
+        for await (const event of agent.stream(message)) {
+          if (closed || signal.aborted) {
+            break;
+          }
+          subscriber.next(toMessageEvent(event));
+        }
+        if (!closed) {
+          subscriber.complete();
+        }
+      } catch (error) {
+        if (!closed) {
+          subscriber.error(error);
+        }
+      } finally {
+        cleanup();
+      }
+    })();
+
+    return cleanup;
+  });
 }
 
 function toMessageEvent(event: AgentEvent): SseMessageEvent {

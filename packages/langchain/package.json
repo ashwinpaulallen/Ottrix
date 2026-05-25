@@ -1,10 +1,11 @@
 {
   "name": "@ottrix/langchain",
   "private": true,
-  "version": "0.0.1",
-  "description": "LangChain.js adapter for ottrix",
+  "version": "0.1.0",
+  "description": "LangChain.js bridge for ottrix providers and memory",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,27 +22,26 @@
   ],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
-    "test": "echo 'No tests yet'",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint src/ tests/",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "ottrix": ">=2.0.0",
-    "langchain": ">=0.3.0"
-  },
-  "peerDependenciesMeta": {
-    "langchain": {
-      "optional": true
-    }
+    "@langchain/core": ">=0.3.0",
+    "ottrix": ">=2.0.0"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
+    "@langchain/core": "0.3.66",
+    "@types/node": "25.9.0",
     "ottrix": "*",
     "tsup": "8.5.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.6",
+    "zod": "3.25.76"
   },
   "repository": {
     "type": "git",

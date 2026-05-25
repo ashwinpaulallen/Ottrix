@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { ProviderRegistryService } from '../services/provider-registry.service.js';
-import { ToolRegistryService } from '../services/tool-registry.service.js';
+import { Inject, Injectable } from '@nestjs/common';
+import { BaseProvider, type ProviderRegistry } from 'ottrix';
+import { OTTRIX_PROVIDER_NAMES, OTTRIX_PROVIDER_REGISTRY } from '../tokens.js';
 
 /** Health check result compatible with @nestjs/terminus. */
 export interface OttrixHealthIndicatorResult {
@@ -11,31 +11,26 @@ export interface OttrixHealthIndicatorResult {
 }
 
 /**
- * Ottrix health indicator for provider connectivity, circuit breakers, and MCP servers.
+ * Ottrix health indicator for provider connectivity and circuit breaker state.
  *
  * Compatible with `@nestjs/terminus` when installed as an optional peer dependency.
  */
 @Injectable()
 export class OttrixHealthIndicator {
   constructor(
-    private readonly providerRegistry: ProviderRegistryService,
-    private readonly toolRegistry: ToolRegistryService,
+    @Inject(OTTRIX_PROVIDER_REGISTRY) private readonly providerRegistry: ProviderRegistry,
+    @Inject(OTTRIX_PROVIDER_NAMES) private readonly providerNames: string[],
   ) {}
 
   /** Run all Ottrix health checks. */
   async check(key = 'ottrix'): Promise<OttrixHealthIndicatorResult> {
-    const providers = await this.providerRegistry.pingProviders();
-    const mcp = this.checkMcpConnections();
-
-    const providerHealthy = Object.values(providers).every((entry) => entry.healthy);
-    const mcpHealthy = Object.values(mcp).every((entry) => entry.connected);
-    const isHealthy = providerHealthy && mcpHealthy;
+    const providers = await this.pingProviders();
+    const isHealthy = Object.values(providers).every((entry) => entry.healthy);
 
     return {
       [key]: {
         status: isHealthy ? 'up' : 'down',
         providers,
-        mcp,
       },
     };
   }
@@ -49,21 +44,40 @@ export class OttrixHealthIndicator {
     return result;
   }
 
-  private checkMcpConnections(): Record<string, { connected: boolean; state?: string }> {
-    const registry = this.toolRegistry.getMcpRegistry();
-    const results: Record<string, { connected: boolean; state?: string }> = {};
+  private async pingProviders(): Promise<
+    Record<string, { healthy: boolean; circuitState?: string; detail?: string }>
+  > {
+    const results: Record<string, { healthy: boolean; circuitState?: string; detail?: string }> =
+      {};
 
-    for (const name of registry.serverNames()) {
-      const provider = registry.getProvider(name);
-      if (!provider) {
-        results[name] = { connected: false, state: 'missing' };
-        continue;
+    for (const name of this.providerNames) {
+      try {
+        const provider = this.providerRegistry.get(name);
+        let healthy = this.providerRegistry.isHealthy(name);
+        let detail: string | undefined;
+
+        if ('healthCheck' in provider && typeof provider.healthCheck === 'function') {
+          const status = await (
+            provider as { healthCheck: () => Promise<{ ok?: boolean; status?: string }> }
+          ).healthCheck();
+          healthy = status.ok !== false;
+          detail = status.status;
+          this.providerRegistry.setHealthy(name, healthy);
+        }
+
+        const circuitState =
+          provider instanceof BaseProvider ? provider.getCircuitState() : undefined;
+
+        results[name] = { healthy, circuitState, detail };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        results[name] = { healthy: false, detail: message };
+        try {
+          this.providerRegistry.setHealthy(name, false);
+        } catch {
+          // Provider may have been removed.
+        }
       }
-      const state = provider.getState();
-      results[name] = {
-        connected: state === 'connected',
-        state,
-      };
     }
 
     return results;

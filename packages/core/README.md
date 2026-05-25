@@ -1,13 +1,15 @@
 # ottrix
 
-**TypeScript framework for production LLM agents** — ReAct loop, structured output, tool calling, memory, guardrails, observability, evals, multi-agent workflows, and [MCP](https://modelcontextprotocol.io/) client/server support. Vendor-neutral: Anthropic Claude, OpenAI-compatible APIs, and Ollama via native `fetch` (no vendor SDK required).
+**TypeScript framework for production LLM agents** — the **`ottrix`** npm package is the core of the [Ottrix monorepo](https://github.com/ashwinpaulallen/ottrix). ReAct loop, structured output, tool calling, memory, guardrails, observability, evals, multi-agent workflows, and [MCP](https://modelcontextprotocol.io/) **client** support. Vendor-neutral: Anthropic Claude, OpenAI-compatible APIs, and Ollama via native `fetch` (no vendor SDK required).
+
+**All packages:** [docs/README.md](../../docs/README.md)
 
 [![npm version](https://img.shields.io/npm/v/ottrix.svg)](https://www.npmjs.com/package/ottrix)
 [![Node](https://img.shields.io/node/v/ottrix)](https://www.npmjs.com/package/ottrix)
 
-**Version:** 2.0.0 · **Node:** ≥20 · **License:** MIT
+**Version:** 2.1.0 · **Node:** ≥20 · **License:** MIT
 
-Full project docs: [github.com/ashwinpaulallen/ottrix](https://github.com/ashwinpaulallen/ottrix) · Module guides: [docs/](https://github.com/ashwinpaulallen/ottrix/tree/main/docs)
+Full project docs: [github.com/ashwinpaulallen/ottrix](https://github.com/ashwinpaulallen/ottrix) · **Core module guides:** [docs/README.md](docs/README.md) · Monorepo index: [../../docs/README.md](../../docs/README.md)
 
 ---
 
@@ -23,6 +25,15 @@ npm install ottrix
 npm install zod          # structured output, Zod tools, schema eval scorers
 npm install js-yaml      # full YAML workflow files
 npm install ioredis pg   # Redis/Postgres DAG state stores
+```
+
+**Standalone packages** (install when you need them):
+
+```bash
+npm install @ottrix/exporter-langfuse   # Langfuse trace export
+npm install @ottrix/exporter-braintrust # Braintrust trace export
+npm install @ottrix/exporter-otel       # OpenTelemetry OTLP export
+npm install @ottrix/mcp-server          # MCP server hosting + ottrix-serve CLI
 ```
 
 ```bash
@@ -67,19 +78,22 @@ const answer = await quickAgent('Summarize TypeScript in one sentence.', {
 | `ottrix/agent` | Agent internals | `Agent`, planner, reflector, structured output |
 | `ottrix/providers` | LLM backends | `createAnthropicProvider`, `ProviderRegistry`, `CircuitBreaker` |
 | `ottrix/tools` | Tool calling | `FunctionTool`, `createTool`, `ToolRegistry`, `MCPClient` |
-| `ottrix/mcp-server` | MCP hosting | `serveMCP`, `MCPServer` |
 | `ottrix/memory` | Agent memory | `WorkingMemory`, `SemanticMemory`, `ObservationalMemory` |
 | `ottrix/orchestration` | Multi-agent | `SequentialWorkflow`, `SupervisorWorkflow`, `DAGBuilder` |
 | `ottrix/guardrails` | Safety | `createGuardrails`, `configureBudgets`, `PromptInjectionGuardrail` |
 | `ottrix/observability` | Telemetry | `getTelemetry`, `getLogger`, replay utilities |
 | `ottrix/evals` | Evaluation | `evaluate`, `EvalRunner`, scorers, `EvalReporter` |
-| `ottrix/exporters/otel` | OpenTelemetry | `OtelExporter`, `createOtelExporter` |
-| `ottrix/exporters/langfuse` | Langfuse | `LangfuseExporter` |
-| `ottrix/exporters/braintrust` | Braintrust | `BraintrustExporter` |
 | `ottrix/exporters/webhook` | Webhooks | `WebhookExporter` |
 | `ottrix/types` | Types only | Shared TypeScript contracts |
 
-**CLI:** `npx ottrix-serve --transport stdio` — host tools as an MCP server.
+| Standalone package | Purpose | Key APIs |
+|--------------------|---------|----------|
+| `@ottrix/mcp-server` | MCP hosting | `serveMCP`, `MCPServer`, `ottrix-serve` CLI |
+| `@ottrix/exporter-otel` | OpenTelemetry | `OtelExporter`, `createOtelExporter` |
+| `@ottrix/exporter-langfuse` | Langfuse | `LangfuseExporter` |
+| `@ottrix/exporter-braintrust` | Braintrust | `BraintrustExporter` |
+
+**CLI:** `npx ottrix-serve --transport stdio` — requires `@ottrix/mcp-server`.
 
 ---
 
@@ -152,8 +166,11 @@ await runWith({ runId: 'req-42', orgId: 'acme-corp' }, () =>
 
 ### MCP server
 
+Install `@ottrix/mcp-server` — the MCP **client** (`MCPClient`) remains in core.
+
 ```ts
-import { serveMCP, ToolRegistry } from 'ottrix/mcp-server';
+import { serveMCP } from '@ottrix/mcp-server';
+import { ToolRegistry } from 'ottrix';
 
 const registry = new ToolRegistry();
 registry.register(myTool);
@@ -183,8 +200,8 @@ const dag = new DAGBuilder()
 
 ```ts
 import { getTelemetry } from 'ottrix';
-import { LangfuseExporter } from 'ottrix/exporters/langfuse';
-import { createOtelExporter } from 'ottrix/exporters/otel';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
+import { createOtelExporter } from '@ottrix/exporter-otel';
 
 getTelemetry().setExporter(new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -230,7 +247,7 @@ Environment variables (legacy `AGENT_KIT_*` / `AGENTIC_*` aliases still supporte
 | `OTTRIX_MODEL` | Default model id |
 | `OTTRIX_MAX_STEPS` | Max ReAct iterations (default `10`) |
 | `OTTRIX_CONFIG_PATH` | Path to `.ottrixrc.json` |
-| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `langfuse`, `otel`, `webhook`, etc. |
+| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `webhook`, `memory`, `none` (Langfuse/Braintrust/OTel → standalone packages) |
 
 ```ts
 import { loadConfig, createAgent } from 'ottrix';
@@ -247,11 +264,11 @@ Use **`ottrix`** directly in any Node.js HTTP framework, or install a first-part
 
 | Adapter | Package | Status |
 |---------|---------|--------|
-| NestJS | `@ottrix/nestjs` | Published — [README](../nestjs/README.md) |
-| Express | `@ottrix/express` | Planned |
-| Fastify | `@ottrix/fastify` | Planned |
-| Hono | `@ottrix/hono` | Planned |
-| Next.js | `@ottrix/nextjs` | Planned |
+| NestJS | `@ottrix/nestjs` | Published — [docs](../nestjs/docs/) |
+| Express | `@ottrix/express` | Implemented — [README](../express/README.md) · [docs](../express/docs/) |
+| Fastify | `@ottrix/fastify` | Implemented — [README](../fastify/README.md) · [docs](../fastify/docs/) |
+| Hono | `@ottrix/hono` | Implemented — [README](../hono/README.md) · [docs](../hono/docs/) |
+| Next.js | `@ottrix/nextjs` | Planned — [docs](../nextjs/docs/) |
 
 ---
 
@@ -259,16 +276,19 @@ Use **`ottrix`** directly in any Node.js HTTP framework, or install a first-part
 
 ```ts
 import { OTTRIX_VERSION } from 'ottrix';
-// '2.0.0'
+// '2.1.0'
 ```
 
 ---
 
 ## Links
 
-- [Module documentation](https://github.com/ashwinpaulallen/ottrix/tree/main/docs)
-- [Examples](https://github.com/ashwinpaulallen/ottrix/tree/main/examples)
-- [Changelog](https://github.com/ashwinpaulallen/ottrix/blob/main/CHANGELOG.md)
-- [Migration guide](https://github.com/ashwinpaulallen/ottrix/blob/main/MIGRATION.md)
+- [Core module documentation](docs/README.md)
+- [Monorepo package index](../../docs/README.md)
+- [Root README](../../README.md)
+- [Migration guide](../../MIGRATION.md) — v2.1 exporter & MCP server moves
+- [NestJS adapter](../nestjs/README.md) · [MCP server](../mcp-server/README.md)
+- [Trace exporters](../exporter-otel/README.md) · [Framework bridges](../vercel-ai/README.md)
+- [Examples](../../examples/) · [Changelog](../../CHANGELOG.md)
 
 [MIT](https://github.com/ashwinpaulallen/ottrix/blob/main/LICENSE) © [ashwinpaulallen](https://github.com/ashwinpaulallen)

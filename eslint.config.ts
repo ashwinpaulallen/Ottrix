@@ -14,7 +14,10 @@ const stubPackageNames = [
   'nextjs',
   'vercel-ai',
   'exporter-langfuse',
+  'exporter-braintrust',
   'exporter-otel',
+  'mcp-server',
+  'mastra',
 ] as const;
 
 const stubSrcFiles = stubPackageNames.map((name) => `packages/${name}/src/**/*.ts`);

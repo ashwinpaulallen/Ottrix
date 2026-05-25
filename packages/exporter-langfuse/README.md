@@ -1,22 +1,18 @@
 # @ottrix/exporter-langfuse
 
-> **Status:** Not published as a standalone package. Langfuse export ships in **`ottrix`**.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-Use the built-in Langfuse trace exporter from the core package.
+Standalone Langfuse trace exporter for Ottrix — batch ingestion via the Langfuse public API.
+
+**Peer dependency:** `ottrix` ≥2.0.0 · **Zero runtime dependencies**
 
 ---
 
 ## Install
 
 ```bash
-npm install ottrix
-```
-
-Set credentials:
-
-```bash
-export LANGFUSE_PUBLIC_KEY=pk-lf-...
-export LANGFUSE_SECRET_KEY=sk-lf-...
+npm install @ottrix/exporter-langfuse ottrix
 ```
 
 ---
@@ -24,73 +20,37 @@ export LANGFUSE_SECRET_KEY=sk-lf-...
 ## Usage
 
 ```ts
-import { getTelemetry, LangfuseExporter } from 'ottrix';
-// or: import { LangfuseExporter } from 'ottrix/exporters/langfuse';
+import { getTelemetry } from 'ottrix';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
 
-getTelemetry().setExporter(
+getTelemetry().addExporter(
   new LangfuseExporter({
     publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
     secretKey: process.env.LANGFUSE_SECRET_KEY!,
-    baseUrl: 'https://cloud.langfuse.com', // optional
+    baseUrl: 'https://cloud.langfuse.com',
+    flushInterval: 5000,
   }),
 );
 ```
 
-### Via configuration file
+Traces are translated to Langfuse ingestion events:
 
-`.ottrixrc.json`:
+- Root trace → `trace-create` with input/output
+- LLM spans → `generation-create` (model, tokens, TTFT, cost metadata)
+- Tool/other spans → `span-create`
 
-```json
-{
-  "telemetry": {
-    "enabled": true,
-    "exporter": "langfuse",
-    "langfuse": {
-      "publicKey": "${LANGFUSE_PUBLIC_KEY}",
-      "secretKey": "${LANGFUSE_SECRET_KEY}"
-    }
-  }
-}
-```
-
-```ts
-import { loadConfig, createAgent } from 'ottrix';
-
-const { config } = loadConfig();
-const agent = createAgent({ provider: 'anthropic' });
-// Telemetry exporter is applied from config when enabled
-```
-
-### With NestJS
-
-```ts
-OttrixModule.forRoot({
-  telemetry: {
-    exporter: 'langfuse',
-    langfuse: {
-      publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-      secretKey: process.env.LANGFUSE_SECRET_KEY!,
-    },
-  },
-});
-```
+POST `{baseUrl}/api/public/ingestion` with Basic auth (`publicKey:secretKey`).
 
 ---
 
-## Features (in `ottrix`)
+## Also available in core config
 
-| Feature | Description |
-|---------|-------------|
-| Trace export | Agent runs, tool calls, and workflow steps as Langfuse traces |
-| Multi-exporter | Combine with OTEL via `getTelemetry().addExporter()` |
-| Env-based config | `OTTRIX_TELEMETRY_EXPORTER=langfuse` + `LANGFUSE_*` keys |
+For `telemetry.exporter: 'langfuse'`, install this package and register `LangfuseExporter` manually — core no longer bundles the Langfuse exporter. See [MIGRATION.md](../../MIGRATION.md).
 
-Other trace exporters in **`ottrix`:** Braintrust (`ottrix/exporters/braintrust`), webhook (`ottrix/exporters/webhook`), OpenTelemetry (`ottrix/exporters/otel`).
+## Related packages
 
----
-
-## Links
-
-- [Observability docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/observability.md)
-- [Configuration docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/configuration.md)
-- [ottrix core package](../core/README.md)
+| Package | Role |
+|---------|------|
+| **`ottrix`** | `getTelemetry()`, trace types, agent instrumentation |
+| **`@ottrix/exporter-otel`** | OpenTelemetry OTLP export |
+| **`@ottrix/exporter-braintrust`** | Braintrust project logs |

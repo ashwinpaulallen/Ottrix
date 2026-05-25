@@ -1,5 +1,5 @@
 /** Matches `package.json` version — update both when releasing. */
-export const OTTRIX_VERSION = '2.0.0' as const;
+export const OTTRIX_VERSION = '2.1.0' as const;
 
 /** @deprecated Use {@link OTTRIX_VERSION}. */
 export const AGENT_KIT_VERSION = OTTRIX_VERSION;
@@ -197,9 +197,6 @@ export {
   resetIdempotencyStore,
   InMemoryIdempotencyStore,
   TOOL_IDEMPOTENCY_IN_PROGRESS_NAME,
-  MCPServer,
-  serveMCP,
-  ASK_AGENT_TOOL_NAME,
 } from './tools/index.js';
 
 export type {
@@ -290,6 +287,10 @@ export {
 } from './guardrails/index.js';
 
 // --- Observability ---
+// Langfuse exporter: npm install @ottrix/exporter-langfuse
+// Braintrust exporter: npm install @ottrix/exporter-braintrust
+// OTel exporter: npm install @ottrix/exporter-otel
+// MCP server: npm install @ottrix/mcp-server
 export {
   Logger,
   Telemetry,
@@ -302,8 +303,6 @@ export {
   getGlobalLogLevel,
   ConsoleExporter,
   InMemoryExporter,
-  LangfuseExporter,
-  BraintrustExporter,
   WebhookExporter,
   TraceConsoleExporter,
   InMemoryTraceExporter,
@@ -311,8 +310,12 @@ export {
   buildTraceData,
   createTraceExporterFromConfig,
   configureTraceExportFromConfig,
+  shutdownObservability,
+  resetGlobalObservability,
   type TraceExporter,
   type TraceData,
+  type ExportSpanData as SpanData,
+  type WebhookExporterOptions,
 } from './observability/index.js';
 
 // --- Evals ---

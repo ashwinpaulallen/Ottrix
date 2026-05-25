@@ -1,3 +1,3 @@
-// @ottrix/vercel-ai — coming soon
-// See https://github.com/ashwinpaulallen/Ottrix for roadmap
-export {};
+export { createOttrixModel, type CreateOttrixModelOptions } from './model.js';
+export { createOttrixProvider, type OttrixProvider } from './registry.js';
+export { ottrixToolsToVercel, vercelToolsToOttrix } from './tools.js';

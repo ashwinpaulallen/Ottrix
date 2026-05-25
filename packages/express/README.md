@@ -1,91 +1,60 @@
 # @ottrix/express
 
-> **Status:** Planned — not yet published on npm.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
 
-Express middleware and router helpers for Ottrix agents — request-scoped `RunContext`, prompt-injection guards on JSON bodies, streaming responses, and a ready-made `/chat` router.
+Thin Express adapter for Ottrix — middleware, router factory, SSE streaming, and error mapping. All agent logic lives in **`ottrix`** core.
 
----
+Documentation: [docs/README.md](./docs/README.md)
 
-## Planned features
-
-| Feature | Description |
-|---------|-------------|
-| `ottrixExpress()` | Attach Ottrix telemetry, run context, and guardrails to an Express app |
-| `createChatRouter(agent)` | Drop-in router with `POST /chat` and optional SSE streaming |
-| `injectionMiddleware()` | Prompt injection scan for `req.body` and `messages[]` arrays |
-| `runContextMiddleware()` | Propagate `x-run-id`, `x-request-id`, `x-org-id` into ALS |
-
-**Peer dependencies (planned):** `ottrix` ≥2.0.0, `express` ≥4.
+**Peer dependencies:** `ottrix` ≥2.0.0, `express` ≥4.18.0
 
 ---
 
-## Use Ottrix with Express today
-
-Install the core package and wire a route manually:
-
-```bash
-npm install ottrix express
-```
+## Quick start
 
 ```ts
 import express from 'express';
-import { randomUUID } from 'node:crypto';
-import { createAgent, runWith } from 'ottrix';
+import { createAgent } from 'ottrix';
+import {
+  createAgentRouter,
+  runContextMiddleware,
+  injectionMiddleware,
+  ottrixErrorHandler,
+} from '@ottrix/express';
 
 const app = express();
 app.use(express.json());
 
-const agent = createAgent({
-  provider: 'anthropic',
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-  systemPrompt: 'You are a helpful assistant.',
-});
+const agent = createAgent({ provider: 'anthropic', systemPrompt: 'You are helpful.' });
 
-app.post('/chat', async (req, res) => {
-  const { message } = req.body as { message?: string };
-  if (!message) {
-    res.status(400).json({ error: 'message required' });
-    return;
-  }
-
-  const runId = (req.headers['x-run-id'] as string | undefined) ?? randomUUID();
-
-  try {
-    const result = await runWith({ runId, requestId: req.headers['x-request-id'] as string }, () =>
-      agent.run(message),
-    );
-    res.json({ response: result.response, runId });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
+app.use(runContextMiddleware());
+app.use('/chat', injectionMiddleware(), createAgentRouter({ agent }));
+app.use(ottrixErrorHandler());
 
 app.listen(3000);
 ```
 
-Streaming (without the adapter):
+`POST /chat` runs the agent; `GET /chat/stream?message=...` streams SSE events.
 
-```ts
-app.post('/chat/stream', async (req, res) => {
-  const { message } = req.body as { message: string };
-  res.setHeader('Content-Type', 'text/event-stream');
+---
 
-  for await (const event of agent.stream(message)) {
-    if (event.type === 'text') {
-      res.write(`data: ${JSON.stringify(event.data)}\n\n`);
-    }
-  }
-  res.write('data: [DONE]\n\n');
-  res.end();
-});
-```
+## Exports
 
-For NestJS, use the published [`@ottrix/nestjs`](../nestjs/README.md) adapter instead.
+| API | Purpose |
+|-----|---------|
+| `createAgentRouter()` | `POST /` + optional `GET /stream` |
+| `runContextMiddleware()` | `runWith()` per request (ALS) |
+| `telemetryMiddleware()` | HTTP spans via `getTelemetry()` |
+| `injectionMiddleware()` | Prompt injection scan on JSON bodies |
+| `budgetMiddleware()` | Block when budget guardrails are exceeded |
+| `sendAgentStream()` | SSE helper for custom routes |
+| `ottrixErrorHandler()` | Map Ottrix errors → HTTP status codes |
 
 ---
 
 ## Links
 
-- [ottrix core package](../core/README.md)
-- [Run context docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/context.md)
-- [Guardrails docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/guardrails.md)
+- [Integration docs](./docs/README.md)
+- [ottrix core](../core/README.md)
+- [@ottrix/nestjs](../nestjs/README.md)

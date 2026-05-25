@@ -3,7 +3,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'cli/serve': 'src/cli/serve.ts',
     'providers/index': 'src/providers/index.ts',
     'providers/registry': 'src/providers/registry.ts',
     'providers/anthropic': 'src/providers/anthropic.ts',
@@ -13,7 +12,6 @@ export default defineConfig({
     'providers/base': 'src/providers/base.ts',
     'types/index': 'src/types/index.ts',
     'tools/index': 'src/tools/index.ts',
-    'tools/mcp-server': 'src/tools/mcp-server-public.ts',
     'memory/index': 'src/memory/index.ts',
     'orchestration/index': 'src/orchestration/index.ts',
     'guardrails/index': 'src/guardrails/index.ts',
@@ -21,10 +19,7 @@ export default defineConfig({
     'agent/index': 'src/agent/index.ts',
     'evals/index': 'src/evals/index.ts',
     'observability/exporters/index': 'src/observability/exporters/index.ts',
-    'observability/exporters/langfuse': 'src/observability/exporters/langfuse.ts',
-    'observability/exporters/braintrust': 'src/observability/exporters/braintrust.ts',
     'observability/exporters/webhook': 'src/observability/exporters/webhook.ts',
-    'observability/exporters/otel': 'src/observability/exporters/otel.ts',
   },
   format: ['esm', 'cjs'],
   platform: 'node',

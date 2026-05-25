@@ -1,10 +1,13 @@
 # @ottrix/nestjs
 
-First-party **NestJS** integration for [Ottrix](https://github.com/ashwinpaulallen/ottrix) — dependency injection, lifecycle hooks, guards, interceptors, SSE streaming, and health checks.
+> Part of **[Ottrix](https://github.com/ashwinpaulallen/ottrix)** — TypeScript framework for production LLM agents.  
+> **Core:** [`ottrix`](https://www.npmjs.com/package/ottrix) · **All packages:** [docs/README.md](../../docs/README.md)
+
+Thin **NestJS adapter** for [Ottrix](https://github.com/ashwinpaulallen/ottrix) — dependency injection, lifecycle hooks, HTTP interceptors, guards, SSE streaming, and health checks. All AI logic lives in the `ottrix` core package.
 
 **Version:** 0.1.0 · **Requires:** `ottrix` ≥2.0.0 · **Node:** ≥20 · **License:** MIT
 
-Detailed module guide: [docs/nestjs.md](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/nestjs.md)
+Documentation: [docs/README.md](./docs/README.md) · Full guide: [docs/guide.md](./docs/guide.md)
 
 ---
 
@@ -14,39 +17,57 @@ Detailed module guide: [docs/nestjs.md](https://github.com/ashwinpaulallen/ottri
 npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs
 ```
 
-**Optional peers:**
-
-- `@nestjs/terminus` — register `OttrixHealthIndicator` in health checks
-- `@nestjs/bull` — queue-based agent jobs (bring your own wiring)
+**Optional peers:** `@nestjs/terminus` (health checks)
 
 ---
 
 ## Quick start
 
+One module import wires providers, telemetry, RunContext, and HTTP spans:
+
 ```typescript
-import { Module } from '@nestjs/common';
-import { OttrixModule } from '@ottrix/nestjs';
+import { Controller, Module, Post, Body, Injectable } from '@nestjs/common';
+import { OttrixModule, InjectAgent } from '@ottrix/nestjs';
+import type { Agent } from 'ottrix';
 
 @Module({
   imports: [
     OttrixModule.forRoot({
       providers: {
-        chain: ['anthropic', 'openai'],
         anthropic: { apiKey: process.env.ANTHROPIC_API_KEY! },
-        openai: { apiKey: process.env.OPENAI_API_KEY! },
       },
-      telemetry: {
-        exporter: 'otel',
-        otel: { endpoint: 'http://localhost:4318', serviceName: 'my-api' },
-      },
+      telemetry: { exporter: 'console' },
+      // http defaults: runContext + telemetry interceptors (see below)
     }),
     OttrixModule.forFeature({
-      agents: [{ name: 'researcher', systemPrompt: 'You are a researcher.' }],
+      agents: [{ name: 'assistant', systemPrompt: 'You are helpful.' }],
     }),
   ],
+  controllers: [ChatController],
 })
 export class AppModule {}
+
+@Injectable()
+class ChatService {
+  constructor(@InjectAgent('assistant') private readonly agent: Agent) {}
+
+  ask(message: string) {
+    return this.agent.run(message);
+  }
+}
+
+@Controller('chat')
+class ChatController {
+  constructor(private readonly chat: ChatService) {}
+
+  @Post()
+  chat(@Body('message') message: string) {
+    return this.chat.ask(message);
+  }
+}
 ```
+
+No manual `APP_INTERCEPTOR` wiring required — `forRoot` registers RunContext and telemetry globally by default.
 
 ---
 
@@ -54,40 +75,75 @@ export class AppModule {}
 
 | Method | Purpose |
 |--------|---------|
-| `forRoot(options)` | Global providers, telemetry, guardrails, registries |
-| `forRootAsync(options)` | Async config via factory, `useClass`, or `useExisting` |
-| `forFeature(options)` | Feature-scoped agents, tools, and DAG workflows |
+| `forRoot(options)` | Global providers, telemetry, registries, HTTP wiring |
+| `forRootAsync(options)` | Async config via factory / `useClass` / `useExisting` |
+| `forFeature({ agents })` | Register named agents via core `createAgent()` |
 
-### `forRoot` options
+### Providers
 
 ```typescript
 OttrixModule.forRoot({
   providers: {
-    chain: ['anthropic', 'openai'],           // fallback order
-    anthropic: { apiKey, baseUrl?, model? },
+    chain: ['anthropic', 'openai'],     // fallback order
+    anthropic: { apiKey, model? },
     openai: { apiKey, baseUrl?, model? },
     ollama: { baseUrl?, model? },
   },
-  telemetry: {
-    exporter: 'otel' | 'langfuse' | 'console' | 'webhook',
-    otel: { endpoint, headers?, serviceName? },
-    langfuse: { publicKey, secretKey, baseUrl? },
-    webhook: { url, headers? },
-  },
-  guardrails: {
-    injection: { mode: 'block' | 'flag' | 'sanitize', strictness: 'low' | 'medium' | 'high' },
-    pii: { mode: 'block' | 'flag' | 'tokenize' },
-    budget: { maxTokens?, maxCostUsd?, maxSteps? },
-  },
-  runContext: true,  // AsyncLocalStorage RunContext (default: true)
 });
 ```
+
+Agents registered in `forFeature` use the module's `ProviderRegistry` by default (including fallback chains).
+
+### Telemetry
+
+Uses the same exporter types as Ottrix core, plus an `otel` shorthand:
+
+```typescript
+telemetry: {
+  exporter: 'console' | 'langfuse' | 'webhook' | 'braintrust' | 'memory' | 'none' | 'otel',
+  enabled?: boolean,                  // default true
+  langfuse?: { publicKey, secretKey, baseUrl? },
+  braintrust?: { apiKey, projectName, baseUrl?, projectId? },
+  webhook?: { url, headers? },
+  otel?: { endpoint, protocol?, headers?, serviceName? },
+  maxFinishedSpans?: number,
+  maxMetricPoints?: number,
+}
+```
+
+Spans flush on module destroy via `OttrixLifecycleService`.
+
+### HTTP wiring (`http`)
+
+| Value | Behavior |
+|-------|----------|
+| *(omitted)* | RunContext + telemetry interceptors **on**; injection guard **off** |
+| `true` | All three enabled with defaults |
+| `false` | No automatic HTTP wiring |
+| `{ runContext?, telemetry?, injectionGuard? }` | Fine-grained control |
+
+```typescript
+OttrixModule.forRoot({
+  providers: { anthropic: { apiKey: '...' } },
+  http: {
+    runContext: true,
+    telemetry: true,
+    injectionGuard: { mode: 'block', bodyField: 'message' },
+  },
+});
+```
+
+**RunContextInterceptor** — calls `runWith()` per request; `runId` from `x-request-id` header.
+
+**TelemetryInterceptor** — HTTP span via `getTelemetry()`; RunContext attributes included automatically.
+
+**InjectionGuard** — calls `PromptInjectionGuardrail.checkInput()` on the request body field.
+
+To wire interceptors manually instead, pass `http: false` and register `APP_INTERCEPTOR` / `APP_GUARD` yourself.
 
 ### Async configuration
 
 ```typescript
-import { ConfigModule, ConfigService } from '@nestjs/config';
-
 OttrixModule.forRootAsync({
   imports: [ConfigModule],
   inject: [ConfigService],
@@ -97,140 +153,71 @@ OttrixModule.forRootAsync({
     },
     telemetry: { exporter: 'console' },
   }),
+  http: true,  // set here — not inside useFactory
 });
 ```
 
-### Feature modules
+### Feature agents
 
-Register agents, tools, and workflows scoped to a module:
+Each agent definition is a core `CreateAgentConfig` plus a required `name`:
 
 ```typescript
 import { createTool } from 'ottrix';
 import { z } from 'zod';
-import { OttrixModule } from '@ottrix/nestjs';
 
 OttrixModule.forFeature({
-  tools: [
-    {
-      tool: createTool({
-        name: 'search',
-        description: 'Search the web',
-        input: z.object({ query: z.string() }),
-        execute: async ({ query }) => ({ results: [] }),
-      }),
-    },
-  ],
   agents: [
     {
       name: 'researcher',
-      systemPrompt: 'You research topics.',
-      provider: 'anthropic',
-      tools: ['search'],
+      systemPrompt: 'You research topics thoroughly.',
+      provider: 'anthropic',       // optional — defaults to full registry
+      model: 'claude-sonnet-4-20250514',
+      tools: [searchTool],         // pass BaseTool[] directly
+      guardrails: true,            // core defaults, or CreateGuardrailsConfig
+      memory: true,
       maxSteps: 10,
     },
-  ],
-  workflows: [
-    { name: 'pipeline', config: dagWorkflowConfig },
   ],
 });
 ```
 
-Each `forFeature()` call uses an isolated registration token so multiple feature modules can register tools without DI collisions.
+Pass tools in the agent config (`tools: [...]`). The global `@InjectToolRegistry()` token is for app-level tool registration outside `forFeature`.
 
 ---
 
-## Inject agents and services
-
-```typescript
-import { Controller, Post, Body } from '@nestjs/common';
-import { InjectAgent, RunContextService } from '@ottrix/nestjs';
-import type { Agent } from 'ottrix/agent';
-
-@Controller('chat')
-export class ChatController {
-  constructor(
-    @InjectAgent('researcher') private readonly agent: Agent,
-    private readonly runContext: RunContextService,
-  ) {}
-
-  @Post()
-  async chat(@Body('message') message: string) {
-    const { response } = await this.agent.run(message);
-    return { response };
-  }
-}
-```
+## Decorators
 
 | Decorator | Injects |
 |-----------|---------|
 | `@InjectAgent('name')` | Agent from `forFeature` |
-| `@InjectWorkflow('name')` | `DAGWorkflow` from `forFeature` |
 | `@InjectProvider('anthropic')` | Named LLM provider |
+| `@InjectProvider()` | Full `ProviderRegistry` |
 | `@InjectToolRegistry()` | Global `ToolRegistry` |
-| `@InjectTelemetry()` | `TelemetryService` |
+| `@InjectTelemetry()` | Ottrix `Telemetry` singleton |
 
-**Manual tokens:** `agentToken('name')`, `workflowToken('name')`, `providerToken('anthropic')`, `OTTRIX_TOOL_REGISTRY`, `OTTRIX_TELEMETRY`, `OTTRIX_RUN_CONTEXT`, `OTTRIX_GUARDRAIL_SERVICE`.
-
----
-
-## Guards and interceptors
-
-Register globally (recommended) or per-controller:
-
-```typescript
-import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import {
-  InjectionGuard,
-  BudgetGuard,
-  TelemetryInterceptor,
-  RunContextInterceptor,
-} from '@ottrix/nestjs';
-
-@Module({
-  providers: [
-    { provide: APP_INTERCEPTOR, useClass: RunContextInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: TelemetryInterceptor },
-    { provide: APP_GUARD, useClass: InjectionGuard },
-    { provide: APP_GUARD, useClass: BudgetGuard },
-  ],
-})
-export class AppModule {}
-```
-
-| Component | Behavior |
-|-----------|----------|
-| `RunContextInterceptor` | Sets ALS from `x-run-id`, `x-request-id`, `x-org-id`, and `user.orgId` |
-| `TelemetryInterceptor` | Wraps HTTP requests in Ottrix telemetry spans |
-| `InjectionGuard` | Scans request body for prompt injection; sanitizes `messages[].content` arrays |
-| `BudgetGuard` | Pre-checks org-scope budget when `user.orgId` is present |
-
-`RunContextService.contextFromRequest(req)` builds a `RunContext` from headers and authenticated user metadata.
+Manual tokens: `agentToken('name')`, `providerToken('anthropic')`, `OTTRIX_PROVIDER_REGISTRY`, `OTTRIX_TOOL_REGISTRY`, `OTTRIX_TELEMETRY`.
 
 ---
 
 ## SSE streaming
 
-Bridge `Agent.stream()` to NestJS `@Sse()` endpoints:
-
 ```typescript
 import { Controller, Sse, Query, Req } from '@nestjs/common';
-import { InjectAgent, createSseHandler } from '@ottrix/nestjs';
-import type { Agent } from 'ottrix/agent';
-import type { Request } from 'express';
+import { InjectAgent, createSseStream } from '@ottrix/nestjs';
+import type { Agent } from 'ottrix';
 
 @Controller('stream')
 export class StreamController {
-  constructor(@InjectAgent('researcher') private readonly agent: Agent) {}
+  constructor(@InjectAgent('assistant') private readonly agent: Agent) {}
 
   @Sse()
   stream(@Query('message') message: string, @Req() req: Request) {
-    return createSseHandler(this.agent, { signal: req.signal })(message);
+    return createSseStream(this.agent, message, { signal: req.signal });
   }
 }
 ```
 
-`createSseHandler(agent, { keepaliveMs?, signal? })` returns an RxJS `Observable` compatible with NestJS SSE.
+`createSseStream` maps `agent.stream()` to NestJS `Observable<MessageEvent>` with keepalive and disconnect handling.
 
 ---
 
@@ -253,24 +240,12 @@ export class HealthController {
   @Get()
   @HealthCheck()
   check() {
-    return this.health.check([() => this.ottrix.isHealthy('anthropic')]);
+    return this.health.check([() => this.ottrix.isHealthy('ottrix')]);
   }
 }
 ```
 
----
-
-## Telemetry backends
-
-| Backend | `telemetry` config |
-|---------|-------------------|
-| Jaeger / Grafana Tempo | `{ exporter: 'otel', otel: { endpoint: 'http://localhost:4318' } }` |
-| Datadog OTLP | `{ exporter: 'otel', otel: { endpoint: 'https://otlp.datadoghq.com', headers: { 'DD-API-KEY': key } } }` |
-| Langfuse | `{ exporter: 'langfuse', langfuse: { publicKey, secretKey } }` |
-| Honeycomb | `{ exporter: 'otel', otel: { endpoint: 'https://api.honeycomb.io', headers: { 'x-honeycomb-team': key } } }` |
-| Webhook | `{ exporter: 'webhook', webhook: { url: 'https://...' } }` |
-
-`TelemetryService` configures exporters on module init and flushes spans on destroy.
+Pings configured providers and reports circuit breaker state.
 
 ---
 
@@ -279,20 +254,21 @@ export class HealthController {
 | Category | Exports |
 |----------|---------|
 | Module | `OttrixModule` |
-| Services | `ProviderRegistryService`, `ToolRegistryService`, `TelemetryService`, `RunContextService`, `GuardrailService` |
-| Guards | `InjectionGuard`, `BudgetGuard` |
+| Lifecycle | `OttrixLifecycleService` |
+| HTTP setup | `createHttpProviders`, `resolveHttpOptions` |
+| Guards | `InjectionGuard` |
 | Interceptors | `RunContextInterceptor`, `TelemetryInterceptor` |
-| SSE | `createSseHandler`, `SseMessageEvent`, `SseHandlerOptions` |
+| SSE | `createSseStream`, `SseMessageEvent`, `CreateSseStreamOptions` |
 | Health | `OttrixHealthIndicator`, `OttrixHealthCheckError` |
-| Decorators | `InjectAgent`, `InjectWorkflow`, `InjectProvider`, `InjectToolRegistry`, `InjectTelemetry` |
-| Types | `OttrixModuleOptions`, `OttrixFeatureOptions`, `AgentDefinition`, `ToolDefinition`, `WorkflowDefinition` |
+| Decorators | `InjectAgent`, `InjectProvider`, `InjectToolRegistry`, `InjectTelemetry` |
+| Types | `OttrixModuleOptions`, `OttrixHttpOptions`, `OttrixTelemetryConfig`, `AgentDefinition`, … |
 
 ---
 
 ## Links
 
-- [Ottrix core package](../core/README.md)
-- [NestJS module docs](https://github.com/ashwinpaulallen/ottrix/blob/main/docs/nestjs.md)
-- [Changelog](https://github.com/ashwinpaulallen/ottrix/blob/main/CHANGELOG.md)
+- [Ottrix core](../core/README.md)
+- [Integration guide](./docs/guide.md)
+- [Core configuration](../core/docs/configuration.md) · [Guardrails](../core/docs/guardrails.md)
 
-[MIT](https://github.com/ashwinpaulallen/ottrix/blob/main/LICENSE) © [ashwinpaulallen](https://github.com/ashwinpaulallen)
+[MIT](https://github.com/ashwinpaulallen/ottrix/blob/main/LICENSE)

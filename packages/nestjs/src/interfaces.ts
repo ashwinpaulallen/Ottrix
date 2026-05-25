@@ -1,7 +1,5 @@
 import type { ModuleMetadata, Type } from '@nestjs/common';
-import type { Agent } from 'ottrix/agent';
-import type { BaseTool } from 'ottrix/tools';
-import type { DAGWorkflow, DAGWorkflowConfig } from 'ottrix/orchestration';
+import type { AgenticTelemetryConfig, CreateAgentConfig } from 'ottrix';
 
 /** Provider configuration for Ottrix LLM backends. */
 export interface OttrixProviderConfig {
@@ -10,41 +8,39 @@ export interface OttrixProviderConfig {
   model?: string;
 }
 
-/** Telemetry exporter configuration. */
-export interface OttrixTelemetryConfig {
-  exporter: 'langfuse' | 'otel' | 'console' | 'webhook';
-  langfuse?: {
-    publicKey: string;
-    secretKey: string;
-    baseUrl?: string;
-  };
-  otel?: {
-    endpoint: string;
-    protocol?: 'grpc' | 'http';
-    headers?: Record<string, string>;
-    serviceName?: string;
-  };
-  webhook?: {
-    url: string;
-    headers?: Record<string, string>;
-  };
+/** OTEL exporter settings (NestJS shorthand when `exporter: 'otel'`). */
+export interface OttrixOtelConfig {
+  endpoint: string;
+  protocol?: 'grpc' | 'http';
+  headers?: Record<string, string>;
+  serviceName?: string;
 }
 
-/** Guardrail configuration for the NestJS module. */
-export interface OttrixGuardrailsConfig {
-  injection?: {
-    mode?: 'block' | 'flag' | 'sanitize';
-    strictness?: 'low' | 'medium' | 'high';
-  };
-  pii?: {
-    mode?: 'block' | 'flag' | 'tokenize';
-  };
-  budget?: {
-    maxTokens?: number;
-    maxCostUsd?: number;
-    maxSteps?: number;
-  };
-}
+/**
+ * Telemetry configuration for {@link OttrixModule.forRoot}.
+ *
+ * Extends core {@link AgenticTelemetryConfig} with an `otel` shorthand block.
+ */
+export type OttrixTelemetryConfig = Omit<AgenticTelemetryConfig, 'exporter' | 'enabled'> & {
+  enabled?: boolean;
+  exporter: AgenticTelemetryConfig['exporter'] | 'otel';
+  otel?: OttrixOtelConfig;
+};
+
+/**
+ * HTTP integration for {@link OttrixModule.forRoot}.
+ *
+ * - `true` — enable RunContext, telemetry spans, and injection guard
+ * - `false` — disable all automatic HTTP wiring
+ * - object — enable individual features (defaults: runContext + telemetry on, injectionGuard off)
+ */
+export type OttrixHttpOptions =
+  | boolean
+  | {
+      runContext?: boolean | RunContextInterceptorOptions;
+      telemetry?: boolean;
+      injectionGuard?: boolean | InjectionGuardOptions;
+    };
 
 /** Root module configuration for {@link OttrixModule.forRoot}. */
 export interface OttrixModuleOptions {
@@ -55,9 +51,12 @@ export interface OttrixModuleOptions {
     ollama?: OttrixProviderConfig;
   };
   telemetry?: OttrixTelemetryConfig;
-  guardrails?: OttrixGuardrailsConfig;
-  /** Enable AsyncLocalStorage-backed RunContext. @defaultValue true */
-  runContext?: boolean;
+  /**
+   * Wire Ottrix HTTP interceptors and guards globally via Nest `APP_*` tokens.
+   *
+   * @defaultValue `{ runContext: true, telemetry: true }` — injection guard is opt-in
+   */
+  http?: OttrixHttpOptions;
 }
 
 /** Factory interface for async module configuration. */
@@ -71,44 +70,39 @@ export interface OttrixModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'
   inject?: Array<Type<unknown> | string | symbol>;
   useClass?: Type<OttrixOptionsFactory>;
   useExisting?: Type<OttrixOptionsFactory>;
+  /**
+   * HTTP wiring — set on `forRootAsync` (not inside `useFactory`) so Nest can register `APP_*` tokens.
+   *
+   * @defaultValue `{ runContext: true, telemetry: true }`
+   */
+  http?: OttrixHttpOptions;
 }
 
-/** Agent definition for {@link OttrixModule.forFeature}. */
-export interface AgentDefinition {
-  name: string;
-  systemPrompt: string;
-  /** Registered provider name from {@link OttrixModuleOptions.providers}. */
-  provider?: string;
-  model?: string;
-  /** Tool names registered in the global {@link ToolRegistry}. */
-  tools?: string[];
-  maxSteps?: number;
-  maxTokenBudget?: number;
-}
-
-/** Tool definition for feature registration. */
-export interface ToolDefinition {
-  tool: BaseTool;
-}
-
-/** Workflow definition for feature registration. */
-export interface WorkflowDefinition {
-  name: string;
-  /** Pre-built workflow instance. */
-  workflow?: DAGWorkflow;
-  /** Workflow config used to construct a {@link DAGWorkflow} on init. */
-  config?: DAGWorkflowConfig;
-}
+/** Agent definition for {@link OttrixModule.forFeature} — args for {@link createAgent}. */
+export type AgentDefinition = CreateAgentConfig & { name: string };
 
 /** Feature-scoped configuration for {@link OttrixModule.forFeature}. */
 export interface OttrixFeatureOptions {
   agents?: AgentDefinition[];
-  tools?: ToolDefinition[];
-  workflows?: WorkflowDefinition[];
 }
 
-/** Resolved agent handle stored in the DI container. */
-export type ResolvedAgent = Agent;
+/** Options for {@link RunContextInterceptor}. */
+export interface RunContextInterceptorOptions {
+  orgId?: (request: Record<string, unknown>) => string | undefined;
+  userId?: (request: Record<string, unknown>) => string | undefined;
+}
 
-/** Resolved workflow handle stored in the DI container. */
-export type ResolvedWorkflow = DAGWorkflow;
+/** Options for {@link InjectionGuard}. */
+export interface InjectionGuardOptions {
+  /** Body field to scan. @defaultValue `'message'` */
+  bodyField?: string;
+  /** @defaultValue `'block'` */
+  mode?: 'block' | 'flag';
+}
+
+/** Resolved HTTP feature flags used internally by {@link OttrixModule}. */
+export interface ResolvedOttrixHttpOptions {
+  runContext: boolean | RunContextInterceptorOptions;
+  telemetry: boolean;
+  injectionGuard: boolean | InjectionGuardOptions;
+}

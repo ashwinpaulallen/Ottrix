@@ -10,4 +10,5 @@ export default defineConfig({
   },
   clean: true,
   sourcemap: true,
+  external: ['@langchain/core', 'ottrix', 'zod'],
 });
