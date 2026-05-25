@@ -18,6 +18,7 @@
 - [Why Ottrix](#why-ottrix)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Packages](#packages)
 - [Quick start](#quick-start)
 - [Feature examples](#feature-examples)
 - [More examples](#more-examples)
@@ -92,6 +93,27 @@ Set your provider key (example for Anthropic):
 ```bash
 export ANTHROPIC_API_KEY=your-api-key-here
 ```
+
+---
+
+## Packages
+
+Ottrix ships as a **core library** plus optional **framework adapters**. Install only what you need.
+
+| Package | Install | Status | Description |
+|---------|---------|--------|-------------|
+| **`ottrix`** | `npm install ottrix` | **Published** · v2.0.0 | Core agent framework — ReAct loop, tools, MCP, memory, guardrails, workflows, evals, observability |
+| **`@ottrix/nestjs`** | `npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs` | **Published** · v0.1.0 | NestJS module, guards, interceptors, SSE, health checks ([README](packages/nestjs/README.md)) |
+| `@ottrix/express` | — | Planned | Express middleware and router ([README](packages/express/README.md)) |
+| `@ottrix/fastify` | — | Planned | Fastify plugin ([README](packages/fastify/README.md)) |
+| `@ottrix/hono` | — | Planned | Hono middleware ([README](packages/hono/README.md)) |
+| `@ottrix/nextjs` | — | Planned | Next.js API route helpers ([README](packages/nextjs/README.md)) |
+| `@ottrix/vercel-ai` | — | Planned | Vercel AI SDK adapter ([README](packages/vercel-ai/README.md)) |
+| `@ottrix/langchain` | — | Planned | LangChain.js interop ([README](packages/langchain/README.md)) |
+
+Trace exporters (**Langfuse**, **OpenTelemetry**, Braintrust, webhook) ship inside **`ottrix`** — use `ottrix/exporters/*` subpaths. Standalone `@ottrix/exporter-*` packages are reserved for future split releases; see [exporter-otel](packages/exporter-otel/README.md) and [exporter-langfuse](packages/exporter-langfuse/README.md).
+
+**Core package details:** [packages/core/README.md](packages/core/README.md) · **Module docs:** [docs/](docs/README.md)
 
 ---
 
@@ -592,7 +614,7 @@ Merge order: **defaults → config file → environment → code overrides** (`l
 
 ## Package exports
 
-Tree-shakeable subpath imports:
+The **`ottrix`** package exposes tree-shakeable subpath imports:
 
 | Import | Use case |
 |--------|----------|

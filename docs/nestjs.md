@@ -90,7 +90,7 @@ Missing required exporter fields log a warning at startup.
 
 ## SSE streaming
 
-`streamAgentToSse(agent, input, res)` bridges `Agent.stream()` to Server-Sent Events for NestJS controllers.
+`createSseHandler(agent, options)` returns an RxJS `Observable` for NestJS `@Sse()` endpoints — it bridges `Agent.stream()` to Server-Sent Events.
 
 ## Health
 
