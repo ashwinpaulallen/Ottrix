@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fp from 'fastify-plugin';
 import type { FastifyPluginAsync } from 'fastify';
 import {
@@ -6,37 +5,36 @@ import {
   getTelemetry,
   PromptInjectionGuardrail,
   runWith,
+  shutdownObservability,
   ToolRegistry,
   type CompletionProvider,
   type CreateAgentConfig,
   type ProviderName,
   type ProviderRegistry,
-  type RunContext,
 } from 'ottrix';
+import {
+  buildRunContext,
+  extractMessage,
+  isStreamInjectionRequest,
+  scanMessageForInjection,
+  type ContextExtractors,
+} from 'ottrix/http';
 import { registerOttrixErrorHandler } from './errors.js';
+import { readHeaders } from './helpers.js';
 import { createProviderRegistry, type OttrixProviderOptions } from './setup/create-provider-registry.js';
 import './types.js';
 
 export type { OttrixProviderOptions };
 
-/** Prompt injection settings for {@link ottrixPlugin}. */
-export interface OttrixInjectionOptions {
-  mode?: 'block' | 'flag';
-  bodyField?: string;
-}
-
-/** Run context extractors for {@link ottrixPlugin}. */
-export interface OttrixRunContextOptions {
-  orgId?: (request: { headers: Record<string, unknown> }) => string | undefined;
-  userId?: (request: { headers: Record<string, unknown> }) => string | undefined;
-}
-
 /** Options for {@link ottrixPlugin}. */
 export interface OttrixPluginOptions {
   agents?: Record<string, CreateAgentConfig>;
   providers?: OttrixProviderOptions;
-  injection?: boolean | OttrixInjectionOptions;
-  runContext?: boolean | OttrixRunContextOptions;
+  /** Prompt injection handling. @defaultValue `'block'` */
+  injection?: 'block' | 'flag' | false;
+  /** Enable RunContext per request. @defaultValue `true` */
+  runContext?: boolean | Partial<ContextExtractors>;
+  /** HTTP telemetry spans. @defaultValue `true` */
   telemetry?: boolean;
 }
 
@@ -62,65 +60,49 @@ const ottrixPluginImpl: FastifyPluginAsync<OttrixPluginOptions> = async (fastify
 
   fastify.decorate('ottrix', { agents, providers, tools });
 
-  const runContextOptions =
-    opts.runContext === false ? undefined : normalizeRunContextOptions(opts.runContext ?? true);
-  if (runContextOptions !== undefined) {
-    fastify.addHook('onRequest', (request, reply, done) => {
-      const ctx = buildRunContext(request, runContextOptions);
-      request.ottrixContext = ctx;
-
-      runWith(ctx, () =>
-        new Promise<void>((resolve, reject) => {
-          let settled = false;
-          const finish = () => {
-            if (!settled) {
-              settled = true;
-              resolve();
-            }
-          };
-          reply.raw.once('finish', finish);
-          reply.raw.once('close', finish);
-
-          try {
-            done();
-          } catch (error) {
-            if (!settled) {
-              settled = true;
-              reject(error);
-            }
-            done(error as Error);
-          }
-        }),
-      ).catch((error) => done(error as Error));
+  const runContext = opts.runContext ?? true;
+  if (runContext !== false) {
+    const extractors = runContext === true ? undefined : runContext;
+    fastify.addHook('onRequest', (request, _reply, done) => {
+      request.ottrixContext = buildRunContext(readHeaders(request), extractors);
+      void runWith(request.ottrixContext, () => done()).catch(done);
     });
   }
 
-  const injectionOptions = normalizeInjectionOptions(opts.injection);
-  if (injectionOptions) {
-    const guardrail = new PromptInjectionGuardrail({ mode: injectionOptions.mode });
-    const bodyField = injectionOptions.bodyField ?? 'message';
-
+  const injection = opts.injection ?? 'block';
+  if (injection !== false) {
+    const guardrail = new PromptInjectionGuardrail({ mode: injection });
     fastify.addHook('preHandler', async (request, reply) => {
-      if (!MUTATING_METHODS.has(request.method)) {
+      let message: string | undefined;
+
+      if (MUTATING_METHODS.has(request.method)) {
+        const parsed = extractMessage(request.body, 'message');
+        if (!parsed.ok) {
+          return;
+        }
+        message = parsed.message;
+      } else if (
+        isStreamInjectionRequest(
+          request.method,
+          request.routeOptions?.url ?? request.url.split('?')[0] ?? '',
+        )
+      ) {
+        const query = request.query as Record<string, unknown>;
+        const parsed = extractMessage({ message: query.message }, 'message');
+        if (!parsed.ok) {
+          return;
+        }
+        message = parsed.message;
+      } else {
         return;
       }
 
-      const body = request.body as Record<string, unknown> | undefined;
-      const message = body?.[bodyField];
-      if (typeof message !== 'string' || message.length === 0) {
+      const scan = await scanMessageForInjection(message, { mode: injection, guardrail });
+      if (scan.allowed) {
         return;
       }
 
-      const detection = await guardrail.checkInput(message);
-      if (!detection.detected) {
-        return;
-      }
-
-      if (injectionOptions.mode === 'flag') {
-        return;
-      }
-
-      reply.code(403).send({ error: 'Blocked' });
+      reply.code(scan.status).send(scan.body);
     });
   }
 
@@ -138,10 +120,7 @@ const ottrixPluginImpl: FastifyPluginAsync<OttrixPluginOptions> = async (fastify
       const span = request.ottrixSpan;
       if (span) {
         span.setAttribute('http.status_code', reply.statusCode);
-        span.setAttribute(
-          'http.duration_ms',
-          Date.now() - (request.ottrixStartTime ?? Date.now()),
-        );
+        span.setAttribute('http.duration_ms', Date.now() - (request.ottrixStartTime ?? Date.now()));
         span.setStatus(reply.statusCode >= 400 ? 'error' : 'ok');
         span.end();
       }
@@ -153,6 +132,7 @@ const ottrixPluginImpl: FastifyPluginAsync<OttrixPluginOptions> = async (fastify
 
   fastify.addHook('onClose', async () => {
     agents.clear();
+    await shutdownObservability();
   });
 };
 
@@ -177,54 +157,4 @@ function resolveAgentProvider(
     }
   }
   return provider;
-}
-
-function buildRunContext(
-  request: { headers: Record<string, unknown> },
-  options?: OttrixRunContextOptions,
-): RunContext {
-  const runId = readHeader(request.headers, 'x-request-id') ?? randomUUID();
-  const orgId = options?.orgId?.(request) ?? readHeader(request.headers, 'x-org-id');
-  const userId = options?.userId?.(request) ?? readHeader(request.headers, 'x-user-id');
-
-  return {
-    runId,
-    ...(orgId ? { orgId } : {}),
-    ...(userId ? { userId } : {}),
-  } as RunContext;
-}
-
-function readHeader(headers: Record<string, unknown>, name: string): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    return typeof value[0] === 'string' ? value[0] : undefined;
-  }
-  return typeof value === 'string' ? value : undefined;
-}
-
-function normalizeInjectionOptions(
-  injection: OttrixPluginOptions['injection'],
-): OttrixInjectionOptions | undefined {
-  if (injection === false || injection === undefined) {
-    return undefined;
-  }
-  if (injection === true) {
-    return { mode: 'block', bodyField: 'message' };
-  }
-  return {
-    mode: injection.mode ?? 'block',
-    bodyField: injection.bodyField ?? 'message',
-  };
-}
-
-function normalizeRunContextOptions(
-  runContext: OttrixPluginOptions['runContext'],
-): OttrixRunContextOptions | undefined {
-  if (runContext === false || runContext === undefined) {
-    return undefined;
-  }
-  if (runContext === true) {
-    return {};
-  }
-  return runContext;
 }

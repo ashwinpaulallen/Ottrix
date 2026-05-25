@@ -9,16 +9,16 @@ import {
   resetGlobalObservability,
   StructuredOutputError,
 } from 'ottrix';
+import { BudgetExhaustedError, mapOttrixError } from 'ottrix/http';
 import {
   agentHandler,
   agentStreamHandler,
-  mapOttrixError,
+  ottrix,
   ottrixContext,
   ottrixErrorHandler,
   ottrixInjection,
   type OttrixEnv,
 } from '../src/index.js';
-import { BudgetExhaustedError } from '../src/errors.js';
 
 const MOCK_RESULT: AgentResult = {
   response: 'hello from agent',
@@ -31,7 +31,7 @@ function createMockAgent(overrides: Partial<Agent> = {}): Agent {
   return {
     run: vi.fn().mockResolvedValue(MOCK_RESULT),
     stream: vi.fn().mockImplementation(async function* () {
-      yield { type: 'text', data: 'partial' } satisfies AgentEvent;
+      yield { type: 'text', data: { text: 'partial' } } satisfies AgentEvent;
       yield { type: 'done', data: { stopReason: 'completed' } } satisfies AgentEvent;
     }),
     getName: () => 'test-agent',
@@ -46,10 +46,31 @@ describe('@ottrix/hono', () => {
     resetGlobalObservability();
   });
 
+  describe('ottrix()', () => {
+    it('mounts agent routes with defaults-on', async () => {
+      const agent = createMockAgent();
+      const app = new Hono();
+      app.route('/chat', ottrix({ agent, cors: false, healthCheck: false }));
+
+      const post = await app.request('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'hi' }),
+      });
+      expect(post.status).toBe(200);
+      expect((await post.json()).response).toBe('hello from agent');
+
+      const stream = await app.request('/chat/stream?message=stream%20me');
+      expect(stream.status).toBe(200);
+      expect(stream.headers.get('content-type')).toContain('text/event-stream');
+    });
+  });
+
   describe('agentHandler', () => {
     it('returns JSON response', async () => {
       const agent = createMockAgent();
-      const app = new Hono();
+      const app = new Hono<OttrixEnv>();
+      app.use('*', ottrixContext());
       app.post('/chat', agentHandler(agent));
 
       const response = await app.request('/chat', {
@@ -77,7 +98,7 @@ describe('@ottrix/hono', () => {
       expect(response.headers.get('content-type')).toContain('text/event-stream');
       const body = await response.text();
       expect(body).toContain('event: text\n');
-      expect(body).toContain('data: "partial"');
+      expect(body).toContain('{"text":"partial"}');
       expect(body).toContain('event: done\n');
       expect(agent.stream).toHaveBeenCalledWith('stream me');
     });
@@ -120,7 +141,10 @@ describe('@ottrix/hono', () => {
       });
 
       expect(response.status).toBe(403);
-      expect(((await response.json()) as { error: string }).error).toBe('Blocked');
+      expect(await response.json()).toEqual({
+        error: 'Request blocked',
+        code: 'injection_detected',
+      });
     });
   });
 
@@ -133,7 +157,7 @@ describe('@ottrix/hono', () => {
         mapOttrixError(new StructuredOutputError('bad', '{}', new ZodError([]) as never, 1)).status,
       ).toBe(422);
       expect(mapOttrixError(new CircuitOpenError('open', 'anthropic', 30_000)).status).toBe(503);
-      expect(mapOttrixError(new BudgetExhaustedError()).status).toBe(429);
+      expect(mapOttrixError(new BudgetExhaustedError('budget exhausted')).status).toBe(429);
       expect(mapOttrixError(new Error('boom')).status).toBe(500);
     });
 
@@ -146,7 +170,10 @@ describe('@ottrix/hono', () => {
 
       const response = await app.request('/fail');
       expect(response.status).toBe(502);
-      expect(((await response.json()) as { error: string }).error).toBe('upstream failed');
+      expect(await response.json()).toEqual({
+        error: 'LLM provider error',
+        code: 'server_error',
+      });
     });
   });
 });

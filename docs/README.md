@@ -126,7 +126,7 @@ npm install ottrix @ottrix/langchain @ottrix/exporter-langfuse @langchain/core
 - [Root README](../README.md) — overview, quick start, architecture
 - [CHANGELOG.md](../CHANGELOG.md) — release history
 - [MIGRATION.md](../MIGRATION.md) — upgrade guide (incl. v2.1 exporter/MCP moves)
-- [examples/](../examples/) — runnable samples
+- [examples/](../examples/) — workflow YAML samples and [HTTP adapter demos](../examples/http-agents/)
 
 ## API reference (HTML)
 

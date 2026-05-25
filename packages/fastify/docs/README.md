@@ -2,7 +2,7 @@
 
 > Part of **[Ottrix](../../../README.md)** — see [package index](../../../docs/README.md) for all `@ottrix/*` packages.
 
-Thin Fastify adapter for Ottrix — plugin, agent routes, hooks, and error mapping.
+Thin Fastify adapter for Ottrix — plugin, agent routes, hooks, and error mapping. Shared HTTP logic lives in **`ottrix/http`**.
 
 Package quick start: [../README.md](../README.md)
 
@@ -16,7 +16,8 @@ Package quick start: [../README.md](../README.md)
 | Prompt injection guard | ✅ | `preHandler` hook (opt-in via `injection`) |
 | HTTP telemetry | ✅ | `onRequest` + `onResponse` spans |
 | SSE streaming | ✅ | `reply.raw` + keepalive |
-| Error mapping | ✅ | `setErrorHandler` via plugin |
+| Error mapping | ✅ | `setErrorHandler` via `mapOttrixError` from `ottrix/http` |
+| Graceful shutdown | ✅ | `onClose` hook flushes telemetry |
 
 ## Not in this package
 

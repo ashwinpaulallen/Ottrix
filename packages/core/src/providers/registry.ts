@@ -10,6 +10,7 @@ import { instrumentProvider } from '../observability/instrument.js';
 import type { Telemetry } from '../observability/telemetry.js';
 import {
   FallbackExecutor,
+  isProviderCircuitOpen,
   normalizeFallbackChain,
   type FallbackChainEntry,
   type FallbackChainInput,
@@ -353,6 +354,17 @@ export class ProviderRegistry implements CompletionProvider {
    */
   isHealthy(name: string): boolean {
     return this.getEntry(name).health.healthy;
+  }
+
+  /** Names of all registered providers (insertion order). */
+  listRegisteredProviders(): string[] {
+    return [...this.providers.keys()];
+  }
+
+  /** Whether a provider's circuit breaker is open. */
+  isCircuitOpen(name: string): boolean {
+    const entry = this.getEntry(name);
+    return isProviderCircuitOpen(entry.sourceProvider);
   }
 
   /**

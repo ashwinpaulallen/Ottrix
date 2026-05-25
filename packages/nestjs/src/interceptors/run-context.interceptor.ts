@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import {
   CallHandler,
   ExecutionContext,
@@ -7,11 +6,12 @@ import {
   NestInterceptor,
   Optional,
 } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { defer, from, lastValueFrom } from 'rxjs';
-import { runWith, type RunContext } from 'ottrix';
+import { defer, Observable } from 'rxjs';
+import { runWith } from 'ottrix';
+import { buildRunContext, type ContextExtractors } from 'ottrix/http';
 import type { RunContextInterceptorOptions } from '../interfaces.js';
 import { OTTRIX_RUN_CONTEXT_OPTIONS } from '../tokens.js';
+import { readHeaders } from '../helpers/read-headers.js';
 
 /** Establishes Ottrix {@link RunContext} for each HTTP request via ALS. */
 @Injectable()
@@ -23,48 +23,25 @@ export class RunContextInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const request = context.switchToHttp().getRequest<
-      Record<string, unknown> & {
-        headers?: Record<string, string | string[] | undefined>;
-      }
-    >();
+    const request = context.switchToHttp().getRequest<{ headers?: Record<string, string | string[] | undefined> }>();
+    const extractors = this.options as Partial<ContextExtractors> | undefined;
+    const runContext = buildRunContext(readHeaders(request.headers ?? {}), extractors);
 
-    const runContext = buildRunContext(request, this.options);
+    return defer(
+      () =>
+        new Observable((subscriber) => {
+          let subscription: { unsubscribe: () => void } | undefined;
 
-    return defer(() => from(runWith(runContext, () => lastValueFrom(next.handle()))));
+          void runWith(runContext, () => {
+            subscription = next.handle().subscribe({
+              next: (value) => subscriber.next(value),
+              error: (error) => subscriber.error(error),
+              complete: () => subscriber.complete(),
+            });
+          });
+
+          return () => subscription?.unsubscribe();
+        }),
+    );
   }
-}
-
-function buildRunContext(
-  request: Record<string, unknown> & {
-    headers?: Record<string, string | string[] | undefined>;
-  },
-  options?: RunContextInterceptorOptions,
-): RunContext {
-  const headers = request.headers ?? {};
-  const runId = readHeader(headers, 'x-request-id') ?? randomUUID();
-  const ctx: RunContext & { orgId?: string; userId?: string } = { runId };
-
-  const orgId = options?.orgId?.(request) ?? readHeader(headers, 'x-org-id');
-  if (orgId) {
-    ctx.orgId = orgId;
-  }
-
-  const userId = options?.userId?.(request) ?? readHeader(headers, 'x-user-id');
-  if (userId) {
-    ctx.userId = userId;
-  }
-
-  return ctx;
-}
-
-function readHeader(
-  headers: Record<string, string | string[] | undefined>,
-  name: string,
-): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()];
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
 }

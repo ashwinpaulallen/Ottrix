@@ -1,6 +1,13 @@
-import { randomUUID } from 'node:crypto';
 import { createMiddleware } from 'hono/factory';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
+import {
+  buildRunContext,
+  corsHeaders,
+  extractMessage,
+  isStreamInjectionRequest,
+  scanMessageForInjection,
+  type ContextExtractors,
+} from 'ottrix/http';
 import {
   getTelemetry,
   PromptInjectionGuardrail,
@@ -8,10 +15,11 @@ import {
   type InjectionDetection,
   type RunContext,
 } from 'ottrix';
+import { readHeaders, readRequestBody } from './helpers.js';
 
 /** Hono context variables used by Ottrix middleware. */
 export type OttrixVariables = {
-  ottrixBody?: Record<string, unknown>;
+  ottrixContext?: RunContext;
   ottrixInjection?: InjectionDetection;
 };
 
@@ -19,10 +27,7 @@ export type OttrixVariables = {
 export type OttrixEnv = { Variables: OttrixVariables };
 
 /** Options for {@link ottrixContext}. */
-export interface OttrixContextOptions {
-  orgId?: (c: Context) => string | undefined;
-  userId?: (c: Context) => string | undefined;
-}
+export type OttrixContextOptions = Partial<ContextExtractors>;
 
 /** Options for {@link ottrixInjection}. */
 export interface OttrixInjectionOptions {
@@ -40,39 +45,57 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH']);
 /** Establishes Ottrix {@link RunContext} for each request via AsyncLocalStorage. */
 export function ottrixContext(options?: OttrixContextOptions): MiddlewareHandler {
   return createMiddleware<OttrixEnv>(async (c, next) => {
-    const ctx = buildRunContext(c, options);
+    const ctx = buildRunContext(readHeaders(c), options);
+    c.set('ottrixContext', ctx);
     return runWith(ctx, () => next());
   });
 }
 
-/** Scans mutating JSON bodies for prompt injection. */
+/** Sets CORS headers on every response. */
+export function corsMiddleware(): MiddlewareHandler {
+  return createMiddleware(async (c, next) => {
+    const origin = c.req.header('origin');
+    for (const [key, value] of Object.entries(corsHeaders(origin))) {
+      c.header(key, value);
+    }
+    await next();
+  });
+}
+
+/** Scans POST bodies and GET `/stream?message=` for prompt injection. */
 export function ottrixInjection(options?: OttrixInjectionOptions): MiddlewareHandler {
   const mode = options?.mode ?? 'block';
   const bodyField = options?.bodyField ?? 'message';
   const guardrail = new PromptInjectionGuardrail({ mode });
 
   return createMiddleware<OttrixEnv>(async (c, next) => {
-    if (!MUTATING_METHODS.has(c.req.method)) {
+    let message: string | undefined;
+
+    if (MUTATING_METHODS.has(c.req.method)) {
+      const parsed = extractMessage(await readRequestBody(c), bodyField);
+      if (!parsed.ok) {
+        return next();
+      }
+      message = parsed.message;
+    } else if (isStreamInjectionRequest(c.req.method, c.req.path)) {
+      const parsed = extractMessage({ [bodyField]: c.req.query(bodyField) }, bodyField);
+      if (!parsed.ok) {
+        return next();
+      }
+      message = parsed.message;
+    } else {
       return next();
     }
 
-    const body = await readJsonBody(c);
-    const message = body[bodyField];
-    if (typeof message !== 'string' || message.length === 0) {
+    const scan = await scanMessageForInjection(message, { mode, guardrail });
+    if (scan.allowed) {
+      if (scan.flagged) {
+        c.set('ottrixInjection', scan.flagged);
+      }
       return next();
     }
 
-    const detection = await guardrail.checkInput(message);
-    if (!detection.detected) {
-      return next();
-    }
-
-    if (mode === 'flag') {
-      c.set('ottrixInjection', detection);
-      return next();
-    }
-
-    return c.json({ error: 'Blocked' }, 403);
+    return c.json(scan.body, scan.status as 403);
   });
 }
 
@@ -93,40 +116,4 @@ export function ottrixTelemetry(_options?: OttrixTelemetryOptions): MiddlewareHa
     span.setStatus(c.res.status >= 400 ? 'error' : 'ok');
     span.end();
   });
-}
-
-function buildRunContext(c: Context, options?: OttrixContextOptions): RunContext {
-  const runId = c.req.header('x-request-id') ?? randomUUID();
-  const orgId = options?.orgId?.(c) ?? c.req.header('x-org-id');
-  const userId = options?.userId?.(c) ?? c.req.header('x-user-id');
-
-  return {
-    runId,
-    ...(orgId ? { orgId } : {}),
-    ...(userId ? { userId } : {}),
-  } as RunContext;
-}
-
-async function readJsonBody(c: Context<OttrixEnv>): Promise<Record<string, unknown>> {
-  const cached = c.var.ottrixBody;
-  if (cached) {
-    return cached;
-  }
-
-  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
-  c.set('ottrixBody', body);
-  return body;
-}
-
-/** Read JSON body, reusing cache from {@link ottrixInjection} when present. */
-export async function readAgentMessageBody(
-  c: Context<OttrixEnv>,
-  bodyField = 'message',
-): Promise<{ message?: string; body: Record<string, unknown> }> {
-  const body = await readJsonBody(c);
-  const message = body[bodyField];
-  return {
-    body,
-    message: typeof message === 'string' ? message : undefined,
-  };
 }

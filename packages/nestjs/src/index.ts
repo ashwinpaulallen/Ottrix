@@ -29,6 +29,7 @@ export {
   OTTRIX_PROVIDER_REGISTRY,
   OTTRIX_PROVIDER_NAMES,
   OTTRIX_RUN_CONTEXT_OPTIONS,
+  OTTRIX_HTTP_OPTIONS,
   OTTRIX_INJECTION_GUARD_OPTIONS,
   agentToken,
   providerToken,
@@ -54,3 +55,9 @@ export {
   OttrixHealthCheckError,
   type OttrixHealthIndicatorResult,
 } from './health/ottrix.health.js';
+
+export { OttrixExceptionFilter } from './filters/ottrix-exception.filter.js';
+
+export { OttrixController, createOttrixController } from './controllers/ottrix.controller.js';
+
+export { mapOttrixError } from 'ottrix/http';

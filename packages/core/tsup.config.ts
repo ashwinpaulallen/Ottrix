@@ -20,6 +20,8 @@ export default defineConfig({
     'evals/index': 'src/evals/index.ts',
     'observability/exporters/index': 'src/observability/exporters/index.ts',
     'observability/exporters/webhook': 'src/observability/exporters/webhook.ts',
+    'http/index': 'src/http/index.ts',
+    'testing/index': 'src/testing/index.ts',
   },
   format: ['esm', 'cjs'],
   platform: 'node',
@@ -35,4 +37,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   outDir: 'dist',
+  external: ['vitest', 'zod', 'ottrix'],
 });

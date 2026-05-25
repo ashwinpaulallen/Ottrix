@@ -3,12 +3,10 @@ export {
   runContextMiddleware,
   telemetryMiddleware,
   injectionMiddleware,
-  budgetMiddleware,
   type RunContextMiddlewareOptions,
   type TelemetryMiddlewareOptions,
   type InjectionMiddlewareOptions,
-  type BudgetMiddlewareOptions,
 } from './middleware.js';
-export { sendAgentStream, setSseHeaders, writeSseEvent } from './sse.js';
-export { ottrixErrorHandler, BudgetExhaustedError } from './errors.js';
+export { ottrixErrorHandler } from './errors.js';
+export { gracefulShutdown, type GracefulShutdownOptions } from './shutdown.js';
 import './types.js';

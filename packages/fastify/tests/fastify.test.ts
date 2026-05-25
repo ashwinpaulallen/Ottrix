@@ -9,8 +9,8 @@ import {
   resetGlobalObservability,
   StructuredOutputError,
 } from 'ottrix';
+import { BudgetExhaustedError, mapOttrixError } from 'ottrix/http';
 import { agentRoutes, ottrixPlugin } from '../src/index.js';
-import { BudgetExhaustedError, mapOttrixError } from '../src/errors.js';
 
 const MOCK_RESULT: AgentResult = {
   response: 'hello from agent',
@@ -23,7 +23,7 @@ function createMockAgent(overrides: Partial<Agent> = {}): Agent {
   return {
     run: vi.fn().mockResolvedValue(MOCK_RESULT),
     stream: vi.fn().mockImplementation(async function* () {
-      yield { type: 'text', data: 'partial' } satisfies AgentEvent;
+      yield { type: 'text', data: { text: 'partial' } } satisfies AgentEvent;
       yield { type: 'done', data: { stopReason: 'completed' } } satisfies AgentEvent;
     }),
     getName: () => 'test-agent',
@@ -99,7 +99,8 @@ describe('@ottrix/fastify', () => {
   describe('agentRoutes', () => {
     it('POST returns agent response', async () => {
       const agent = createMockAgent();
-      await app.register(agentRoutes, { prefix: '/chat', agent });
+      await app.register(ottrixPlugin, { telemetry: false });
+      await app.register(agentRoutes, { prefix: '/chat', agent, cors: false, healthCheck: false });
 
       const response = await app.inject({
         method: 'POST',
@@ -114,7 +115,8 @@ describe('@ottrix/fastify', () => {
 
     it('GET /stream returns SSE events', async () => {
       const agent = createMockAgent();
-      await app.register(agentRoutes, { prefix: '/chat', agent });
+      await app.register(ottrixPlugin, { telemetry: false });
+      await app.register(agentRoutes, { prefix: '/chat', agent, cors: false, healthCheck: false });
 
       const response = await app.inject({
         method: 'GET',
@@ -124,7 +126,7 @@ describe('@ottrix/fastify', () => {
       expect(response.statusCode).toBe(200);
       expect(response.headers['content-type']).toContain('text/event-stream');
       expect(response.body).toContain('event: text\n');
-      expect(response.body).toContain('data: "partial"');
+      expect(response.body).toContain('{"text":"partial"}');
       expect(response.body).toContain('event: done\n');
       expect(agent.stream).toHaveBeenCalledWith('stream me');
     });
@@ -132,7 +134,7 @@ describe('@ottrix/fastify', () => {
 
   describe('runContext hook', () => {
     it('sets RunContext visible via getRunContext()', async () => {
-      await app.register(ottrixPlugin, { runContext: true });
+      await app.register(ottrixPlugin, { runContext: true, telemetry: false });
       app.get('/ctx', async () => {
         const ctx = getRunContext();
         return { runId: ctx?.runId, orgId: ctx?.orgId };
@@ -155,7 +157,7 @@ describe('@ottrix/fastify', () => {
 
   describe('injection hook', () => {
     it('blocks malicious input', async () => {
-      await app.register(ottrixPlugin, { injection: true });
+      await app.register(ottrixPlugin, { injection: 'block', telemetry: false });
       app.post('/chat', async () => ({ ok: true }));
 
       const response = await app.inject({
@@ -167,7 +169,10 @@ describe('@ottrix/fastify', () => {
       });
 
       expect(response.statusCode).toBe(403);
-      expect(response.json().error).toBe('Blocked');
+      expect(response.json()).toEqual({
+        error: 'Request blocked',
+        code: 'injection_detected',
+      });
     });
   });
 
@@ -180,19 +185,22 @@ describe('@ottrix/fastify', () => {
         mapOttrixError(new StructuredOutputError('bad', '{}', new ZodError([]) as never, 1)).status,
       ).toBe(422);
       expect(mapOttrixError(new CircuitOpenError('open', 'anthropic', 30_000)).status).toBe(503);
-      expect(mapOttrixError(new BudgetExhaustedError()).status).toBe(429);
+      expect(mapOttrixError(new BudgetExhaustedError('budget exhausted')).status).toBe(429);
       expect(mapOttrixError(new Error('boom')).status).toBe(500);
     });
 
     it('returns mapped status from plugin error handler', async () => {
-      await app.register(ottrixPlugin, {});
+      await app.register(ottrixPlugin, { telemetry: false });
       app.get('/fail', async () => {
         throw new ProviderError('upstream failed', { code: 'server_error', retryable: true });
       });
 
       const response = await app.inject({ method: 'GET', url: '/fail' });
       expect(response.statusCode).toBe(502);
-      expect(response.json().error).toBe('upstream failed');
+      expect(response.json()).toEqual({
+        error: 'LLM provider error',
+        code: 'server_error',
+      });
     });
   });
 });

@@ -5,8 +5,22 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "ottrix#build": {
+      "dependsOn": [],
+      "outputs": ["dist/**"]
+    },
+    "@ottrix/integration-tests#test": {
+      "dependsOn": [
+        "build",
+        "@ottrix/express#build",
+        "@ottrix/fastify#build",
+        "@ottrix/hono#build",
+        "@ottrix/nestjs#build"
+      ],
+      "outputs": []
+    },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "outputs": []
     },
     "typecheck": {
@@ -19,6 +33,22 @@
     },
     "clean": {
       "cache": false
+    },
+    "ottrix-example-express-agent#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["typecheck-complete"]
+    },
+    "ottrix-example-fastify-agent#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["typecheck-complete"]
+    },
+    "ottrix-example-hono-agent#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["typecheck-complete"]
+    },
+    "ottrix-example-nestjs-agent#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["typecheck-complete"]
     }
   }
 }

@@ -24,7 +24,8 @@
   },
   "packageManager": "npm@10.9.4",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "examples/http-agents/*"
   ],
   "overrides": {
     "@ai-sdk/provider": "3.0.10"

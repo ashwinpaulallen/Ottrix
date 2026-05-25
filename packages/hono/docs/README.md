@@ -2,7 +2,7 @@
 
 > Part of **[Ottrix](../../../README.md)** — see [package index](../../../docs/README.md) for all `@ottrix/*` packages.
 
-Thin Hono adapter for Ottrix — middleware, agent handlers, and error mapping. Edge-compatible (Workers, Deno, Bun, Node).
+Thin Hono adapter for Ottrix — one-call setup, middleware, handlers, and error mapping. Shared HTTP logic lives in **`ottrix/http`**. Edge-compatible (Workers, Deno, Bun, Node).
 
 Package quick start: [../README.md](../README.md)
 
@@ -10,12 +10,14 @@ Package quick start: [../README.md](../README.md)
 
 | Feature | Status | API |
 |---------|--------|-----|
+| One-call setup | ✅ | `ottrix({ agent })` sub-app |
 | Run context ALS | ✅ | `ottrixContext()` |
 | Prompt injection guard | ✅ | `ottrixInjection()` |
 | HTTP telemetry | ✅ | `ottrixTelemetry()` |
 | Agent POST handler | ✅ | `agentHandler(agent)` |
 | Agent SSE handler | ✅ | `agentStreamHandler(agent)` |
-| Error mapping | ✅ | `ottrixErrorHandler()` |
+| Health check | ✅ | `ottrixHealth({ registry })` |
+| Error mapping | ✅ | `ottrixErrorHandler()` via `ottrix/http` |
 
 ## Not in this package
 

@@ -29,6 +29,7 @@ import { InjectionGuard } from './guards/injection.guard.js';
 import { TelemetryInterceptor } from './interceptors/telemetry.interceptor.js';
 import { RunContextInterceptor } from './interceptors/run-context.interceptor.js';
 import { OttrixHealthIndicator } from './health/ottrix.health.js';
+import { createOttrixController } from './controllers/ottrix.controller.js';
 
 const CORE_PROVIDERS = [
   OttrixLifecycleService,
@@ -76,10 +77,19 @@ export class OttrixModule {
 
   /** Register feature-scoped agents from declarative {@link createAgent} config. */
   static forFeature(options: OttrixFeatureOptions): DynamicModule {
+    const controller =
+      options.controller === true
+        ? createOttrixController(options.controllerPath ?? 'chat')
+        : undefined;
+
     return {
       module: OttrixModule,
+      controllers: controller ? [controller] : [],
       providers: createAgentProviders(options),
-      exports: options.agents?.map((agent) => agentToken(agent.name)) ?? [],
+      exports: [
+        ...(options.agents?.map((agent) => agentToken(agent.name)) ?? []),
+        ...(controller ? [controller] : []),
+      ],
     };
   }
 }

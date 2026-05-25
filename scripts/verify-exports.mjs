@@ -27,6 +27,8 @@ const SUBPATHS = [
   './observability',
   './agent',
   './evals',
+  './http',
+  './testing',
   './exporters/webhook',
 ];
 

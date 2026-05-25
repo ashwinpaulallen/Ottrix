@@ -69,6 +69,16 @@
       "import": "./dist/evals/index.js",
       "require": "./dist/evals/index.cjs"
     },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "import": "./dist/http/index.js",
+      "require": "./dist/http/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.cjs"
+    },
     "./exporters/*": {
       "types": "./dist/observability/exporters/*.d.ts",
       "import": "./dist/observability/exporters/*.js",

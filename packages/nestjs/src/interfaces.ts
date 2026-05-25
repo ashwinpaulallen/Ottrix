@@ -1,5 +1,6 @@
 import type { ModuleMetadata, Type } from '@nestjs/common';
 import type { AgenticTelemetryConfig, CreateAgentConfig } from 'ottrix';
+import type { ContextExtractors } from 'ottrix/http';
 
 /** Provider configuration for Ottrix LLM backends. */
 export interface OttrixProviderConfig {
@@ -40,6 +41,8 @@ export type OttrixHttpOptions =
       runContext?: boolean | RunContextInterceptorOptions;
       telemetry?: boolean;
       injectionGuard?: boolean | InjectionGuardOptions;
+      /** Enable CORS headers on {@link OttrixController} OPTIONS handler. @defaultValue `true` when `http: true` */
+      cors?: boolean;
     };
 
 /** Root module configuration for {@link OttrixModule.forRoot}. */
@@ -84,13 +87,14 @@ export type AgentDefinition = CreateAgentConfig & { name: string };
 /** Feature-scoped configuration for {@link OttrixModule.forFeature}. */
 export interface OttrixFeatureOptions {
   agents?: AgentDefinition[];
+  /** Register {@link OttrixController} with the feature module. */
+  controller?: boolean;
+  /** Route prefix for {@link OttrixController}. @defaultValue `'chat'` */
+  controllerPath?: string;
 }
 
 /** Options for {@link RunContextInterceptor}. */
-export interface RunContextInterceptorOptions {
-  orgId?: (request: Record<string, unknown>) => string | undefined;
-  userId?: (request: Record<string, unknown>) => string | undefined;
-}
+export type RunContextInterceptorOptions = Partial<ContextExtractors>;
 
 /** Options for {@link InjectionGuard}. */
 export interface InjectionGuardOptions {
@@ -105,4 +109,5 @@ export interface ResolvedOttrixHttpOptions {
   runContext: boolean | RunContextInterceptorOptions;
   telemetry: boolean;
   injectionGuard: boolean | InjectionGuardOptions;
+  cors: boolean;
 }

@@ -16,6 +16,9 @@ export const OTTRIX_PROVIDER_NAMES = Symbol('OTTRIX_PROVIDER_NAMES');
 /** Injection token for {@link RunContextInterceptor} options. */
 export const OTTRIX_RUN_CONTEXT_OPTIONS = Symbol('OTTRIX_RUN_CONTEXT_OPTIONS');
 
+/** Injection token for resolved Ottrix HTTP feature flags. */
+export const OTTRIX_HTTP_OPTIONS = Symbol('OTTRIX_HTTP_OPTIONS');
+
 /** Injection token for {@link InjectionGuard} options. */
 export const OTTRIX_INJECTION_GUARD_OPTIONS = Symbol('OTTRIX_INJECTION_GUARD_OPTIONS');
 

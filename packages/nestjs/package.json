@@ -18,6 +18,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/contract-harness.d.ts",
+      "import": "./dist/testing/contract-harness.js",
+      "require": "./dist/testing/contract-harness.cjs"
     }
   },
   "scripts": {
@@ -70,12 +75,15 @@
   "devDependencies": {
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
     "@nestjs/testing": "^11.1.0",
     "@ottrix/exporter-otel": "*",
     "@types/node": "25.9.0",
+    "@types/supertest": "^7.2.0",
     "ottrix": "*",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "supertest": "^7.2.2",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
     "vitest": "4.1.6"

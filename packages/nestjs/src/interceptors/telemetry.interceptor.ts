@@ -4,8 +4,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { defer, from, lastValueFrom } from 'rxjs';
+import { defer, finalize, Observable } from 'rxjs';
 import { getTelemetry } from 'ottrix';
 
 /** Wraps each HTTP request in an Ottrix telemetry span. */
@@ -26,23 +25,29 @@ export class TelemetryInterceptor implements NestInterceptor {
       'http.route': request.url ?? request.path ?? '/',
     });
 
-    return defer(() =>
-      from(
-        (async () => {
-          try {
-            const result: unknown = await lastValueFrom(next.handle());
-            span.setStatus('ok');
-            return result;
-          } catch (error) {
-            span.setStatus('error', error instanceof Error ? error.message : String(error));
-            throw error;
-          } finally {
-            span.setAttribute('http.status_code', response.statusCode ?? 200);
-            span.setAttribute('http.duration_ms', Date.now() - startedAt);
-            span.end();
-          }
-        })(),
-      ),
+    return defer(
+      () =>
+        new Observable((subscriber) => {
+          const subscription = next.handle().subscribe({
+            next: (value) => subscriber.next(value),
+            error: (error) => {
+              span.setStatus('error', error instanceof Error ? error.message : String(error));
+              subscriber.error(error);
+            },
+            complete: () => {
+              span.setStatus('ok');
+              subscriber.complete();
+            },
+          });
+
+          return () => subscription.unsubscribe();
+        }),
+    ).pipe(
+      finalize(() => {
+        span.setAttribute('http.status_code', response.statusCode ?? 200);
+        span.setAttribute('http.duration_ms', Date.now() - startedAt);
+        span.end();
+      }),
     );
   }
 }

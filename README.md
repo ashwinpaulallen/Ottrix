@@ -20,6 +20,7 @@
 - [Installation](#installation)
 - [Packages](#packages)
 - [Quick start](#quick-start)
+- [Use with your backend](#use-with-your-backend)
 - [Feature examples](#feature-examples)
 - [More examples](#more-examples)
 - [Architecture](#architecture)
@@ -174,6 +175,38 @@ console.log(response);
 ```
 
 Prompt injection protection, PII detection, and step/token budgets are **enabled by default** — no extra configuration required.
+
+---
+
+## Use with your backend
+
+Expose any Ottrix agent over HTTP with one adapter — **same routes, same JSON, same SSE wire format** regardless of framework:
+
+```ts
+import express from 'express';
+import { createAgent } from 'ottrix';
+import { createAgentRouter } from '@ottrix/express';
+
+const app = express();
+app.use(express.json());
+app.use('/chat', createAgentRouter({
+  agent: createAgent({ provider: 'anthropic', systemPrompt: 'You are helpful.' }),
+}));
+app.listen(3000); // POST /chat, GET /chat/stream, GET /chat/health
+```
+
+| Adapter | Install |
+|---------|---------|
+| Express | `@ottrix/express` — [README](packages/express/README.md) |
+| Fastify | `@ottrix/fastify` — [README](packages/fastify/README.md) |
+| Hono | `@ottrix/hono` — [README](packages/hono/README.md) |
+| NestJS | `@ottrix/nestjs` — [README](packages/nestjs/README.md) |
+
+**Compare all four side by side:** [BACKEND_ADAPTERS.md](BACKEND_ADAPTERS.md) (feature matrix, endpoints, SSE/error formats)
+
+**Runnable examples:** [examples/http-agents/](examples/http-agents/) — `cd examples/http-agents/express-agent && ANTHROPIC_API_KEY=sk-... npm start`
+
+---
 
 One-liner helper:
 
@@ -696,7 +729,7 @@ CLI: **`npx ottrix-serve`** — from `@ottrix/mcp-server`.
 | Resource | Link |
 |----------|------|
 | Module docs (code-accurate) | [docs/](docs/README.md) → `packages/*/docs/` |
-| Runnable examples | [examples/](examples/README.md) |
+| Runnable examples | [examples/http-agents/](examples/http-agents/) · [BACKEND_ADAPTERS.md](BACKEND_ADAPTERS.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Migration guide | [MIGRATION.md](MIGRATION.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |

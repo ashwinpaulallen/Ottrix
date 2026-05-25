@@ -1,8 +1,9 @@
+export { ottrix, type OttrixOptions } from './ottrix.js';
 export {
   ottrixContext,
   ottrixInjection,
   ottrixTelemetry,
-  readAgentMessageBody,
+  corsMiddleware,
   type OttrixContextOptions,
   type OttrixInjectionOptions,
   type OttrixTelemetryOptions,
@@ -12,7 +13,9 @@ export {
 export {
   agentHandler,
   agentStreamHandler,
+  ottrixHealth,
   type AgentHandlerOptions,
   type AgentStreamHandlerOptions,
-} from './handler.js';
-export { ottrixErrorHandler, mapOttrixError, BudgetExhaustedError } from './errors.js';
+  type OttrixHealthOptions,
+} from './handlers.js';
+export { ottrixErrorHandler, mapOttrixError } from './errors.js';
