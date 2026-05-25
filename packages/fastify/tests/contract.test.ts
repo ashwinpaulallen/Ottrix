@@ -79,7 +79,7 @@ runAdapterContractTests({
           method: method as 'GET' | 'POST' | 'OPTIONS',
           url: path,
           headers: opts?.headers,
-          payload: opts?.body,
+          payload: opts?.body as object | string | undefined,
         });
 
         return {

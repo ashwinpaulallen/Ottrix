@@ -113,7 +113,7 @@ export async function createExpressHarness(options: HarnessOptions): Promise<Ada
           req = req.set(key, value);
         }
       }
-      if (opts?.body !== undefined) {
+      if (opts?.body !== undefined && opts.body !== null) {
         req = req.send(opts.body);
       }
       const res = await req;
@@ -158,7 +158,7 @@ export async function createFastifyHarness(options: HarnessOptions): Promise<Ada
         method: method as 'GET' | 'POST' | 'OPTIONS',
         url: path,
         headers: opts?.headers,
-        payload: opts?.body,
+        payload: opts?.body as object | string | undefined,
       });
 
       return {

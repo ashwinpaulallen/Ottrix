@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { defer, Observable } from 'rxjs';
 import { runWith } from 'ottrix';
-import { buildRunContext, type ContextExtractors } from 'ottrix/http';
+import { buildRunContext } from 'ottrix/http';
 import type { RunContextInterceptorOptions } from '../interfaces.js';
 import { OTTRIX_RUN_CONTEXT_OPTIONS } from '../tokens.js';
 import { readHeaders } from '../helpers/read-headers.js';
@@ -24,7 +24,7 @@ export class RunContextInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<{ headers?: Record<string, string | string[] | undefined> }>();
-    const extractors = this.options as Partial<ContextExtractors> | undefined;
+    const extractors = this.options;
     const runContext = buildRunContext(readHeaders(request.headers ?? {}), extractors);
 
     return defer(

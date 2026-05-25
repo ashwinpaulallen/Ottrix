@@ -13,15 +13,16 @@ export function gracefulShutdown(server: Server, options: GracefulShutdownOption
   const timeoutMs = options.timeout ?? 10_000;
   let shuttingDown = false;
 
-  const shutdown = (signal: string) => {
+  const shutdown = (_signal: string) => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
 
-    server.close(async () => {
-      await options.onShutdown?.();
-      process.exit(0);
+    server.close(() => {
+      void Promise.resolve(options.onShutdown?.()).then(() => {
+        process.exit(0);
+      });
     });
 
     setTimeout(() => {

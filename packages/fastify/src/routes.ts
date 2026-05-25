@@ -65,14 +65,10 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (fastif
       reply.send(result);
     };
 
-    try {
-      if (request.ottrixContext) {
-        await runWith(request.ottrixContext, execute);
-      } else {
-        await execute();
-      }
-    } catch (error) {
-      throw error;
+    if (request.ottrixContext) {
+      await runWith(request.ottrixContext, execute);
+    } else {
+      await execute();
     }
   });
 

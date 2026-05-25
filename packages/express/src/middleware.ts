@@ -10,7 +10,6 @@ import {
   getTelemetry,
   PromptInjectionGuardrail,
   runWith,
-  type InjectionDetection,
 } from 'ottrix';
 import './types.js';
 

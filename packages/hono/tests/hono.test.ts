@@ -58,7 +58,8 @@ describe('@ottrix/hono', () => {
         body: JSON.stringify({ message: 'hi' }),
       });
       expect(post.status).toBe(200);
-      expect((await post.json()).response).toBe('hello from agent');
+      const payload = (await post.json()) as { response?: string };
+      expect(payload.response).toBe('hello from agent');
 
       const stream = await app.request('/chat/stream?message=stream%20me');
       expect(stream.status).toBe(200);

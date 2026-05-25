@@ -494,12 +494,14 @@ export function runAdapterContractTests(config: AdapterTestConfig): void {
           const result = await harness.request('GET', HEALTH_PATH);
 
           expect(result.status).toBe(200);
-          expect(result.body).toMatchObject({
-            status: expect.any(String),
-            providers: expect.any(Object),
-            uptime: expect.any(Number),
-            timestamp: expect.any(String),
-          });
+          if (!result.body || typeof result.body !== 'object') {
+            throw new Error('Expected health check body object');
+          }
+          const body = result.body as Record<string, unknown>;
+          expect(typeof body.status).toBe('string');
+          expect(body.providers).toEqual(expect.any(Object));
+          expect(typeof body.uptime).toBe('number');
+          expect(typeof body.timestamp).toBe('string');
         } finally {
           await harness.close();
         }
@@ -508,17 +510,25 @@ export function runAdapterContractTests(config: AdapterTestConfig): void {
   });
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 function errorMessage(body: unknown): string {
-  if (body && typeof body === 'object' && 'error' in body) {
-    return String((body as { error: unknown }).error);
+  if (isObject(body) && 'error' in body) {
+    const error = body.error;
+    return typeof error === 'string' ? error : JSON.stringify(error);
   }
   return '';
 }
 
 function responseText(body: unknown): string | undefined {
-  if (body && typeof body === 'object' && 'response' in body) {
-    const value = (body as { response: unknown }).response;
-    return value === undefined ? undefined : String(value);
+  if (isObject(body) && 'response' in body) {
+    const value = body.response;
+    if (value === undefined) {
+      return undefined;
+    }
+    return typeof value === 'string' ? value : JSON.stringify(value);
   }
   return undefined;
 }

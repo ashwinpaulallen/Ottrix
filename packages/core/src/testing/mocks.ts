@@ -1,5 +1,5 @@
 import type { Agent } from '../agent/agent.js';
-import type { RunContext } from '../context/run-context.js';
+import { getRunContext, type RunContext } from '../context/run-context.js';
 import type { AgentEvent, AgentResult, AgentRunMetadata } from '../types/agent.js';
 import { BaseProvider, type BaseProviderConfig } from '../providers/base.js';
 import type { ChatMessage } from '../types/messages.js';
@@ -75,16 +75,16 @@ class MockAgentImpl {
     return this.lastRunContext;
   }
 
-  async run(_input: string): Promise<AgentResult<AgentRunMetadata>> {
-    await this.captureContext();
+  run(_input: string): Promise<AgentResult<AgentRunMetadata>> {
+    this.captureContext();
     if (this.error) {
-      throw this.error;
+      return Promise.reject(this.error);
     }
-    return this.runResponse;
+    return Promise.resolve(this.runResponse);
   }
 
   async *stream(_input: string): AsyncIterable<AgentEvent> {
-    await this.captureContext();
+    this.captureContext();
     if (this.error) {
       throw this.error;
     }
@@ -97,11 +97,8 @@ class MockAgentImpl {
     }
   }
 
-  private async captureContext(): Promise<void> {
-    const ottrix = (await import('ottrix' as string)) as {
-      getRunContext: () => RunContext | undefined;
-    };
-    this.lastRunContext = ottrix.getRunContext();
+  private captureContext(): void {
+    this.lastRunContext = getRunContext();
   }
 }
 
@@ -115,23 +112,26 @@ class HealthyMockProvider extends BaseProvider {
     super(config);
   }
 
-  protected async _rawComplete(): Promise<CompletionResult> {
-    return ensureCompletionLatency({
-      content: [{ type: 'text', text: 'ok' }],
-      model: this.config.defaultModel,
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      stopReason: 'stop',
-    });
+  protected _rawComplete(): Promise<CompletionResult> {
+    return Promise.resolve(
+      ensureCompletionLatency({
+        content: [{ type: 'text', text: 'ok' }],
+        model: this.config.defaultModel,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        stopReason: 'stop',
+      }),
+    );
   }
 
   protected _rawStream(): AsyncIterable<StreamChunk> {
     return (async function* () {
+      await Promise.resolve();
       yield { type: 'done', data: { stopReason: 'stop' } };
     })();
   }
 
-  protected async _countTokens(_messages: ChatMessage[]): Promise<number> {
-    return 1;
+  protected _countTokens(_messages: ChatMessage[]): Promise<number> {
+    return Promise.resolve(1);
   }
 }
 
@@ -140,23 +140,28 @@ class DownMockProvider extends BaseProvider {
     super(config);
   }
 
-  protected async _rawComplete(): Promise<CompletionResult> {
-    return ensureCompletionLatency({
-      content: [{ type: 'text', text: 'ok' }],
-      model: this.config.defaultModel,
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      stopReason: 'stop',
-    });
+  protected _rawComplete(): Promise<CompletionResult> {
+    return Promise.resolve(
+      ensureCompletionLatency({
+        content: [{ type: 'text', text: 'ok' }],
+        model: this.config.defaultModel,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        stopReason: 'stop',
+      }),
+    );
   }
 
   protected _rawStream(): AsyncIterable<StreamChunk> {
     return (async function* () {
+      await Promise.resolve();
       yield { type: 'done', data: { stopReason: 'stop' } };
     })();
   }
 
-  protected async _countTokens(_messages: ChatMessage[]): Promise<number> {
-    throw new ProviderError('provider down', { code: 'server_error', retryable: true });
+  protected _countTokens(_messages: ChatMessage[]): Promise<number> {
+    return Promise.reject(
+      new ProviderError('provider down', { code: 'server_error', retryable: true }),
+    );
   }
 }
 

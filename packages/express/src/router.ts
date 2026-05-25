@@ -204,10 +204,13 @@ function readRequestBody(req: Request): unknown {
     return undefined;
   }
 
-  if (typeof req.body === 'object' && !Array.isArray(req.body) && Object.keys(req.body).length === 0) {
-    const contentType = req.headers['content-type'];
-    if (!contentType || !contentType.includes('application/json')) {
-      return undefined;
+  if (typeof req.body === 'object' && !Array.isArray(req.body)) {
+    const body = req.body as Record<string, unknown>;
+    if (Object.keys(body).length === 0) {
+      const contentType = req.headers['content-type'];
+      if (!contentType || !contentType.includes('application/json')) {
+        return undefined;
+      }
     }
   }
 

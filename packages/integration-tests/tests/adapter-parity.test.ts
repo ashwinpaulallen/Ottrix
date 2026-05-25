@@ -53,7 +53,10 @@ function errorCode(body: unknown): string {
 function responseText(body: unknown): string | undefined {
   if (body && typeof body === 'object' && 'response' in body) {
     const value = (body as { response: unknown }).response;
-    return value === undefined ? undefined : String(value);
+    if (value === undefined) {
+      return undefined;
+    }
+    return typeof value === 'string' ? value : JSON.stringify(value);
   }
   return undefined;
 }

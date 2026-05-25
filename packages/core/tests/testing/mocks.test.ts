@@ -42,8 +42,8 @@ describe('createMockAgent', () => {
     const agent = createMockAgent({ error: new Error('stream failed') });
 
     await expect(async () => {
-      for await (const _event of agent.stream('hello')) {
-        // drain
+      for await (const chunk of agent.stream('hello')) {
+        void chunk;
       }
     }).rejects.toThrow('stream failed');
   });

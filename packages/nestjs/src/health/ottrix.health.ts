@@ -1,15 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ProviderRegistry } from 'ottrix';
-import { checkHealth } from 'ottrix/http';
+import { checkHealth, type HealthCheckResult } from 'ottrix/http';
 import { OTTRIX_PROVIDER_REGISTRY } from '../tokens.js';
 
-/** Health check result compatible with @nestjs/terminus. */
-export interface OttrixHealthIndicatorResult {
-  [key: string]: {
-    status: 'up' | 'down';
-    [meta: string]: unknown;
-  };
+/** Single entry in an {@link OttrixHealthIndicatorResult}. */
+export interface OttrixHealthIndicatorEntry {
+  status: 'up' | 'down';
+  check: HealthCheckResult;
 }
+
+/** Health check result compatible with @nestjs/terminus. */
+export type OttrixHealthIndicatorResult = Record<string, OttrixHealthIndicatorEntry>;
 
 /**
  * Ottrix health indicator backed by {@link checkHealth} from `ottrix/http`.

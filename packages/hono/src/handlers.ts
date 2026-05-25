@@ -73,16 +73,16 @@ export function agentStreamHandler(
     return stream(c, async (streamWriter) => {
       let closed = false;
       const firstKeepaliveMs = Math.min(100, KEEPALIVE_INTERVAL_MS);
-      const firstKeepaliveTimer = setTimeout(async () => {
+      const firstKeepaliveTimer = setTimeout(() => {
         if (!closed) {
-          await streamWriter.write(formatSseComment('keepalive'));
+          void streamWriter.write(formatSseComment('keepalive'));
         }
       }, firstKeepaliveMs);
       firstKeepaliveTimer.unref?.();
 
-      const keepaliveTimer = setInterval(async () => {
+      const keepaliveTimer = setInterval(() => {
         if (!closed) {
-          await streamWriter.write(formatSseComment('keepalive'));
+          void streamWriter.write(formatSseComment('keepalive'));
         }
       }, KEEPALIVE_INTERVAL_MS);
       keepaliveTimer.unref?.();

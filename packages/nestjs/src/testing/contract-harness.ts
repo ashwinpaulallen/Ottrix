@@ -14,12 +14,12 @@ import {
   Res,
   Sse,
   UseFilters,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { NestFactory } from '@nestjs/core';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
+import type { Server } from 'node:http';
 import type { Request, Response } from 'express';
 import type { Observable } from 'rxjs';
 import request from 'supertest';
@@ -216,10 +216,11 @@ export async function createContractHarness(
   const ContractAppModule = buildContractModule(options);
   const app = await NestFactory.create(ContractAppModule, { logger: false });
   await app.init();
+  const httpServer = app.getHttpServer() as Server;
 
   return {
     request: async (method, path, opts) => {
-      let req = request(app.getHttpServer())[method.toLowerCase() as 'get' | 'post' | 'options'](path);
+      let req = request(httpServer)[method.toLowerCase() as 'get' | 'post' | 'options'](path);
       if (opts?.headers) {
         for (const [key, value] of Object.entries(opts.headers)) {
           req = req.set(key, value);
@@ -232,11 +233,11 @@ export async function createContractHarness(
       return {
         status: res.status,
         body: parseJsonBody(res.text),
-        headers: res.headers as Record<string, string>,
+        headers: res.headers,
       };
     },
     requestSse: async (path, query) => {
-      let req = request(app.getHttpServer()).get(path);
+      let req = request(httpServer).get(path);
       if (query) {
         req = req.query(query);
       }

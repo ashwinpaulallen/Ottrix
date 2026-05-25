@@ -28,7 +28,7 @@ export async function readRequestBody(c: Context): Promise<unknown> {
       typeof body === 'object' &&
       body !== null &&
       !Array.isArray(body) &&
-      Object.keys(body).length === 0 &&
+      Object.keys(body as Record<string, unknown>).length === 0 &&
       !contentType?.includes('application/json')
     ) {
       return undefined;
