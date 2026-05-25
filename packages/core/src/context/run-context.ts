@@ -48,7 +48,21 @@ export namespace RunContext {
   }
 }
 
-const runContextStorage = new AsyncLocalStorage<RunContext>();
+const runContextStorageKey = Symbol.for('ottrix.runContextStorage');
+
+type RunContextGlobal = typeof globalThis & {
+  [runContextStorageKey]?: AsyncLocalStorage<RunContext>;
+};
+
+function getRunContextStorage(): AsyncLocalStorage<RunContext> {
+  const globalScope = globalThis as RunContextGlobal;
+  if (!globalScope[runContextStorageKey]) {
+    globalScope[runContextStorageKey] = new AsyncLocalStorage<RunContext>();
+  }
+  return globalScope[runContextStorageKey];
+}
+
+const runContextStorage = getRunContextStorage();
 
 function mergeContexts(outer: RunContext | undefined, inner: RunContext): RunContext {
   return Object.freeze({ ...outer, ...inner });

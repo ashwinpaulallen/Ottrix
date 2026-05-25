@@ -7,15 +7,16 @@ export type {
   OttrixOptionsFactory,
   OttrixProviderConfig,
   OttrixTelemetryConfig,
-  OttrixGuardrailsConfig,
+  OttrixOtelConfig,
+  OttrixHttpOptions,
+  ResolvedOttrixHttpOptions,
   AgentDefinition,
-  ToolDefinition,
-  WorkflowDefinition,
+  RunContextInterceptorOptions,
+  InjectionGuardOptions,
 } from './interfaces.js';
 
 export {
   InjectAgent,
-  InjectWorkflow,
   InjectProvider,
   InjectToolRegistry,
   InjectTelemetry,
@@ -26,30 +27,37 @@ export {
   OTTRIX_TOOL_REGISTRY,
   OTTRIX_TELEMETRY,
   OTTRIX_PROVIDER_REGISTRY,
-  OTTRIX_GUARDRAIL_SERVICE,
-  OTTRIX_RUN_CONTEXT,
-  OTTRIX_MCP_REGISTRY,
+  OTTRIX_PROVIDER_NAMES,
+  OTTRIX_RUN_CONTEXT_OPTIONS,
+  OTTRIX_HTTP_OPTIONS,
+  OTTRIX_INJECTION_GUARD_OPTIONS,
   agentToken,
-  workflowToken,
   providerToken,
 } from './tokens.js';
 
-export { ProviderRegistryService } from './services/provider-registry.service.js';
-export { TelemetryService } from './services/telemetry.service.js';
-export { ToolRegistryService } from './services/tool-registry.service.js';
-export { RunContextService } from './services/run-context.service.js';
-export { GuardrailService } from './services/guardrail.service.js';
+export { OttrixLifecycleService } from './lifecycle/ottrix-lifecycle.service.js';
+
+export { resolveHttpOptions, createHttpProviders } from './setup/http-providers.js';
 
 export { InjectionGuard } from './guards/injection.guard.js';
-export { BudgetGuard } from './guards/budget.guard.js';
 
 export { TelemetryInterceptor } from './interceptors/telemetry.interceptor.js';
 export { RunContextInterceptor } from './interceptors/run-context.interceptor.js';
 
-export { createSseHandler, type SseMessageEvent, type SseHandlerOptions } from './helpers/sse.js';
+export {
+  createSseStream,
+  type SseMessageEvent,
+  type CreateSseStreamOptions,
+} from './helpers/sse.js';
 
 export {
   OttrixHealthIndicator,
   OttrixHealthCheckError,
   type OttrixHealthIndicatorResult,
 } from './health/ottrix.health.js';
+
+export { OttrixExceptionFilter } from './filters/ottrix-exception.filter.js';
+
+export { OttrixController, createOttrixController } from './controllers/ottrix.controller.js';
+
+export { mapOttrixError } from 'ottrix/http';

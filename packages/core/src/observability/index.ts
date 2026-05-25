@@ -59,8 +59,6 @@ export {
 export { MetricsCollector, type MetricStats, type MetricsCollectorOptions } from './metrics.js';
 
 export {
-  LangfuseExporter,
-  BraintrustExporter,
   WebhookExporter,
   TraceConsoleExporter,
   InMemoryTraceExporter,
@@ -72,7 +70,5 @@ export {
   type TraceExporter,
   type TraceData,
   type SpanData as ExportSpanData,
-  type LangfuseExporterOptions,
-  type BraintrustExporterOptions,
   type WebhookExporterOptions,
 } from './exporters/index.js';

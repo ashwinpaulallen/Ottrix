@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const coreDir = path.join(import.meta.dirname, 'packages/core');
 const nestjsDir = path.join(import.meta.dirname, 'packages/nestjs');
+const integrationTestsDir = path.join(import.meta.dirname, 'packages/integration-tests');
 
 const stubPackageNames = [
   'express',
@@ -14,7 +15,10 @@ const stubPackageNames = [
   'nextjs',
   'vercel-ai',
   'exporter-langfuse',
+  'exporter-braintrust',
   'exporter-otel',
+  'mcp-server',
+  'mastra',
 ] as const;
 
 const stubSrcFiles = stubPackageNames.map((name) => `packages/${name}/src/**/*.ts`);
@@ -76,6 +80,17 @@ export default tseslint.config(
       },
     },
     rules: {
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-construction': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-namespace': 'off',
+      'require-yield': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
@@ -112,6 +127,27 @@ export default tseslint.config(
       '@typescript-eslint/require-await': 'off',
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      'require-yield': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['packages/integration-tests/tests/**/*.ts'],
+    extends: [...tseslint.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        project: './tsconfig.json',
+        tsconfigRootDir: integrationTestsDir,
+      },
+    },
+    rules: {
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
       'require-yield': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },

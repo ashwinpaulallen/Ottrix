@@ -3,7 +3,6 @@ import { Agent } from '../../src/agent/agent.js';
 import { instrumentProvider } from '../../src/observability/instrument.js';
 import {
   InMemoryTraceExporter,
-  LangfuseExporter,
   MultiExporter,
   TraceConsoleExporter,
   WebhookExporter,
@@ -22,15 +21,6 @@ const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
 interface FetchCallInit extends RequestInit {
   body?: RequestInit['body'];
-}
-
-interface LangfuseBatchEvent {
-  type: string;
-  body: Record<string, unknown>;
-}
-
-interface LangfuseIngestionBody {
-  batch: LangfuseBatchEvent[];
 }
 
 interface WebhookPayloadItem {
@@ -86,73 +76,6 @@ function sampleTrace(overrides: Partial<TraceData> = {}): TraceData {
     ...overrides,
   };
 }
-
-describe('LangfuseExporter', () => {
-  it('maps TraceData to Langfuse ingestion format', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
-    const exporter = new LangfuseExporter({
-      publicKey: 'pk',
-      secretKey: 'sk',
-      baseUrl: 'https://langfuse.test',
-      flushIntervalMs: 60_000,
-      batchSize: 1,
-      fetchImpl: fetchMock,
-    });
-
-    await exporter.export(sampleTrace());
-    await exporter.shutdown();
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, FetchCallInit];
-    expect(url).toBe('https://langfuse.test/api/public/ingestion');
-    expect(init.method).toBe('POST');
-    expect((init.headers as Record<string, string>).Authorization).toBe(
-      `Basic ${Buffer.from('pk:sk').toString('base64')}`,
-    );
-
-    const body = parseJsonBody(init.body) as LangfuseIngestionBody;
-    expect(body.batch).toHaveLength(3);
-
-    const traceEvent = body.batch.find((event) => event.type === 'trace-create');
-    expect(traceEvent?.body.id).toBe('trace-1');
-    expect(traceEvent?.body.input).toBe('hello');
-    expect(traceEvent?.body.output).toBe('world');
-
-    const generation = body.batch.find((event) => event.type === 'generation-create');
-    expect(generation?.body.traceId).toBe('trace-1');
-    expect(generation?.body.model).toBe('mock-model');
-    expect(generation?.body.usage).toEqual({
-      promptTokens: 10,
-      completionTokens: 5,
-      totalTokens: 15,
-    });
-    expect((generation?.body.metadata as { ttft_ms: number }).ttft_ms).toBe(12);
-
-    const spanEvent = body.batch.find((event) => event.type === 'span-create');
-    expect(spanEvent?.body.name).toBe('tool.execute');
-  });
-
-  it('flushes buffered traces on interval', async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
-    const exporter = new LangfuseExporter({
-      publicKey: 'pk',
-      secretKey: 'sk',
-      flushIntervalMs: 1_000,
-      batchSize: 100,
-      fetchImpl: fetchMock,
-    });
-
-    await exporter.export(sampleTrace());
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    await exporter.shutdown();
-    vi.useRealTimers();
-  });
-});
 
 describe('WebhookExporter', () => {
   beforeEach(() => {

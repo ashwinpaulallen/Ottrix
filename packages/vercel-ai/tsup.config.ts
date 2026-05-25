@@ -10,4 +10,5 @@ export default defineConfig({
   },
   clean: true,
   sourcemap: true,
+  external: ['ai', '@ai-sdk/provider', 'ottrix', 'zod'],
 });

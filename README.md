@@ -1,6 +1,6 @@
 # Ottrix
 
-**TypeScript framework for building production LLM agents** — ReAct loop, structured output, tool calling, memory, guardrails, observability, evals, multi-agent workflows, and [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) client and server support. Vendor-neutral: Anthropic Claude, OpenAI-compatible APIs, and local Ollama via native `fetch` (no `@anthropic-ai/sdk` or `openai` npm package required).
+**TypeScript framework for building production LLM agents** — ReAct loop, structured output, tool calling, memory, guardrails, observability, evals, multi-agent workflows, and [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) client support (MCP **server** via `@ottrix/mcp-server`). Vendor-neutral: Anthropic Claude, OpenAI-compatible APIs, and local Ollama via native `fetch` (no `@anthropic-ai/sdk` or `openai` npm package required).
 
 [![npm version](https://img.shields.io/npm/v/ottrix.svg)](https://www.npmjs.com/package/ottrix)
 [![CI](https://img.shields.io/github/actions/workflow/status/ashwinpaulallen/ottrix/test.yml?branch=main&logo=githubactions&label=CI)](https://github.com/ashwinpaulallen/ottrix/actions/workflows/test.yml)
@@ -18,7 +18,9 @@
 - [Why Ottrix](#why-ottrix)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Packages](#packages)
 - [Quick start](#quick-start)
+- [Use with your backend](#use-with-your-backend)
 - [Feature examples](#feature-examples)
 - [More examples](#more-examples)
 - [Architecture](#architecture)
@@ -42,11 +44,11 @@ Use **Ottrix** when you need a **small, explicit TypeScript library** to run LLM
 | **ReAct agent loop** | Call the model, execute tools, repeat until a final answer or limit |
 | **Structured output** | Validate final responses with Zod schemas and automatic retries |
 | **Tool calling** | JSON Schema (`FunctionTool`) or Zod (`createTool`) with typed I/O |
-| **MCP** | Connect to external MCP servers **and** host your own via `serveMCP` / `ottrix-serve` |
+| **MCP** | Connect to external MCP servers (core client) **and** host your own via **`@ottrix/mcp-server`** |
 | **Multi-agent workflows** | Sequential, parallel, router, hierarchical, **supervisor**, and **DAG** (with suspend/resume) |
 | **Memory** | Working, semantic (RAG), episodic, and **observational** (LLM fact extraction) |
 | **Guardrails** | PII, **multi-scope budgets (USD)**, content filters, human approval, **AuditEmitter**, prompt injection (default) |
-| **Observability** | Spans, metrics, run replay, exporters for **OTEL**, Langfuse, Braintrust, webhooks |
+| **Observability** | Spans, metrics, run replay; exporters via **`@ottrix/exporter-*`** packages |
 | **NestJS** | **`@ottrix/nestjs`** — DI module, guards, interceptors, SSE, health checks |
 | **Evals** | Run datasets against agents with pluggable scorers and CSV/Markdown reports |
 | **Provider resilience** | Fallback chains and per-provider circuit breakers |
@@ -85,13 +87,73 @@ npm install zod
 
 # Full YAML workflow files (built-in subset parser works without this)
 npm install js-yaml
+
+# Redis/Postgres DAG state stores
+npm install ioredis pg
 ```
+
+**Standalone `@ottrix/*` packages** (MCP server, trace exporters, HTTP adapters, framework bridges) — see [docs/README.md](docs/README.md).
 
 Set your provider key (example for Anthropic):
 
 ```bash
 export ANTHROPIC_API_KEY=your-api-key-here
 ```
+
+---
+
+## Packages
+
+Ottrix is a **monorepo**: a focused **`ottrix`** core plus optional **`@ottrix/*`** packages. Install only what you need.
+
+**Full package index:** [docs/README.md](docs/README.md)
+
+### Core
+
+| Package | Install | Description |
+|---------|---------|-------------|
+| **`ottrix`** | `npm install ottrix` | **v2.1.0** — ReAct agents, providers, tools, MCP client, memory, guardrails, workflows, evals, webhook/console exporters |
+
+Optional peers: `zod`, `js-yaml`, `ioredis`, `pg` — see [Installation](#installation).
+
+### HTTP adapters
+
+| Package | Install | Status |
+|---------|---------|--------|
+| **`@ottrix/nestjs`** | `npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs` | Published — [README](packages/nestjs/README.md) |
+| **`@ottrix/express`** | `npm install @ottrix/express ottrix express` | Implemented — [README](packages/express/README.md) |
+| **`@ottrix/fastify`** | `npm install @ottrix/fastify ottrix fastify` | Implemented — [README](packages/fastify/README.md) |
+| **`@ottrix/hono`** | `npm install @ottrix/hono ottrix hono` | Implemented — [README](packages/hono/README.md) |
+
+### Framework bridges
+
+| Package | Install | Integrates with |
+|---------|---------|-----------------|
+| **`@ottrix/vercel-ai`** | `npm install @ottrix/vercel-ai ottrix ai` | [Vercel AI SDK](https://sdk.vercel.ai/) — [README](packages/vercel-ai/README.md) |
+| **`@ottrix/langchain`** | `npm install @ottrix/langchain ottrix @langchain/core` | [LangChain.js](https://js.langchain.com/) — [README](packages/langchain/README.md) |
+| **`@ottrix/mastra`** | `npm install @ottrix/mastra ottrix @mastra/core` | [Mastra](https://mastra.ai/) — [README](packages/mastra/README.md) |
+
+### Observability exporters
+
+Moved out of core in **v2.1** — register with `getTelemetry().addExporter(...)`. See [MIGRATION.md](MIGRATION.md).
+
+| Package | Install | Destination |
+|---------|---------|-------------|
+| **`@ottrix/exporter-otel`** | `npm install @ottrix/exporter-otel ottrix` | OTLP/HTTP (Jaeger, Tempo, Datadog, …) — [README](packages/exporter-otel/README.md) |
+| **`@ottrix/exporter-langfuse`** | `npm install @ottrix/exporter-langfuse ottrix` | Langfuse — [README](packages/exporter-langfuse/README.md) |
+| **`@ottrix/exporter-braintrust`** | `npm install @ottrix/exporter-braintrust ottrix` | Braintrust — [README](packages/exporter-braintrust/README.md) |
+
+Built into core: `WebhookExporter`, `TraceConsoleExporter`, `MultiExporter` via `ottrix/exporters/webhook` and the main barrel.
+
+### MCP server
+
+| Package | Install | Description |
+|---------|---------|-------------|
+| **`@ottrix/mcp-server`** | `npm install @ottrix/mcp-server ottrix` | Host ottrix tools over MCP (stdio/SSE) + **`npx ottrix-serve`** CLI — [README](packages/mcp-server/README.md) |
+
+Core keeps the MCP **client** (`MCPClient`, `MCPRegistry`) for connecting to external servers.
+
+**Core module docs:** [packages/core/docs/](packages/core/docs/README.md) · **Core README:** [packages/core/README.md](packages/core/README.md)
 
 ---
 
@@ -113,6 +175,38 @@ console.log(response);
 ```
 
 Prompt injection protection, PII detection, and step/token budgets are **enabled by default** — no extra configuration required.
+
+---
+
+## Use with your backend
+
+Expose any Ottrix agent over HTTP with one adapter — **same routes, same JSON, same SSE wire format** regardless of framework:
+
+```ts
+import express from 'express';
+import { createAgent } from 'ottrix';
+import { createAgentRouter } from '@ottrix/express';
+
+const app = express();
+app.use(express.json());
+app.use('/chat', createAgentRouter({
+  agent: createAgent({ provider: 'anthropic', systemPrompt: 'You are helpful.' }),
+}));
+app.listen(3000); // POST /chat, GET /chat/stream, GET /chat/health
+```
+
+| Adapter | Install |
+|---------|---------|
+| Express | `@ottrix/express` — [README](packages/express/README.md) |
+| Fastify | `@ottrix/fastify` — [README](packages/fastify/README.md) |
+| Hono | `@ottrix/hono` — [README](packages/hono/README.md) |
+| NestJS | `@ottrix/nestjs` — [README](packages/nestjs/README.md) |
+
+**Compare all four side by side:** [BACKEND_ADAPTERS.md](BACKEND_ADAPTERS.md) (feature matrix, endpoints, SSE/error formats)
+
+**Runnable examples:** [examples/http-agents/](examples/http-agents/) — `cd examples/http-agents/express-agent && ANTHROPIC_API_KEY=sk-... npm start`
+
+---
 
 One-liner helper:
 
@@ -172,17 +266,18 @@ await registry.complete({ messages: [{ role: 'user', content: 'Hello' }] });
 
 ### MCP server
 
-Expose tools (and optionally an agent) to external MCP clients:
+Install `@ottrix/mcp-server` — the MCP **client** stays in `ottrix`.
 
 ```ts
-import { serveMCP, ToolRegistry } from 'ottrix/mcp-server';
+import { serveMCP } from '@ottrix/mcp-server';
+import { ToolRegistry } from 'ottrix';
 
 const registry = new ToolRegistry();
 registry.register(myTool);
 await serveMCP({ name: 'my-tools', version: '1.0.0', toolRegistry: registry, transport: 'stdio' });
 ```
 
-CLI: `npx ottrix-serve --transport stdio`
+CLI: `npx ottrix-serve --transport stdio` (requires `@ottrix/mcp-server`)
 
 ### Supervisor pattern
 
@@ -238,10 +333,10 @@ console.log(report.aggregates.exact_match?.mean);
 ### Observability (Langfuse)
 
 ```ts
-import { getTelemetry, LangfuseExporter } from 'ottrix';
-// or: import { LangfuseExporter } from 'ottrix/exporters/langfuse';
+import { getTelemetry } from 'ottrix';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
 
-getTelemetry().setExporter(
+getTelemetry().addExporter(
   new LangfuseExporter({
     publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
     secretKey: process.env.LANGFUSE_SECRET_KEY!,
@@ -253,7 +348,7 @@ getTelemetry().setExporter(
 
 ```ts
 import { getTelemetry } from 'ottrix';
-import { createOtelExporter } from 'ottrix/exporters/otel';
+import { createOtelExporter } from '@ottrix/exporter-otel';
 
 getTelemetry().addExporter(
   createOtelExporter('jaeger', { serviceName: 'my-agent' }),
@@ -308,7 +403,7 @@ import { OttrixModule } from '@ottrix/nestjs';
 export class AppModule {}
 ```
 
-See [docs/nestjs.md](docs/nestjs.md).
+See [packages/nestjs/docs/guide.md](packages/nestjs/docs/guide.md).
 
 ### Prompt injection guardrails
 
@@ -516,9 +611,9 @@ Example `.ottrixrc.json` (legacy `.agentkitrc.*` / `.agenticrc.*` are also suppo
 │  Agent — ReAct loop · structured output (Zod) · Planner · Reflector  │
 ├────────────┬─────────────┬──────────────┬─────────────┬────────────┤
 │   Tools    │   Memory    │  Guardrails  │ Observability│   Evals    │
-│  + MCP     │  RAG · epis.│ PII · budget │ Langfuse ·  │  Scorers · │
-│  client &  │  observational│ injection  │ Braintrust  │  reports   │
-│  server    │             │  (default)   │ webhook     │            │
+│  + MCP     │  RAG · epis.│ PII · budget │ @ottrix/    │  Scorers · │
+│  client    │  observational│ injection  │ exporter-*  │  reports   │
+│            │             │  (default)   │ + webhook   │            │
 ├────────────┴─────────────┴──────────────┴─────────────┴────────────┤
 │  Providers — Anthropic · OpenAI · Ollama · fallback chain · breaker  │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -530,22 +625,24 @@ Example `.ottrixrc.json` (legacy `.agentkitrc.*` / `.agenticrc.*` are also suppo
 
 ## Module documentation
 
-Implementation-accurate guides under [`docs/`](docs/README.md):
+Implementation-accurate guides live in each package — index: [docs/README.md](docs/README.md).
 
 | Module | Document | Topics |
 |--------|----------|--------|
-| Agent | [docs/agent.md](docs/agent.md) | ReAct loop, structured output, planner, reflector |
-| Providers | [docs/providers.md](docs/providers.md) | Anthropic, OpenAI, Ollama, fallback chain, circuit breaker |
-| Tools | [docs/tools.md](docs/tools.md) | `FunctionTool`, `createTool`, MCP client/server, tool approval |
-| Memory | [docs/memory.md](docs/memory.md) | Working, semantic, episodic, observational memory |
-| Guardrails | [docs/guardrails.md](docs/guardrails.md) | Middleware, multi-scope budgets, audit emitter, prompt injection |
-| Observability | [docs/observability.md](docs/observability.md) | Telemetry, OTEL exporter, trace exporters, replay |
-| Orchestration | [docs/orchestration.md](docs/orchestration.md) | Workflows, state stores, approval gates, DAG |
-| Run context | [docs/context.md](docs/context.md) | AsyncLocalStorage propagation, `runWith` |
-| NestJS | [docs/nestjs.md](docs/nestjs.md) | `@ottrix/nestjs` adapter |
-| Evals | [docs/evals.md](docs/evals.md) | `evaluate()`, scorers, reports |
-| Configuration | [docs/configuration.md](docs/configuration.md) | `loadConfig`, env vars, `createAgent` |
-| Overview | [docs/overview.md](docs/overview.md) | Package layout, subpath exports |
+| Agent | [packages/core/docs/agent.md](packages/core/docs/agent.md) | ReAct loop, structured output, planner, reflector |
+| Providers | [packages/core/docs/providers.md](packages/core/docs/providers.md) | Anthropic, OpenAI, Ollama, fallback chain, circuit breaker |
+| Tools | [packages/core/docs/tools.md](packages/core/docs/tools.md) | `FunctionTool`, `createTool`, MCP client/server, tool approval |
+| Memory | [packages/core/docs/memory.md](packages/core/docs/memory.md) | Working, semantic, episodic, observational memory |
+| Guardrails | [packages/core/docs/guardrails.md](packages/core/docs/guardrails.md) | Middleware, multi-scope budgets, audit emitter, prompt injection |
+| Observability | [packages/core/docs/observability.md](packages/core/docs/observability.md) | Telemetry, OTEL exporter, trace exporters, replay |
+| Orchestration | [packages/core/docs/orchestration.md](packages/core/docs/orchestration.md) | Workflows, state stores, approval gates, DAG |
+| Run context | [packages/core/docs/context.md](packages/core/docs/context.md) | AsyncLocalStorage propagation, `runWith` |
+| NestJS | [packages/nestjs/docs/guide.md](packages/nestjs/docs/guide.md) | `@ottrix/nestjs` adapter |
+| Framework bridges | [docs/README.md](docs/README.md#framework-bridges) | `@ottrix/vercel-ai`, `@ottrix/langchain`, `@ottrix/mastra` |
+| Trace exporters | [packages/core/docs/observability.md](packages/core/docs/observability.md) | `@ottrix/exporter-*` packages |
+| Evals | [packages/core/docs/evals.md](packages/core/docs/evals.md) | `evaluate()`, scorers, reports |
+| Configuration | [packages/core/docs/configuration.md](packages/core/docs/configuration.md) | `loadConfig`, env vars, `createAgent` |
+| Overview | [packages/core/docs/overview.md](packages/core/docs/overview.md) | Package layout, subpath exports |
 
 Release history: [CHANGELOG.md](CHANGELOG.md) · Upgrade notes: [MIGRATION.md](MIGRATION.md)
 
@@ -559,7 +656,7 @@ Release history: [CHANGELOG.md](CHANGELOG.md) · Upgrade notes: [MIGRATION.md](M
 | OpenAI-compatible | `provider: 'openai'` | `OPENAI_API_KEY` | `gpt-4o` |
 | Ollama (local) | `provider: 'ollama'` | none | `llama3.1` |
 
-Extend any HTTP API with [`BaseProvider`](docs/providers.md):
+Extend any HTTP API with [`BaseProvider`](packages/core/docs/providers.md):
 
 ```ts
 import { BaseProvider } from 'ottrix/providers';
@@ -579,7 +676,7 @@ Common environment variables:
 | `OTTRIX_MAX_STEPS` | Max ReAct iterations (default `10`) |
 | `OTTRIX_CONFIG_PATH` | Path to config JSON/YAML |
 | `OTTRIX_TELEMETRY_ENABLED` | `true` / `false` |
-| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook`, `otel` |
+| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `memory`, `none`, `webhook` (Langfuse/Braintrust/OTel → `@ottrix/exporter-*`) |
 | `ANTHROPIC_API_KEY` | Claude API key |
 | `OPENAI_API_KEY` | OpenAI (or compatible) API key |
 | `OLLAMA_BASE_URL` | Ollama server (default `http://localhost:11434`) |
@@ -592,27 +689,38 @@ Merge order: **defaults → config file → environment → code overrides** (`l
 
 ## Package exports
 
-Tree-shakeable subpath imports:
+### `ottrix` core subpaths
 
 | Import | Use case |
 |--------|----------|
 | `ottrix` | Main API — `Agent`, `createAgent`, evals, guardrails, orchestration |
 | `ottrix/providers` | Provider classes, registry, fallback chain |
-| `ottrix/tools` | Tools, MCP client, `ToolRegistry` |
-| `ottrix/mcp-server` | `MCPServer`, `serveMCP` (lightweight MCP hosting) |
+| `ottrix/tools` | Tools, MCP **client**, `ToolRegistry` |
 | `ottrix/memory` | Memory modules + observational memory |
 | `ottrix/orchestration` | Workflows, supervisor, DAG, `WorkflowLoader` |
 | `ottrix/guardrails` | Middleware and validators |
 | `ottrix/observability` | Logger, telemetry, replay |
 | `ottrix/evals` | `evaluate()`, scorers, `EvalReporter` |
-| `ottrix/exporters/langfuse` | Langfuse trace exporter (also Braintrust, webhook, **otel**) |
-| `ottrix/exporters/otel` | Native OTLP/HTTP OpenTelemetry exporter |
-| `@ottrix/nestjs` | NestJS DI module, guards, interceptors (separate npm package; requires `ottrix` ≥2.0.0) |
+| `ottrix/exporters/webhook` | `WebhookExporter` (built-in) |
 | `ottrix/types` | TypeScript types only |
+
+### Standalone `@ottrix/*` packages
+
+| Package | Use case |
+|---------|----------|
+| `@ottrix/mcp-server` | `serveMCP`, `MCPServer`, `ottrix-serve` CLI |
+| `@ottrix/exporter-otel` | OTLP/HTTP OpenTelemetry export |
+| `@ottrix/exporter-langfuse` | Langfuse trace export |
+| `@ottrix/exporter-braintrust` | Braintrust trace export |
+| `@ottrix/nestjs` | NestJS DI module, guards, interceptors |
+| `@ottrix/express` / `@ottrix/fastify` / `@ottrix/hono` | HTTP server adapters |
+| `@ottrix/vercel-ai` | Vercel AI SDK model & tool bridge |
+| `@ottrix/langchain` | LangChain.js chat model & tools |
+| `@ottrix/mastra` | Mastra model, tools, agent wrapper |
 
 **ESM-first** (`"type": "module"`) with CommonJS builds (`.cjs`) for `require()`.
 
-CLI: **`ottrix-serve`** — host an MCP server from the command line.
+CLI: **`npx ottrix-serve`** — from `@ottrix/mcp-server`.
 
 ---
 
@@ -620,8 +728,8 @@ CLI: **`ottrix-serve`** — host an MCP server from the command line.
 
 | Resource | Link |
 |----------|------|
-| Module docs (code-accurate) | [docs/](docs/README.md) |
-| Runnable examples | [examples/](examples/README.md) |
+| Module docs (code-accurate) | [docs/](docs/README.md) → `packages/*/docs/` |
+| Runnable examples | [examples/http-agents/](examples/http-agents/) · [BACKEND_ADAPTERS.md](BACKEND_ADAPTERS.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Migration guide | [MIGRATION.md](MIGRATION.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |

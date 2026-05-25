@@ -1,41 +1,36 @@
-import { Injectable } from '@nestjs/common';
-import { ProviderRegistryService } from '../services/provider-registry.service.js';
-import { ToolRegistryService } from '../services/tool-registry.service.js';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ProviderRegistry } from 'ottrix';
+import { checkHealth, type HealthCheckResult } from 'ottrix/http';
+import { OTTRIX_PROVIDER_REGISTRY } from '../tokens.js';
 
-/** Health check result compatible with @nestjs/terminus. */
-export interface OttrixHealthIndicatorResult {
-  [key: string]: {
-    status: 'up' | 'down';
-    [meta: string]: unknown;
-  };
+/** Single entry in an {@link OttrixHealthIndicatorResult}. */
+export interface OttrixHealthIndicatorEntry {
+  status: 'up' | 'down';
+  check: HealthCheckResult;
 }
 
+/** Health check result compatible with @nestjs/terminus. */
+export type OttrixHealthIndicatorResult = Record<string, OttrixHealthIndicatorEntry>;
+
 /**
- * Ottrix health indicator for provider connectivity, circuit breakers, and MCP servers.
+ * Ottrix health indicator backed by {@link checkHealth} from `ottrix/http`.
  *
  * Compatible with `@nestjs/terminus` when installed as an optional peer dependency.
  */
 @Injectable()
 export class OttrixHealthIndicator {
   constructor(
-    private readonly providerRegistry: ProviderRegistryService,
-    private readonly toolRegistry: ToolRegistryService,
+    @Inject(OTTRIX_PROVIDER_REGISTRY) private readonly providerRegistry: ProviderRegistry,
   ) {}
 
   /** Run all Ottrix health checks. */
   async check(key = 'ottrix'): Promise<OttrixHealthIndicatorResult> {
-    const providers = await this.providerRegistry.pingProviders();
-    const mcp = this.checkMcpConnections();
-
-    const providerHealthy = Object.values(providers).every((entry) => entry.healthy);
-    const mcpHealthy = Object.values(mcp).every((entry) => entry.connected);
-    const isHealthy = providerHealthy && mcpHealthy;
+    const result = await checkHealth(this.providerRegistry);
 
     return {
       [key]: {
-        status: isHealthy ? 'up' : 'down',
-        providers,
-        mcp,
+        status: result.status === 'healthy' ? 'up' : 'down',
+        check: result,
       },
     };
   }
@@ -47,26 +42,6 @@ export class OttrixHealthIndicator {
       throw new OttrixHealthCheckError('Ottrix health check failed', result);
     }
     return result;
-  }
-
-  private checkMcpConnections(): Record<string, { connected: boolean; state?: string }> {
-    const registry = this.toolRegistry.getMcpRegistry();
-    const results: Record<string, { connected: boolean; state?: string }> = {};
-
-    for (const name of registry.serverNames()) {
-      const provider = registry.getProvider(name);
-      if (!provider) {
-        results[name] = { connected: false, state: 'missing' };
-        continue;
-      }
-      const state = provider.getState();
-      results[name] = {
-        connected: state === 'connected',
-        state,
-      };
-    }
-
-    return results;
   }
 }
 

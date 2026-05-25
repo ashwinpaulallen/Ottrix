@@ -8,6 +8,69 @@ _No breaking changes yet._
 
 ---
 
+## 2.1.0
+
+Release date: 2026-05-25.
+
+### Breaking: exporters and MCP server moved to standalone packages
+
+Heavy integrations are no longer bundled in **`ottrix`**. Install the package you need:
+
+| Removed import | Replacement |
+|----------------|-------------|
+| `ottrix/exporters/langfuse` | `@ottrix/exporter-langfuse` |
+| `ottrix/exporters/braintrust` | `@ottrix/exporter-braintrust` |
+| `ottrix/exporters/otel` | `@ottrix/exporter-otel` |
+| `ottrix/mcp-server` | `@ottrix/mcp-server` |
+| `ottrix-serve` CLI (from `ottrix` bin) | `npx ottrix-serve` from `@ottrix/mcp-server` |
+
+**Before:**
+
+```ts
+import { LangfuseExporter } from 'ottrix/exporters/langfuse';
+import { BraintrustExporter } from 'ottrix/exporters/braintrust';
+import { createOtelExporter } from 'ottrix/exporters/otel';
+import { serveMCP } from 'ottrix/mcp-server';
+```
+
+**After:**
+
+```bash
+npm install @ottrix/exporter-langfuse @ottrix/exporter-braintrust @ottrix/exporter-otel @ottrix/mcp-server
+```
+
+```ts
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
+import { BraintrustExporter } from '@ottrix/exporter-braintrust';
+import { createOtelExporter } from '@ottrix/exporter-otel';
+import { serveMCP } from '@ottrix/mcp-server';
+```
+
+### Still in core
+
+- **MCP client** — `MCPClient`, `MCPRegistry`, `MCPToolProvider` remain on `ottrix` / `ottrix/tools`
+- **Built-in trace exporters** — `TraceConsoleExporter`, `InMemoryTraceExporter`, `WebhookExporter`, `MultiExporter`
+- **Webhook subpath** — `ottrix/exporters/webhook` (unchanged)
+
+### Config-based exporters
+
+`telemetry.exporter: 'langfuse' | 'braintrust'` no longer auto-wires exporters. Ottrix logs a migration hint at startup. Install the standalone package and register manually:
+
+```ts
+import { getTelemetry } from 'ottrix';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
+
+getTelemetry().addExporter(new LangfuseExporter({ /* ... */ }));
+```
+
+### Upgrade
+
+```bash
+npm install ottrix@2.1
+```
+
+---
+
 ## 2.0.0
 
 Release date: 2026-05-23. See [CHANGELOG](CHANGELOG.md) for the full feature list.
@@ -37,14 +100,14 @@ import { OTTRIX_VERSION } from 'ottrix';
 
 | Feature | Doc |
 |---------|-----|
-| Run context (AsyncLocalStorage) | [context.md](docs/context.md) |
-| Tool safety envelope + idempotent execution | [tools.md](docs/tools.md) |
-| Redis/Postgres workflow state stores | [orchestration.md](docs/orchestration.md) |
-| DAG human approval gates | [orchestration.md](docs/orchestration.md) |
-| Native OTEL exporter (`ottrix/exporters/otel`) | [observability.md](docs/observability.md) |
-| Multi-scope budget (USD) + `configureBudgets()` | [guardrails.md](docs/guardrails.md) |
-| `AuditEmitter` SOC2 audit trail | [guardrails.md](docs/guardrails.md) |
-| `@ottrix/nestjs` adapter | [nestjs.md](docs/nestjs.md) |
+| Run context (AsyncLocalStorage) | [packages/core/docs/context.md](packages/core/docs/context.md) |
+| Tool safety envelope + idempotent execution | [packages/core/docs/tools.md](packages/core/docs/tools.md) |
+| Redis/Postgres workflow state stores | [packages/core/docs/orchestration.md](packages/core/docs/orchestration.md) |
+| DAG human approval gates | [packages/core/docs/orchestration.md](packages/core/docs/orchestration.md) |
+| Native OTEL exporter (`@ottrix/exporter-otel`) | [packages/exporter-otel/README.md](packages/exporter-otel/README.md) |
+| Multi-scope budget (USD) + `configureBudgets()` | [packages/core/docs/guardrails.md](packages/core/docs/guardrails.md) |
+| `AuditEmitter` SOC2 audit trail | [packages/core/docs/guardrails.md](packages/core/docs/guardrails.md) |
+| `@ottrix/nestjs` adapter | [packages/nestjs/docs/guide.md](packages/nestjs/docs/guide.md) |
 
 ### Changed behavior
 
@@ -75,13 +138,13 @@ The npm package is now **`ottrix`**. Legacy names remain as deprecated aliases w
 |--------|-------|
 | `npm install agentic-fabric` | `npm install ottrix` |
 | `import { createAgent } from 'agentic-fabric'` | `import { createAgent } from 'ottrix'` |
-| `agentic-serve` CLI | `ottrix-serve` |
+| `agentic-serve` CLI | `ottrix-serve` (from `@ottrix/mcp-server`) |
 | `AGENTIC_FABRIC_VERSION` | `OTTRIX_VERSION` (deprecated: `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, `AGENT_FABRIC_VERSION`) |
 | `AGENTIC_*` env vars | `OTTRIX_*` (legacy `AGENT_KIT_*` and `AGENTIC_*` still read) |
 | `.agenticrc.json` | `.ottrixrc.json` (legacy `.agentkitrc.*` / `.agenticrc.*` still discovered) |
 | GitHub `agentic-fabric` / `agent-kit` | [github.com/ashwinpaulallen/ottrix](https://github.com/ashwinpaulallen/ottrix) |
 
-Subpath imports use the new package name: `ottrix/evals`, `ottrix/mcp-server`, `ottrix/exporters/langfuse`, etc.
+Subpath imports use the new package name: `ottrix/evals`, `@ottrix/mcp-server`, `@ottrix/exporter-langfuse`, etc.
 
 ---
 
@@ -102,7 +165,7 @@ npm install ottrix
 | Structured output | Install optional `zod` peer; pass `outputSchema` to `agent.run()` |
 | Zod tools | Use `createTool` instead of manual JSON Schema |
 | Provider fallback | Configure `ProviderRegistry.setFallbackChain()` |
-| MCP server | Import `ottrix/mcp-server` or use `ottrix-serve` CLI |
+| MCP server | Install `@ottrix/mcp-server` or use `ottrix-serve` CLI |
 | Observational memory | Wire `ObservationalMemory` on `AgentConfig` |
 | Supervisor / DAG | Import from `ottrix/orchestration` |
 | Evals | Import from `ottrix/evals` |
@@ -139,8 +202,8 @@ createAgent({ guardrails: false });
 
 ```ts
 import { evaluate } from 'ottrix/evals';
-import { serveMCP } from 'ottrix/mcp-server';
-import { LangfuseExporter } from 'ottrix/exporters/langfuse';
+import { serveMCP } from '@ottrix/mcp-server';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
 ```
 
 Existing subpaths (`providers`, `tools`, `memory`, `orchestration`, `guardrails`, `observability`) unchanged.
@@ -174,6 +237,6 @@ When upgrading to a new major or minor release:
 1. Read the [CHANGELOG](CHANGELOG.md) for breaking changes.
 2. Run your test suite against the new version.
 3. Check environment variable renames under `OTTRIX_*` in the README.
-4. Review [docs/](README.md) for module-specific behavior.
+4. Review [docs/README.md](docs/README.md) and `packages/*/docs/` for module-specific behavior.
 
 Breaking changes will be documented here with before/after examples.

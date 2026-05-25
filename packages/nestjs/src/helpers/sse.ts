@@ -1,6 +1,9 @@
 import { Observable } from 'rxjs';
-import type { Agent } from 'ottrix/agent';
-import type { AgentEvent } from 'ottrix/types';
+import type { Agent } from 'ottrix';
+import {
+  agentEventToSse,
+  KEEPALIVE_INTERVAL_MS,
+} from 'ottrix/http';
 
 /** NestJS SSE {@link MessageEvent} shape. */
 export interface SseMessageEvent {
@@ -10,72 +13,81 @@ export interface SseMessageEvent {
   retry?: number;
 }
 
-/** Options for {@link createSseHandler}. */
-export interface SseHandlerOptions {
-  /** Keepalive interval in milliseconds. @defaultValue 15000 */
-  keepaliveMs?: number;
+/** Options for {@link createSseStream}. */
+export interface CreateSseStreamOptions {
   /** Optional abort signal from the HTTP request (client disconnect). */
   signal?: AbortSignal;
 }
 
 /**
- * Create an SSE handler compatible with NestJS `@Sse()` decorators.
+ * Bridge {@link Agent.stream} to NestJS `@Sse()` as an `Observable<MessageEvent>`.
  *
  * @example
  * ```ts
  * @Sse('stream')
- * stream(@Query('message') message: string, @Req() req: Request) {
- *   return createSseHandler(this.researcher, { signal: req.signal })(message);
+ * stream(@Query('message') message: string) {
+ *   return createSseStream(this.agent)(message);
  * }
  * ```
  */
-export function createSseHandler(
+export function createSseStream(
   agent: Agent,
-  options: SseHandlerOptions = {},
-): (input: string, signal?: AbortSignal) => Observable<SseMessageEvent> {
-  const keepaliveMs = options.keepaliveMs ?? 15_000;
-
-  return (input: string, signal?: AbortSignal) =>
+  options: CreateSseStreamOptions = {},
+): (message: string) => Observable<SseMessageEvent> {
+  return (message: string) =>
     new Observable<SseMessageEvent>((subscriber) => {
       const abortController = new AbortController();
-      const combinedSignal = mergeAbortSignals(options.signal, signal, abortController.signal);
+      const signal = mergeAbortSignals(options.signal, abortController.signal);
       let closed = false;
-      let clearKeepalive = (): void => {};
 
       const cleanup = (): void => {
         if (closed) {
           return;
         }
         closed = true;
-        clearKeepalive();
+        clearTimeout(firstKeepaliveTimer);
+        clearInterval(keepaliveTimer);
         abortController.abort();
       };
 
-      if (combinedSignal.aborted) {
+      if (signal.aborted) {
         subscriber.complete();
         return cleanup;
       }
 
-      combinedSignal.addEventListener('abort', () => {
+      signal.addEventListener('abort', () => {
         cleanup();
         subscriber.complete();
       });
 
+      const firstKeepaliveMs = Math.min(100, KEEPALIVE_INTERVAL_MS);
+      const firstKeepaliveTimer = setTimeout(() => {
+        if (!closed) {
+          subscriber.next({ data: ': keepalive' });
+        }
+      }, firstKeepaliveMs);
+      firstKeepaliveTimer.unref?.();
+
       const keepaliveTimer = setInterval(() => {
-        subscriber.next({ data: ': keepalive\n\n', type: 'keepalive' });
-      }, keepaliveMs);
+        if (!closed) {
+          subscriber.next({ data: ': keepalive' });
+        }
+      }, KEEPALIVE_INTERVAL_MS);
       keepaliveTimer.unref?.();
-      clearKeepalive = (): void => {
-        clearInterval(keepaliveTimer);
-      };
 
       void (async () => {
         try {
-          for await (const event of agent.stream(input)) {
-            if (closed || combinedSignal.aborted) {
+          let index = 0;
+          for await (const event of agent.stream(message)) {
+            if (closed || signal.aborted) {
               break;
             }
-            subscriber.next(toMessageEvent(event));
+            const sse = agentEventToSse(event, index);
+            subscriber.next({ type: sse.event, data: sse.data, id: sse.id });
+            index += 1;
+            if (event.type === 'done') {
+              break;
+            }
           }
           if (!closed) {
             subscriber.complete();
@@ -91,16 +103,6 @@ export function createSseHandler(
 
       return cleanup;
     });
-}
-
-function toMessageEvent(event: AgentEvent): SseMessageEvent {
-  return {
-    type: event.type,
-    data: {
-      type: event.type,
-      data: event.data,
-    },
-  };
 }
 
 function mergeAbortSignals(...signals: Array<AbortSignal | undefined>): AbortSignal {

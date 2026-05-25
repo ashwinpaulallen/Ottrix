@@ -1,10 +1,11 @@
 {
   "name": "@ottrix/vercel-ai",
   "private": true,
-  "version": "0.0.1",
-  "description": "Vercel AI SDK adapter for ottrix",
+  "version": "0.1.0",
+  "description": "Bridge ottrix providers into the Vercel AI SDK",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,27 +22,27 @@
   ],
   "scripts": {
     "build": "tsup",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint src/",
-    "test": "echo 'No tests yet'",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "ottrix": ">=2.0.0",
-    "ai": ">=3.0.0"
-  },
-  "peerDependenciesMeta": {
-    "ai": {
-      "optional": true
-    }
+    "ai": ">=6.0.0",
+    "ottrix": ">=2.0.0"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "3.0.10",
+    "@types/node": "25.9.0",
+    "ai": "6.0.191",
     "ottrix": "*",
     "tsup": "8.5.1",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vitest": "4.1.6",
+    "zod": "3.25.76"
   },
   "repository": {
     "type": "git",

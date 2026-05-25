@@ -1,35 +1,47 @@
 import {
   CallHandler,
   ExecutionContext,
+  Inject,
   Injectable,
   NestInterceptor,
+  Optional,
 } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { defer, from, lastValueFrom } from 'rxjs';
-import { RunContextService } from '../services/run-context.service.js';
+import { defer, Observable } from 'rxjs';
+import { runWith } from 'ottrix';
+import { buildRunContext } from 'ottrix/http';
+import type { RunContextInterceptorOptions } from '../interfaces.js';
+import { OTTRIX_RUN_CONTEXT_OPTIONS } from '../tokens.js';
+import { readHeaders } from '../helpers/read-headers.js';
 
 /** Establishes Ottrix {@link RunContext} for each HTTP request via ALS. */
 @Injectable()
 export class RunContextInterceptor implements NestInterceptor {
-  constructor(private readonly runContextService: RunContextService) {}
+  constructor(
+    @Optional()
+    @Inject(OTTRIX_RUN_CONTEXT_OPTIONS)
+    private readonly options?: RunContextInterceptorOptions,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    if (!this.runContextService.isEnabled()) {
-      return next.handle();
-    }
+    const request = context.switchToHttp().getRequest<{ headers?: Record<string, string | string[] | undefined> }>();
+    const extractors = this.options;
+    const runContext = buildRunContext(readHeaders(request.headers ?? {}), extractors);
 
-    const request = context.switchToHttp().getRequest<{
-      headers?: Record<string, string | string[] | undefined>;
-      user?: { orgId?: string; id?: string; agentName?: string };
-    }>();
+    return defer(
+      () =>
+        new Observable((subscriber) => {
+          let subscription: { unsubscribe: () => void } | undefined;
 
-    const runContext = this.runContextService.contextFromRequest(request);
-    if (request.user?.agentName) {
-      runContext.agentName = request.user.agentName;
-    }
+          void runWith(runContext, () => {
+            subscription = next.handle().subscribe({
+              next: (value) => subscriber.next(value),
+              error: (error) => subscriber.error(error),
+              complete: () => subscriber.complete(),
+            });
+          });
 
-    return defer(() =>
-      from(this.runContextService.runWith(runContext, () => lastValueFrom(next.handle()))),
+          return () => subscription?.unsubscribe();
+        }),
     );
   }
 }

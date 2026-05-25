@@ -1,0 +1,23 @@
+{
+  "name": "ottrix-example-nestjs-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx main.ts",
+    "build": "tsc --noEmit && touch typecheck-complete"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.0",
+    "@nestjs/core": "^11.1.0",
+    "@nestjs/platform-express": "^11.1.0",
+    "@ottrix/nestjs": "*",
+    "ottrix": "*",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.0",
+    "tsx": "^4.19.3",
+    "typescript": "6.0.3"
+  }
+}

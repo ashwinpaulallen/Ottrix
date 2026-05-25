@@ -19,31 +19,31 @@ import { runWith } from 'ottrix';
 await runWith({ runId: 'req-42', orgId: 'acme' }, () => agent.run('Hello'));
 ```
 
-See [docs/context.md](docs/context.md).
+See [packages/core/docs/context.md](packages/core/docs/context.md).
 
 #### Tool safety envelope
 
 Tools declare safety metadata: `sideEffect`, `idempotent`, `requiresApproval`, `requiresSandbox`, and optional `audit` field filters. `ToolRegistry` enforces sandbox and approval gates for destructive tools and emits policy audit events.
 
-See [docs/tools.md](docs/tools.md#tool-safety-envelope).
+See [packages/core/docs/tools.md](packages/core/docs/tools.md#tool-safety-envelope).
 
 #### Idempotent tool execution
 
 Mark tools `idempotent: true` and configure an `IdempotencyStore` on `ToolRegistry` to deduplicate concurrent and retried executions.
 
-See [docs/tools.md](docs/tools.md#idempotent-tool-execution).
+See [packages/core/docs/tools.md](packages/core/docs/tools.md#idempotent-tool-execution).
 
 #### Pluggable workflow state stores
 
 Persist suspended DAG workflow state to **Redis** (`ioredis`) or **PostgreSQL** (`pg`) for cross-process resume. Includes optional distributed locks.
 
-See [docs/orchestration.md](docs/orchestration.md#state-persistence).
+See [packages/core/docs/orchestration.md](packages/core/docs/orchestration.md#state-persistence).
 
 #### Human approval gates (DAG)
 
 DAG steps support `approvalGate` with role-based approvers, timeouts, escalation, signed decisions, and `ApprovalStore` persistence.
 
-See [docs/orchestration.md](docs/orchestration.md#human-approval-gates).
+See [packages/core/docs/orchestration.md](packages/core/docs/orchestration.md#human-approval-gates).
 
 #### Native OpenTelemetry exporter
 
@@ -58,7 +58,7 @@ getTelemetry().addExporter(createOtelExporter('datadog', {
 }));
 ```
 
-Subpath: `ottrix/exporters/otel`. See [docs/observability.md](docs/observability.md).
+Subpath: `ottrix/exporters/otel`. See [packages/core/docs/observability.md](packages/core/docs/observability.md).
 
 #### Multi-scope budget enforcement
 
@@ -76,7 +76,7 @@ configureBudgets({
 });
 ```
 
-New stop reason: **`cost_budget`**. See [docs/guardrails.md](docs/guardrails.md).
+New stop reason: **`cost_budget`**. See [packages/core/docs/guardrails.md](packages/core/docs/guardrails.md).
 
 #### AuditEmitter (SOC2-ready audit trail)
 
@@ -92,7 +92,7 @@ useAudit(new AuditEmitter({
 }));
 ```
 
-See [docs/guardrails.md](docs/guardrails.md).
+See [packages/core/docs/guardrails.md](packages/core/docs/guardrails.md).
 
 #### `@ottrix/nestjs` adapter
 
@@ -102,7 +102,7 @@ First-party NestJS integration package in `packages/nestjs/` — `OttrixModule.f
 npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core
 ```
 
-See [docs/nestjs.md](docs/nestjs.md) and [packages/nestjs/README.md](packages/nestjs/README.md).
+See [packages/nestjs/docs/guide.md](packages/nestjs/docs/guide.md) and [packages/nestjs/README.md](packages/nestjs/README.md).
 
 ### Changed
 

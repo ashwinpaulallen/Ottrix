@@ -4,9 +4,7 @@ import {
   getTelemetry,
 } from '../global.js';
 import { logExporterError } from './shared.js';
-import { BraintrustExporter } from './braintrust.js';
 import { TraceConsoleExporter, InMemoryTraceExporter } from './console.js';
-import { LangfuseExporter } from './langfuse.js';
 import type { TraceExporter } from './types.js';
 import { WebhookExporter } from './webhook.js';
 
@@ -17,28 +15,9 @@ export type {
 } from './types.js';
 
 export { buildTraceData } from './trace-builder.js';
-export { LangfuseExporter, type LangfuseExporterOptions, type LangfuseBatchEvent } from './langfuse.js';
-export { BraintrustExporter, type BraintrustExporterOptions } from './braintrust.js';
 export { WebhookExporter, type WebhookExporterOptions } from './webhook.js';
 export { TraceConsoleExporter, InMemoryTraceExporter } from './console.js';
 export { MultiExporter } from './multi.js';
-export {
-  OtelExporter,
-  createOtelExporter,
-  OTLP_PROTOCOL_VERSION,
-  GEN_AI_ATTRIBUTES,
-  OTTRIX_ATTRIBUTES,
-  type OtelExporterOptions,
-  type OtlpSpan,
-  type OtlpKeyValue,
-  type OtlpAnyValue,
-  type OtlpEvent,
-  type OtlpStatus,
-  type OtlpResource,
-  type OtlpScopeSpans,
-  type OtlpResourceSpans,
-  type OtlpExportTraceServiceRequest,
-} from './otel.js';
 
 /** Create a {@link TraceExporter} from Ottrix telemetry configuration. */
 export function createTraceExporterFromConfig(
@@ -51,29 +30,18 @@ export function createTraceExporterFromConfig(
       return new TraceConsoleExporter();
     case 'memory':
       return new InMemoryTraceExporter();
-    case 'langfuse': {
-      const langfuse = config.langfuse;
-      if (!langfuse?.publicKey || !langfuse.secretKey) {
-        return undefined;
-      }
-      return new LangfuseExporter({
-        publicKey: langfuse.publicKey,
-        secretKey: langfuse.secretKey,
-        baseUrl: langfuse.baseUrl,
-      });
-    }
-    case 'braintrust': {
-      const braintrust = config.braintrust;
-      if (!braintrust?.apiKey || !braintrust.projectName) {
-        return undefined;
-      }
-      return new BraintrustExporter({
-        apiKey: braintrust.apiKey,
-        projectName: braintrust.projectName,
-        baseUrl: braintrust.baseUrl,
-        projectId: braintrust.projectId,
-      });
-    }
+    case 'langfuse':
+      logExporterError(
+        'telemetry',
+        'Langfuse exporter moved to @ottrix/exporter-langfuse — install it and call getTelemetry().addExporter(new LangfuseExporter(...))',
+      );
+      return undefined;
+    case 'braintrust':
+      logExporterError(
+        'telemetry',
+        'Braintrust exporter moved to @ottrix/exporter-braintrust — install it and call getTelemetry().addExporter(new BraintrustExporter(...))',
+      );
+      return undefined;
     case 'webhook': {
       const webhook = config.webhook;
       if (!webhook?.url) {
