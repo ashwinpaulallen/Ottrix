@@ -7,6 +7,12 @@ import {
   type ProviderName,
   type ProviderRegistry,
 } from 'ottrix';
+import { createToolProviders, resolveAgentTools } from './tools/register-tools.js';
+import {
+  createAsyncSessionMemoryProviders,
+  createSessionMemoryProviders,
+} from './setup/session-memory-providers.js';
+import type { BaseTool } from 'ottrix';
 import type {
   OttrixFeatureOptions,
   OttrixModuleAsyncOptions,
@@ -15,9 +21,11 @@ import type {
 } from './interfaces.js';
 import {
   agentToken,
+  featureToolsReadyToken,
   OTTRIX_MODULE_OPTIONS,
   OTTRIX_PROVIDER_NAMES,
   OTTRIX_PROVIDER_REGISTRY,
+  OTTRIX_SESSION_MEMORY,
   OTTRIX_TELEMETRY,
   OTTRIX_TOOL_REGISTRY,
   providerToken,
@@ -53,8 +61,9 @@ export class OttrixModule {
         ...createNamedProviderTokens(),
         ...CORE_PROVIDERS,
         ...createHttpProviders(options.http),
+        ...createSessionMemoryProviders(options),
       ],
-      exports: createRootExports(),
+      exports: createRootExports(options),
     };
   }
 
@@ -70,6 +79,7 @@ export class OttrixModule {
         ...createNamedProviderTokens(),
         ...CORE_PROVIDERS,
         ...createHttpProviders(options.http),
+        ...createAsyncSessionMemoryProviders(),
       ],
       exports: createRootExports(),
     };
@@ -77,6 +87,9 @@ export class OttrixModule {
 
   /** Register feature-scoped agents from declarative {@link createAgent} config. */
   static forFeature(options: OttrixFeatureOptions): DynamicModule {
+    assertFeatureOptions(options);
+
+    const toolsReadyToken = options.tools?.length ? featureToolsReadyToken() : undefined;
     const controller =
       options.controller === true
         ? createOttrixController(options.controllerPath ?? 'chat')
@@ -85,9 +98,13 @@ export class OttrixModule {
     return {
       module: OttrixModule,
       controllers: controller ? [controller] : [],
-      providers: createAgentProviders(options),
+      providers: [
+        ...(toolsReadyToken ? createToolProviders(options.tools ?? [], toolsReadyToken) : []),
+        ...createAgentProviders(options, toolsReadyToken),
+      ],
       exports: [
         ...(options.agents?.map((agent) => agentToken(agent.name)) ?? []),
+        ...(options.tools ?? []),
         ...(controller ? [controller] : []),
       ],
     };
@@ -96,7 +113,7 @@ export class OttrixModule {
 
 const OTTRIX_PROVIDER_SETUP = Symbol('OTTRIX_PROVIDER_SETUP');
 
-function createRootExports() {
+function createRootExports(options?: OttrixModuleOptions) {
   return [
     OTTRIX_MODULE_OPTIONS,
     OTTRIX_TOOL_REGISTRY,
@@ -109,6 +126,7 @@ function createRootExports() {
     OttrixHealthIndicator,
     OttrixLifecycleService,
     ...['anthropic', 'openai', 'ollama'].map((name) => providerToken(name)),
+    ...(options?.sessionMemory ? [OTTRIX_SESSION_MEMORY] : []),
   ];
 }
 
@@ -155,19 +173,58 @@ function createNamedProviderTokens(): Provider[] {
   }));
 }
 
-function createAgentProviders(options: OttrixFeatureOptions): Provider[] {
+function assertFeatureOptions(options: OttrixFeatureOptions): void {
+  const hasAgents = (options.agents?.length ?? 0) > 0;
+  const hasTools = (options.tools?.length ?? 0) > 0;
+  const hasController = options.controller === true;
+
+  if (!hasAgents && !hasTools && !hasController) {
+    throw new Error(
+      'OttrixModule.forFeature requires at least one of: agents, tools, or controller: true',
+    );
+  }
+}
+
+function createAgentProviders(
+  options: OttrixFeatureOptions,
+  toolsReadyToken?: symbol,
+): Provider[] {
+  const usesNamedTools = (options.agents ?? []).some(
+    (definition) =>
+      definition.tools?.length &&
+      typeof definition.tools[0] === 'string',
+  );
+  const needsToolRegistry = Boolean(toolsReadyToken) || usesNamedTools;
+
   return (options.agents ?? []).map((definition) => ({
     provide: agentToken(definition.name),
-    useFactory: (registry: ProviderRegistry) => {
-      const { name, ...createConfig } = definition;
+    useFactory: (
+      registry: ProviderRegistry,
+      toolRegistry?: ToolRegistry,
+      _toolsReady?: boolean,
+    ) => {
+      const { name, tools, ...createConfig } = definition;
+      let resolvedTools: BaseTool[] | undefined;
+      if (!tools?.length) {
+        resolvedTools = undefined;
+      } else if (typeof tools[0] === 'string') {
+        resolvedTools = resolveAgentTools(tools, toolRegistry!);
+      } else {
+        resolvedTools = tools as BaseTool[];
+      }
       return createAgent({
         ...createConfig,
         name,
+        tools: resolvedTools,
         provider: resolveAgentProvider(registry, createConfig.provider),
         telemetry: getTelemetry(),
       });
     },
-    inject: [OTTRIX_PROVIDER_REGISTRY],
+    inject: [
+      OTTRIX_PROVIDER_REGISTRY,
+      ...(needsToolRegistry ? [OTTRIX_TOOL_REGISTRY] : []),
+      ...(toolsReadyToken ? [toolsReadyToken] : []),
+    ],
   }));
 }
 

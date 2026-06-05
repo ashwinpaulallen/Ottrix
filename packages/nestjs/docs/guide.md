@@ -106,12 +106,21 @@ providers: [
 `forFeature` accepts core `CreateAgentConfig` fields plus `name`:
 
 ```typescript
+@OttrixTool()
+@Injectable()
+class SearchTool extends OttrixToolProvider {
+  createTool() {
+    return createTool({ name: 'search', description: '...', input: schema, execute: ... });
+  }
+}
+
 OttrixModule.forFeature({
+  tools: [SearchTool],
   agents: [{
     name: 'researcher',
     systemPrompt: 'You are a researcher.',
     provider: 'anthropic',
-    tools: [myTool],
+    tools: ['search'], // or BaseTool[] instances
     guardrails: { budget: { maxSteps: 10 } },
     memory: true,
   }],
@@ -119,8 +128,33 @@ OttrixModule.forFeature({
 ```
 
 - **`provider` omitted** — agent uses the full `ProviderRegistry` (respects fallback chain).
-- **`tools`** — pass `BaseTool[]` in agent config; not resolved from global registry by name.
+- **`tools` on forFeature** — Nest providers decorated with `@OttrixTool()`; registered before agents resolve.
+- **`tools` on agents** — `BaseTool[]` or registered tool names (type-safe via `defineToolRegistry` in core).
 - **`guardrails` / `memory`** — forwarded to `createAgent()`; see [configuration.md](../../core/docs/configuration.md) and [guardrails.md](../../core/docs/guardrails.md).
+- **Empty `forFeature`** — throws; pass at least one of `agents`, `tools`, or `controller: true`.
+
+## Session memory and chat pipeline
+
+Enable session memory in `forRoot`:
+
+```typescript
+OttrixModule.forRoot({
+  providers: { anthropic: { apiKey: process.env.ANTHROPIC_API_KEY! } },
+  sessionMemory: true,
+});
+```
+
+Use `createChatPipeline` for routing + SSE + session hooks:
+
+```typescript
+const pipeline = createChatPipeline({
+  resolveAgent: (message) => router.resolve(message),
+  sessionMemory: this.sessionMemory,
+  hooks: { onComplete: (result) => this.audit.log(result) },
+});
+```
+
+Cost estimation: `estimateAgentResultCost(result, registry, 'anthropic')` (re-exported from `@ottrix/nestjs`).
 
 ## Telemetry backends
 
@@ -155,8 +189,8 @@ import { getTelemetry, OtelExporter } from 'ottrix';
 
 ## What this package does not do
 
-- Agent loop, tool execution, memory, orchestration, or guardrail middleware logic
-- Automatic tool registration into agents from global `ToolRegistry`
+- Agent loop, tool execution, or guardrail middleware logic (delegates to core)
 - DAG workflows or MCP server lifecycle (use core APIs directly)
+- Persistent session stores (provide a custom `SessionMemoryStore`; default is in-memory)
 
-For those features, import from `ottrix` in your Nest services and wire through DI yourself.
+For orchestration beyond `createChatPipeline`, import from `ottrix` in your Nest services.

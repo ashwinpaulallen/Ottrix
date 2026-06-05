@@ -137,6 +137,11 @@ See [BACKEND_ADAPTERS.md](../../BACKEND_ADAPTERS.md) for request/response/SSE/er
 | `RunContextInterceptor` | `buildRunContext` + `runWith` per request |
 | `TelemetryInterceptor` | HTTP telemetry spans (streaming-safe) |
 | `createSseStream(agent)(message)` | `Agent.stream()` → NestJS SSE `Observable` |
+| `createChatPipeline(options)` | Routing + SSE + session memory + lifecycle hooks |
+| `@OttrixTool()` / `OttrixToolProvider` | Nest DI tool providers auto-registered on `ToolRegistry` |
+| `SessionMemoryService` | HTTP session-scoped `WorkingMemory` (enable via `sessionMemory: true`) |
+| `InjectSessionMemory()` | Inject session memory service |
+| `estimateAgentResultCost` | USD cost from `AgentResult` + provider registry rates |
 | `OttrixHealthIndicator` | `checkHealth()` wrapped for `@nestjs/terminus` |
 | `OttrixLifecycleService` | Config validation + telemetry flush on shutdown |
 | `InjectAgent(name)` | Inject a named agent from `forFeature` |

@@ -84,6 +84,8 @@ export {
   isProviderCircuitOpen,
   isProviderRequestBlocked,
 } from './registry.js';
+
+export { estimateResultCost, estimateAgentResultCost } from './cost.js';
 export type {
   CostTier,
   ProviderCostRates,

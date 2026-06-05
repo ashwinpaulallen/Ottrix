@@ -163,6 +163,8 @@ export {
   OPENAI_DEFAULT_MODEL,
   OLLAMA_DEFAULT_MODEL,
   OLLAMA_DEFAULT_BASE_URL,
+  estimateResultCost,
+  estimateAgentResultCost,
   type BaseProviderConfig,
 } from './providers/index.js';
 
@@ -197,6 +199,9 @@ export {
   resetIdempotencyStore,
   InMemoryIdempotencyStore,
   TOOL_IDEMPOTENCY_IN_PROGRESS_NAME,
+  defineToolRegistry,
+  pickTools,
+  isToolNameArray,
 } from './tools/index.js';
 
 export type {
@@ -354,5 +359,9 @@ export type {
   JSONSchema,
   MemoryProvider,
   MemoryEntry,
+  MemorySnapshot,
   GuardrailConfig,
 } from './types/index.js';
+
+export type { WorkingMemoryOptions } from './memory/index.js';
+export type { ToolRegistryDefinition, ToolNames } from './tools/index.js';

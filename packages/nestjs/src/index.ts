@@ -20,7 +20,33 @@ export {
   InjectProvider,
   InjectToolRegistry,
   InjectTelemetry,
+  InjectSessionMemory,
 } from './decorators.js';
+
+export { OttrixTool } from './decorators/ottrix-tool.decorator.js';
+
+export { OttrixToolProvider } from './tools/ottrix-tool.provider.js';
+export type { OttrixToolFactory } from './tools/ottrix-tool.provider.js';
+
+export {
+  SessionMemoryService,
+  InMemorySessionMemoryStore,
+  type SessionMemoryStore,
+  type SessionMemoryServiceOptions,
+} from './session/session-memory.js';
+
+export {
+  createChatPipeline,
+  type ChatPipelineOptions,
+  type ChatPipelineHooks,
+  type ChatPipelineContext,
+  type ChatPipelineResult,
+} from './helpers/chat-pipeline.js';
+
+export {
+  estimateResultCost,
+  estimateAgentResultCost,
+} from 'ottrix';
 
 export {
   OTTRIX_MODULE_OPTIONS,
@@ -31,6 +57,7 @@ export {
   OTTRIX_RUN_CONTEXT_OPTIONS,
   OTTRIX_HTTP_OPTIONS,
   OTTRIX_INJECTION_GUARD_OPTIONS,
+  OTTRIX_SESSION_MEMORY,
   agentToken,
   providerToken,
 } from './tokens.js';

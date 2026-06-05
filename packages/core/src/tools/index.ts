@@ -118,3 +118,11 @@ export {
 } from './mcp.js';
 
 export { validateSchema, type SchemaValidationResult } from '../utils/schema-validator.js';
+
+export {
+  defineToolRegistry,
+  pickTools,
+  isToolNameArray,
+  type ToolRegistryDefinition,
+  type ToolNames,
+} from './tool-registry-builder.js';

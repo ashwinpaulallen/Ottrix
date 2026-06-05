@@ -1,6 +1,8 @@
 import type { ModuleMetadata, Type } from '@nestjs/common';
-import type { AgenticTelemetryConfig, CreateAgentConfig } from 'ottrix';
+import type { AgenticTelemetryConfig, BaseTool, CreateAgentConfig } from 'ottrix';
 import type { ContextExtractors } from 'ottrix/http';
+import type { OttrixToolFactory } from './tools/ottrix-tool.provider.js';
+import type { SessionMemoryServiceOptions } from './session/session-memory.js';
 
 /** Provider configuration for Ottrix LLM backends. */
 export interface OttrixProviderConfig {
@@ -60,6 +62,11 @@ export interface OttrixModuleOptions {
    * @defaultValue `{ runContext: true, telemetry: true }` — injection guard is opt-in
    */
   http?: OttrixHttpOptions;
+  /**
+   * Session-scoped conversation memory for chat pipelines.
+   * @defaultValue disabled — enable with `true` or a custom store.
+   */
+  sessionMemory?: boolean | SessionMemoryServiceOptions;
 }
 
 /** Factory interface for async module configuration. */
@@ -82,11 +89,20 @@ export interface OttrixModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'
 }
 
 /** Agent definition for {@link OttrixModule.forFeature} — args for {@link createAgent}. */
-export type AgentDefinition = CreateAgentConfig & { name: string };
+export type AgentDefinition = Omit<CreateAgentConfig, 'tools'> & {
+  name: string;
+  /** Tool instances or names registered on {@link OTTRIX_TOOL_REGISTRY}. */
+  tools?: BaseTool[] | readonly string[];
+};
 
 /** Feature-scoped configuration for {@link OttrixModule.forFeature}. */
 export interface OttrixFeatureOptions {
   agents?: AgentDefinition[];
+  /**
+   * NestJS provider classes decorated with {@link OttrixTool} that implement
+   * {@link OttrixToolFactory}. Registered on the global tool registry before agents resolve.
+   */
+  tools?: Array<Type<OttrixToolFactory>>;
   /** Register {@link OttrixController} with the feature module. */
   controller?: boolean;
   /** Route prefix for {@link OttrixController}. @defaultValue `'chat'` */

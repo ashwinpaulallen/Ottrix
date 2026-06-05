@@ -32,7 +32,10 @@ export function providerToken(name: string): string {
   return `OTTRIX_PROVIDER_${name}`;
 }
 
-/** Unique per {@link OttrixModule.forFeature} call — serializes tool registration for that feature. */
-export function featureToolsToken(): symbol {
-  return Symbol('OTTRIX_FEATURE_TOOLS');
+/** Injection token for {@link SessionMemoryService}. */
+export const OTTRIX_SESSION_MEMORY = Symbol('OTTRIX_SESSION_MEMORY');
+
+/** Unique per {@link OttrixModule.forFeature} call — gates agent creation until tools register. */
+export function featureToolsReadyToken(): symbol {
+  return Symbol(`OTTRIX_FEATURE_TOOLS_READY_${String(Math.random()).slice(2)}`);
 }

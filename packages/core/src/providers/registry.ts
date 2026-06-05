@@ -361,6 +361,11 @@ export class ProviderRegistry implements CompletionProvider {
     return [...this.providers.keys()];
   }
 
+  /** Per-1k-token pricing for a registered provider (for cost estimation). */
+  getCostRates(name: string): ProviderCostRates {
+    return this.getEntry(name).costRates;
+  }
+
   /** Whether a provider's circuit breaker is open. */
   isCircuitOpen(name: string): boolean {
     const entry = this.getEntry(name);

@@ -2,6 +2,7 @@ import { Inject } from '@nestjs/common';
 import {
   agentToken,
   OTTRIX_PROVIDER_REGISTRY,
+  OTTRIX_SESSION_MEMORY,
   OTTRIX_TELEMETRY,
   OTTRIX_TOOL_REGISTRY,
   providerToken,
@@ -19,3 +20,6 @@ export const InjectToolRegistry = (): ParameterDecorator => Inject(OTTRIX_TOOL_R
 
 /** Inject Ottrix {@link Telemetry}. */
 export const InjectTelemetry = (): ParameterDecorator => Inject(OTTRIX_TELEMETRY);
+
+/** Inject {@link SessionMemoryService} when enabled via {@link OttrixModule.forRoot}. */
+export const InjectSessionMemory = (): ParameterDecorator => Inject(OTTRIX_SESSION_MEMORY);
