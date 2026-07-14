@@ -46,6 +46,7 @@ export interface CreateAgentConfig
     | 'onError'
     | 'planner'
     | 'reflector'
+    | 'evaluation'
     | 'contextLimitTokens'
     | 'keepRecentMessages'
     | 'defaultModel'
@@ -166,6 +167,12 @@ export function createAgent(config: CreateAgentConfig = {}): Agent {
 
   const provider = resolveProvider(config, providerName, model, agentic);
   const toolRegistry = buildToolRegistry(config.tools, name, resolveTelemetry(config, agentic));
+  const evaluationProvider = resolveEvaluationProvider(
+    config,
+    providerName,
+    model,
+    agentic,
+  );
 
   const agentConfig: AgentConfig = {
     name,
@@ -180,6 +187,8 @@ export function createAgent(config: CreateAgentConfig = {}): Agent {
     onError: config.onError,
     planner: config.planner,
     reflector: config.reflector,
+    evaluation: config.evaluation,
+    evaluationProvider,
     contextLimitTokens: config.contextLimitTokens ?? 128_000,
     keepRecentMessages: config.keepRecentMessages ?? 6,
     runRecorder: config.runRecorder,
@@ -318,6 +327,28 @@ function resolveProvider(
     default:
       throw new Error(`createAgent: unsupported provider "${providerName as string}"`);
   }
+}
+
+/**
+ * When evaluation uses a different model, build a secondary provider with the
+ * same credentials so eval calls don't share the main agent's default model.
+ * Custom CompletionProvider instances cannot be cloned — the evaluator still
+ * passes `evaluation.model` on each complete() call in that case.
+ */
+function resolveEvaluationProvider(
+  config: CreateAgentConfig,
+  providerName: ProviderName,
+  mainModel: string,
+  agentic: AgenticConfig,
+): CompletionProvider | undefined {
+  const evalModel = config.evaluation?.enabled ? config.evaluation.model : undefined;
+  if (!evalModel || evalModel === mainModel) {
+    return undefined;
+  }
+  if (config.provider && typeof config.provider !== 'string') {
+    return undefined;
+  }
+  return resolveProvider({ ...config, model: evalModel }, providerName, evalModel, agentic);
 }
 
 function buildToolRegistry(

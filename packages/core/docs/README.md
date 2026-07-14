@@ -14,6 +14,7 @@ Implementation-accurate guides for the **`ottrix`** npm package (`packages/core`
 | [Overview](./overview.md) | Subpath exports, version constant, architectural layers |
 | [Run context](./context.md) | `RunContext`, AsyncLocalStorage, `runWith`, `withStep` |
 | [Agent](./agent.md) | `Agent`, ReAct loop, structured output (Zod), planner, reflector |
+| [Self-evaluation](./self-evaluation.md) | In-loop sufficiency checks, refinement, cheap eval models |
 | [Configuration](./configuration.md) | `loadConfig`, environment variables, `createAgent`, `quickAgent` |
 | [Providers](./providers.md) | Anthropic, OpenAI, Ollama, fallback chain, circuit breaker |
 | [Tools](./tools.md) | `FunctionTool`, `createTool` (Zod), MCP **client**, tool safety, idempotency |
@@ -29,6 +30,7 @@ Implementation-accurate guides for the **`ottrix`** npm package (`packages/core`
 | Area | Key APIs | Doc |
 |------|----------|-----|
 | Agent loop | `Agent`, `createAgent`, `quickAgent` | [agent.md](./agent.md), [configuration.md](./configuration.md) |
+| Self-evaluation | `evaluation`, `createEvaluator`, refinement events | [self-evaluation.md](./self-evaluation.md) |
 | Structured output | `zodToJsonSchema`, Zod validation | [agent.md](./agent.md) |
 | Providers | `createAnthropicProvider`, `ProviderRegistry`, fallback | [providers.md](./providers.md) |
 | Tools | `FunctionTool`, `createTool`, `ToolRegistry`, MCP client | [tools.md](./tools.md) |

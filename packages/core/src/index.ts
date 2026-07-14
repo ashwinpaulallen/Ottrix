@@ -126,6 +126,13 @@ export {
   extractToolUses,
   isTextOnlyResponse,
   serializeToolOutput,
+  createEvaluator,
+  CompositeEvaluator,
+  HeuristicEvaluator,
+  LLMEvaluator,
+  buildRefinementInstruction,
+  SufficiencyResultSchema,
+  EvaluationConfigSchema,
   type Plan,
   type PlanStep,
   type PlanValidationResult,
@@ -136,6 +143,11 @@ export {
   type ResultEvaluation,
   type StepEvaluation,
   type GuardrailCheckResult,
+  type SufficiencyResult,
+  type EvaluationConfig,
+  type EvaluationRecord,
+  type EvaluatorStrategy,
+  type EvaluationContext,
 } from './agent/index.js';
 
 // --- Providers ---
