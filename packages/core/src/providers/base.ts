@@ -7,6 +7,8 @@ import type {
   StreamChunk,
 } from '../types/provider.js';
 import { getMetricsCollector } from '../observability/global.js';
+import * as tokenAccounting from '../observability/token-accounting/context.js';
+import type { TokenUsage } from '../types/provider.js';
 import {
   attachStreamLatency,
   computeCompletionLatency,
@@ -468,6 +470,9 @@ export abstract class BaseProvider<TModel extends string = string>
 
           if (chunk.type === 'done') {
             this.recordProviderMetrics(enriched, true);
+            const doneUsage =
+              enriched.type === 'done' ? enriched.data.usage : chunk.data.usage;
+            this.recordTokenAccounting(doneUsage, this.config.defaultModel);
           }
 
           yield enriched;
@@ -509,12 +514,31 @@ export abstract class BaseProvider<TModel extends string = string>
         }),
       } as CompletionResult<TModel>;
       this.recordProviderMetrics(enriched, true);
+      this.recordTokenAccounting(enriched.usage, enriched.model);
       return enriched;
     } catch (error) {
       this.recordProviderMetrics(undefined, false);
       if (CircuitOpenError.isCircuitOpenError(error)) throw error;
       throw this.normalizeError(error);
     }
+  }
+
+  /**
+   * Attribute usage to the active token-accounting capability scope (ALS).
+   * No-op when no accumulator is active.
+   */
+  private recordTokenAccounting(usage: TokenUsage | undefined, model: string | undefined): void {
+    if (!usage) {
+      return;
+    }
+    tokenAccounting.recordTokens({
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      model,
+      provider: this.config.providerId ?? 'provider',
+    });
   }
 
   /** Retry a retryable async operation with exponential backoff. */

@@ -252,6 +252,21 @@ export interface AgentResult<
   evaluations?: import('../agent/evaluation/types.js').EvaluationRecord[];
   /** How many refinements were triggered during this run. */
   refinementsUsed?: number;
+  /**
+   * Per-capability token usage breakdown for this agent run.
+   * Present on every run when the agent is called normally.
+   *
+   * @example
+   * const result = await agent.run('Search and summarize...');
+   * console.log(formatTokenBreakdown(result.tokenBreakdown!));
+   * // Token usage for run run_abc123:
+   * //   Total: 3,421 tokens (2,800 in, 621 out) — $0.0124
+   * //   By capability:
+   * //     tool:web_search    1,823 tokens × 3 calls ($0.0072)
+   * //     _llm               1,200 tokens ($0.0043)
+   * //     _evaluation          398 tokens ($0.0009)
+   */
+  tokenBreakdown?: import('../observability/token-accounting/types.js').TokenBreakdown;
   /** Run metadata (stop reason, warnings, model). */
   metadata: TMetadata;
 }

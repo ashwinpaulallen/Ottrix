@@ -18,6 +18,8 @@ export {
   Gauge,
   ConsoleExporter,
   InMemoryExporter,
+  applyTokenBreakdownAttributes,
+  sanitizeOtelAttributeSegment,
   type AttributeValue,
   type MetricPoint,
   type OpenTelemetryBridge,
@@ -28,7 +30,6 @@ export {
   type TelemetryOptions,
   type TelemetryRetentionOptions,
 } from './telemetry.js';
-
 export {
   instrumentProvider,
   instrumentAgentToolRegistry,

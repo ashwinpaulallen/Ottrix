@@ -11,6 +11,10 @@ export interface TokenUsage {
   outputTokens: number;
   /** Sum of input and output tokens. */
   totalTokens: number;
+  /** Anthropic prompt-cache read tokens (`cache_read_input_tokens`), when reported. */
+  cacheReadTokens?: number;
+  /** Anthropic prompt-cache write tokens (`cache_creation_input_tokens`), when reported. */
+  cacheWriteTokens?: number;
 }
 
 /** Circuit breaker settings for a provider instance. */

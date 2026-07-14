@@ -44,16 +44,28 @@ import {
 } from './messages.js';
 import type { Plan, PlanStep, PlanValidationResult } from './planner.js';
 import { instrumentProvider, instrumentAgentToolRegistry } from '../observability/instrument.js';
-import { getMetricsCollector } from '../observability/global.js';
+import { getLogger, getMetricsCollector } from '../observability/global.js';
 import { emitAuditEvent } from '../guardrails/audit.js';
 import { estimateCost, ProviderRegistry } from '../providers/registry.js';
 import {
+  applyTokenBreakdownAttributes,
   runInActiveSpanStack,
   Span,
   SpanStack,
   type Telemetry,
 } from '../observability/telemetry.js';
 import type { RunRecorder } from '../observability/replay.js';
+import {
+  CAPABILITY,
+  enrichBreakdownWithCosts,
+  formatTokenBreakdown,
+  getTokenAccumulator,
+  withCapabilityScope,
+  withTokenAccounting,
+  withTokenAccountingGenerator,
+  type TokenAccumulator,
+} from '../observability/token-accounting/index.js';
+import type { TokenBreakdown } from '../observability/token-accounting/types.js';
 import { OpenAIProvider } from '../providers/openai.js';
 import { unknownCompletionLatency } from '../providers/latency.js';
 import {
@@ -162,37 +174,55 @@ export class Agent {
     options?: AgentRunOptions<TSchema>,
   ): Promise<AgentResult<AgentRunMetadata, z.infer<TSchema>>> {
     return this.runInAgentContext(async () => {
-      const telemetry = this.telemetry;
-      if (!telemetry) {
-        return this.runCore(input, options) as Promise<
-          AgentResult<AgentRunMetadata, z.infer<TSchema>>
-        >;
-      }
+      const runId = getRunContext()?.runId ?? randomUUID();
+      return withTokenAccounting(runId, async (accumulator) => {
+        const telemetry = this.telemetry;
+        if (!telemetry) {
+          const result = (await this.runCore(input, options)) as AgentResult<
+            AgentRunMetadata,
+            z.infer<TSchema>
+          >;
+          return {
+            ...result,
+            tokenBreakdown: this.finalizeTokenBreakdown(
+              accumulator.getBreakdown(),
+              result.metadata.model,
+            ),
+          };
+        }
 
-      const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
-      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
-      let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
+        const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
+        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+        let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
 
-      try {
-        const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
-          try {
-            result = (await this.runCore(input, options, telemetry)) as AgentResult<
-              AgentRunMetadata,
-              z.infer<TSchema>
-            >;
-            return result;
-          } catch (error) {
-            rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-            telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-            throw error;
-          }
-        });
-        return runResult;
-      } finally {
-        this.annotateRootTrace(rootSpan, input, result?.response, result);
-        rootSpan.end();
-        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
-      }
+        try {
+          const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
+            try {
+              result = (await this.runCore(input, options, telemetry)) as AgentResult<
+                AgentRunMetadata,
+                z.infer<TSchema>
+              >;
+              return result;
+            } catch (error) {
+              rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+              telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+              throw error;
+            }
+          });
+          result = {
+            ...runResult,
+            tokenBreakdown: this.finalizeTokenBreakdown(
+              accumulator.getBreakdown(),
+              runResult.metadata.model,
+            ),
+          };
+          return result;
+        } finally {
+          this.annotateRootTrace(rootSpan, input, result?.response, result);
+          rootSpan.end();
+          telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
+        }
+      });
     });
   }
 
@@ -525,6 +555,11 @@ export class Agent {
       span.setAttribute('trace.output', output);
     }
 
+    if (result?.tokenBreakdown) {
+      applyTokenBreakdownAttributes(span, result.tokenBreakdown);
+      getLogger().debug(formatTokenBreakdown(result.tokenBreakdown));
+    }
+
     const evaluationEnabled = Boolean(this.evaluationConfig?.enabled);
     span.setAttribute('ottrix.evaluation.enabled', evaluationEnabled);
     if (!evaluationEnabled) {
@@ -590,56 +625,112 @@ export class Agent {
     };
 
     yield* runGeneratorWith(ctx, async function* (this: Agent) {
-      const telemetry = this.telemetry;
-      if (!telemetry) {
-        yield* this.streamCore(input);
-        return;
-      }
-
-      const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
-      const spanStack = new SpanStack();
-      spanStack.push(rootSpan);
-      rootSpan.setAttribute('trace.input', input);
-      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
-      let streamOutput: string | undefined;
-      let streamResult: AgentResult | undefined;
-
-      try {
-        yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
-          try {
-            for await (const event of this.streamCore(input)) {
-              if (event.type === 'done') {
-                const doneData = event.data as {
-                  response?: string;
-                  evaluations?: EvaluationRecord[];
-                  refinementsUsed?: number;
-                };
-                streamOutput = doneData.response;
-                streamResult = {
-                  response: doneData.response ?? '',
-                  steps: [],
-                  totalTokens: EMPTY_USAGE,
-                  evaluations: doneData.evaluations,
-                  refinementsUsed: doneData.refinementsUsed,
-                  metadata: { stopReason: 'completed' },
-                };
-              }
-              yield event;
-            }
-            rootSpan.setStatus('ok');
-          } catch (error) {
-            rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-            telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-            throw error;
+      yield* withTokenAccountingGenerator(ctx.runId, async function* (
+        this: Agent,
+        accumulator: TokenAccumulator,
+      ) {
+        const telemetry = this.telemetry;
+        if (!telemetry) {
+          for await (const event of this.streamCore(input)) {
+            yield this.attachTokenBreakdownToEvent(event, accumulator.getBreakdown());
           }
-        }.bind(this));
-      } finally {
-        this.annotateRootTrace(rootSpan, input, streamOutput, streamResult);
-        rootSpan.end();
-        spanStack.pop();
-        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
-      }
+          return;
+        }
+
+        const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
+        const spanStack = new SpanStack();
+        spanStack.push(rootSpan);
+        rootSpan.setAttribute('trace.input', input);
+        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+        let streamOutput: string | undefined;
+        let streamResult: AgentResult | undefined;
+
+        try {
+          yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
+            try {
+              for await (const event of this.streamCore(input)) {
+                const withBreakdown = this.attachTokenBreakdownToEvent(
+                  event,
+                  accumulator.getBreakdown(),
+                );
+                if (withBreakdown.type === 'done') {
+                  const doneData = withBreakdown.data as {
+                    response?: string;
+                    evaluations?: EvaluationRecord[];
+                    refinementsUsed?: number;
+                    tokenBreakdown?: TokenBreakdown;
+                  };
+                  streamOutput = doneData.response;
+                  streamResult = {
+                    response: doneData.response ?? '',
+                    steps: [],
+                    totalTokens: EMPTY_USAGE,
+                    evaluations: doneData.evaluations,
+                    refinementsUsed: doneData.refinementsUsed,
+                    tokenBreakdown: doneData.tokenBreakdown,
+                    metadata: { stopReason: 'completed' },
+                  };
+                }
+                yield withBreakdown;
+              }
+              rootSpan.setStatus('ok');
+            } catch (error) {
+              rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+              telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+              throw error;
+            }
+          }.bind(this));
+        } finally {
+          this.annotateRootTrace(rootSpan, input, streamOutput, streamResult);
+          rootSpan.end();
+          spanStack.pop();
+          telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
+        }
+      }.bind(this));
     }.bind(this));
+  }
+
+  private attachTokenBreakdownToEvent(
+    event: AgentEvent,
+    tokenBreakdown: TokenBreakdown,
+  ): AgentEvent {
+    if (event.type !== 'done') {
+      return event;
+    }
+    const model =
+      event.data && typeof event.data === 'object'
+        ? (event.data as { model?: string }).model
+        : undefined;
+    const enriched = this.finalizeTokenBreakdown(tokenBreakdown, model);
+    const data =
+      event.data && typeof event.data === 'object'
+        ? { ...(event.data as Record<string, unknown>), tokenBreakdown: enriched }
+        : { tokenBreakdown: enriched };
+    return { type: 'done', data };
+  }
+
+  private finalizeTokenBreakdown(
+    breakdown: TokenBreakdown,
+    model?: string,
+  ): TokenBreakdown {
+    const resolvedModel = model ?? this.config.defaultModel;
+    if (!resolvedModel) {
+      return breakdown;
+    }
+    return enrichBreakdownWithCosts(
+      breakdown,
+      this.resolveProviderLabel(),
+      resolvedModel,
+    );
+  }
+
+  private resolveProviderLabel(): string {
+    const provider = this.config.provider;
+    const ctorName = provider.constructor?.name;
+    if (typeof ctorName === 'string' && ctorName.length > 0 && ctorName !== 'Object') {
+      return ctorName.replace(/Provider$/, '').toLowerCase() || 'provider';
+    }
+    return 'provider';
   }
 
   private async *streamCore(input: string): AsyncIterable<AgentEvent> {
@@ -905,6 +996,10 @@ export class Agent {
         totalTokens: result.totalTokens,
         evaluations: result.evaluations,
         refinementsUsed: result.refinementsUsed,
+        tokenBreakdown: (() => {
+          const raw = getTokenAccumulator()?.getBreakdown() ?? result.tokenBreakdown;
+          return raw ? this.finalizeTokenBreakdown(raw) : undefined;
+        })(),
       },
     };
     } catch (error) {
@@ -939,6 +1034,10 @@ export class Agent {
       totalTokens: sumTokenUsage(usages),
       evaluations: evaluations.length > 0 ? evaluations : undefined,
       refinementsUsed: evaluations.length > 0 ? refinementCount : undefined,
+      tokenBreakdown: (() => {
+        const raw = getTokenAccumulator()?.getBreakdown();
+        return raw ? this.finalizeTokenBreakdown(raw) : undefined;
+      })(),
       metadata: { stopReason, warning },
     };
   }
@@ -1454,10 +1553,12 @@ export class Agent {
     }
 
     const started = Date.now();
-    let result = await this.provider.complete({
-      ...params,
-      messages: params.messages ?? guardedMessages,
-    });
+    let result = await withCapabilityScope(CAPABILITY.LLM, () =>
+      this.provider.complete({
+        ...params,
+        messages: params.messages ?? guardedMessages,
+      }),
+    );
 
     if (middleware) {
       const post = await middleware.afterLlm({
@@ -1847,23 +1948,25 @@ export class Agent {
     let model = 'stream';
     const contentBlocks: ContentBlock[] = [];
 
-    for await (const chunk of this.provider.stream({
-      ...params,
-      messages: params.messages ?? guardedMessages,
-    })) {
-      this.dispatchStreamChunk(chunk, {
-        textParts,
-        toolUses,
-        toolInputs,
-        contentBlocks,
-        setMeta: (sr, u, m, latency) => {
-          stopReason = sr;
-          if (u) usage = u;
-          if (m) model = m;
-          if (latency) streamLatency = latency;
-        },
-      });
-    }
+    await withCapabilityScope(CAPABILITY.LLM, async () => {
+      for await (const chunk of this.provider.stream({
+        ...params,
+        messages: params.messages ?? guardedMessages,
+      })) {
+        this.dispatchStreamChunk(chunk, {
+          textParts,
+          toolUses,
+          toolInputs,
+          contentBlocks,
+          setMeta: (sr, u, m, latency) => {
+            stopReason = sr;
+            if (u) usage = u;
+            if (m) model = m;
+            if (latency) streamLatency = latency;
+          },
+        });
+      }
+    });
 
     if (contentBlocks.length === 0 && textParts.length > 0) {
       contentBlocks.push({ type: 'text', text: textParts.join('') });

@@ -5,6 +5,7 @@ import type { MetricsCollector } from './metrics.js';
 import { logExporterError } from './exporters/shared.js';
 import { buildTraceData } from './exporters/trace-builder.js';
 import type { TraceExporter } from './exporters/types.js';
+import type { TokenBreakdown } from './token-accounting/types.js';
 
 /** Attribute value types supported on spans and metrics. */
 export type AttributeValue = string | number | boolean;
@@ -666,4 +667,30 @@ export class InMemoryExporter implements TelemetryExporter {
 export interface OpenTelemetryBridge extends TelemetryExporter {
   /** Adapter name for diagnostics. */
   readonly bridgeName: string;
+}
+
+/** Sanitize a capability name for use in OpenTelemetry attribute keys. */
+export function sanitizeOtelAttributeSegment(name: string): string {
+  return name.replace(/[^a-z0-9_]/g, '_');
+}
+
+/**
+ * Attach token-breakdown totals and per-capability usage to a finished run span.
+ */
+export function applyTokenBreakdownAttributes(span: Span, breakdown: TokenBreakdown): void {
+  span.setAttribute('ottrix.tokens.total', breakdown.totalTokens);
+  span.setAttribute('ottrix.tokens.input', breakdown.totalInputTokens);
+  span.setAttribute('ottrix.tokens.output', breakdown.totalOutputTokens);
+  span.setAttribute('ottrix.tokens.cache_read', breakdown.totalCacheReadTokens);
+  span.setAttribute('ottrix.tokens.cache_write', breakdown.totalCacheWriteTokens);
+  span.setAttribute('ottrix.cost.usd', breakdown.totalCostUsd ?? 0);
+
+  for (const [name, usage] of Object.entries(breakdown.byCapability)) {
+    const safe = sanitizeOtelAttributeSegment(name);
+    span.setAttribute(`ottrix.tokens.by.${safe}.total`, usage.inputTokens + usage.outputTokens);
+    span.setAttribute(`ottrix.tokens.by.${safe}.calls`, usage.calls);
+    if (usage.costUsd !== undefined) {
+      span.setAttribute(`ottrix.tokens.by.${safe}.cost_usd`, usage.costUsd);
+    }
+  }
 }

@@ -1,3 +1,7 @@
+import {
+  CAPABILITY,
+  withCapabilityScope,
+} from '../../observability/token-accounting/index.js';
 import type { CompletionProvider } from '../../types/provider.js';
 import type {
   EvaluatorStrategy,
@@ -23,13 +27,15 @@ export class LLMEvaluator implements EvaluatorStrategy {
   async evaluate(ctx: EvaluationContext): Promise<SufficiencyResult> {
     const messages = this.buildEvaluationMessages(ctx);
 
-    const result = await this.provider.complete({
-      messages,
-      model: this.config.model, // cheap model if configured
-      maxTokens: this.config.maxEvalTokens,
-      temperature: 0, // deterministic evaluation
-      systemPrompt: this.buildSystemPrompt(ctx),
-    });
+    const result = await withCapabilityScope(CAPABILITY.EVALUATION, () =>
+      this.provider.complete({
+        messages,
+        model: this.config.model, // cheap model if configured
+        maxTokens: this.config.maxEvalTokens,
+        temperature: 0, // deterministic evaluation
+        systemPrompt: this.buildSystemPrompt(ctx),
+      }),
+    );
 
     this.lastObservation = {
       usedLlm: true,
