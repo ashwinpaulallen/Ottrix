@@ -84,7 +84,12 @@ interface AnthropicMessageResponse {
   content: AnthropicResponseContentBlock[];
   model: string;
   stop_reason: string | null;
-  usage: { input_tokens: number; output_tokens: number };
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
 }
 
 type AnthropicResponseContentBlock =
@@ -302,9 +307,21 @@ export class AnthropicProvider extends BaseProvider<AnthropicModel> {
           }
 
           if (eventType === 'message_start') {
-            const message = data.message as { usage?: { input_tokens?: number } } | undefined;
+            const message = data.message as {
+              usage?: {
+                input_tokens?: number;
+                cache_read_input_tokens?: number;
+                cache_creation_input_tokens?: number;
+              };
+            } | undefined;
             const inputTokens = message?.usage?.input_tokens ?? 0;
-            usage = { inputTokens, outputTokens: 0, totalTokens: inputTokens };
+            usage = {
+              inputTokens,
+              outputTokens: 0,
+              totalTokens: inputTokens,
+              cacheReadTokens: message?.usage?.cache_read_input_tokens,
+              cacheWriteTokens: message?.usage?.cache_creation_input_tokens,
+            };
           }
 
           currentEvent = '';
@@ -451,11 +468,18 @@ function mapAnthropicBlockToContent(block: AnthropicResponseContentBlock): Conte
 }
 
 /** Map Anthropic usage to {@link TokenUsage}. */
-function mapUsage(usage: { input_tokens: number; output_tokens: number }): TokenUsage {
+function mapUsage(usage: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}): TokenUsage {
   return {
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
     totalTokens: usage.input_tokens + usage.output_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens,
+    cacheWriteTokens: usage.cache_creation_input_tokens,
   };
 }
 

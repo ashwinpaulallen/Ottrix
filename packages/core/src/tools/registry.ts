@@ -11,6 +11,10 @@ import { emitAuditEvent } from '../guardrails/audit.js';
 import { runToolSpan } from '../observability/instrument.js';
 import { getMetricsCollector } from '../observability/global.js';
 import type { Telemetry } from '../observability/telemetry.js';
+import {
+  CAPABILITY,
+  withCapabilityScope,
+} from '../observability/token-accounting/index.js';
 import { ConfigurationError } from './errors.js';
 import { BaseTool } from './tool.js';
 import { FunctionTool } from './function-tool.js';
@@ -274,6 +278,15 @@ export class ToolRegistry {
    * @throws {ConfigurationError} If approval is required but no handler is registered.
    */
   async execute(
+    name: string,
+    input: Record<string, unknown>,
+    options?: ToolExecuteOptions,
+  ): Promise<ToolResult> {
+    const capability = `${CAPABILITY.TOOL_PREFIX}${name}`;
+    return withCapabilityScope(capability, () => this.executeInScope(name, input, options));
+  }
+
+  private async executeInScope(
     name: string,
     input: Record<string, unknown>,
     options?: ToolExecuteOptions,

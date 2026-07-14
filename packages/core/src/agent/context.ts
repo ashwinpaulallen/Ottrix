@@ -1,3 +1,7 @@
+import {
+  CAPABILITY,
+  withCapabilityScope,
+} from '../observability/token-accounting/index.js';
 import type { ChatMessage } from '../types/messages.js';
 import type { CompletionProvider } from '../types/provider.js';
 import { estimateMessageTokens, extractTextFromContent } from './messages.js';
@@ -67,20 +71,22 @@ export class ContextManager {
       .map((m) => `${m.role}: ${extractTextFromContent(m.content)}`)
       .join('\n');
 
-    const result = await this.provider.complete({
-      messages: [
-        {
-          role: 'user',
-          content:
-            'Summarize the following conversation segment concisely, preserving key facts, decisions, and tool outcomes:\n\n' +
-            transcript,
-        },
-      ],
-      systemPrompt:
-        'You produce concise conversation summaries. Output only the summary, no preamble.',
-      maxTokens: 1024,
-      temperature: 0,
-    });
+    const result = await withCapabilityScope(CAPABILITY.SUMMARIZATION, () =>
+      this.provider.complete({
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Summarize the following conversation segment concisely, preserving key facts, decisions, and tool outcomes:\n\n' +
+              transcript,
+          },
+        ],
+        systemPrompt:
+          'You produce concise conversation summaries. Output only the summary, no preamble.',
+        maxTokens: 1024,
+        temperature: 0,
+      }),
+    );
 
     return extractTextFromContent(result.content);
   }

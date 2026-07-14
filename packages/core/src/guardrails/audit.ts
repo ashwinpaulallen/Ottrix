@@ -18,6 +18,7 @@ export {
 export type AuditEventType =
   | 'agent.run.start'
   | 'agent.run.end'
+  | 'agent.evaluation.run'
   | 'tool.invoke'
   | 'tool.allow'
   | 'tool.deny'

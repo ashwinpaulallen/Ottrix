@@ -126,6 +126,13 @@ export {
   extractToolUses,
   isTextOnlyResponse,
   serializeToolOutput,
+  createEvaluator,
+  CompositeEvaluator,
+  HeuristicEvaluator,
+  LLMEvaluator,
+  buildRefinementInstruction,
+  SufficiencyResultSchema,
+  EvaluationConfigSchema,
   type Plan,
   type PlanStep,
   type PlanValidationResult,
@@ -136,6 +143,11 @@ export {
   type ResultEvaluation,
   type StepEvaluation,
   type GuardrailCheckResult,
+  type SufficiencyResult,
+  type EvaluationConfig,
+  type EvaluationRecord,
+  type EvaluatorStrategy,
+  type EvaluationContext,
 } from './agent/index.js';
 
 // --- Providers ---
@@ -317,6 +329,27 @@ export {
   type ExportSpanData as SpanData,
   type WebhookExporterOptions,
 } from './observability/index.js';
+
+// --- Token accounting (per-capability attribution) ---
+export { TokenAccumulator } from './observability/token-accounting/accumulator.js';
+export {
+  withTokenAccounting,
+  getTokenAccumulator,
+  recordTokens,
+  withCapabilityScope,
+  enterCapabilityScope,
+} from './observability/token-accounting/context.js';
+export {
+  formatTokenBreakdown,
+  formatTokenBreakdownTable,
+} from './observability/token-accounting/formatter.js';
+export { attachCosts } from './observability/token-accounting/cost-attribution.js';
+export { CAPABILITY } from './observability/token-accounting/types.js';
+export type {
+  TokenBreakdown,
+  CapabilityUsage,
+  TokenRecord,
+} from './observability/token-accounting/types.js';
 
 // --- Evals ---
 export {

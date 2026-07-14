@@ -44,11 +44,28 @@ import {
 } from './messages.js';
 import type { Plan, PlanStep, PlanValidationResult } from './planner.js';
 import { instrumentProvider, instrumentAgentToolRegistry } from '../observability/instrument.js';
-import { getMetricsCollector } from '../observability/global.js';
+import { getLogger, getMetricsCollector } from '../observability/global.js';
 import { emitAuditEvent } from '../guardrails/audit.js';
-import { ProviderRegistry } from '../providers/registry.js';
-import { runInActiveSpanStack, Span, SpanStack, type Telemetry } from '../observability/telemetry.js';
+import { estimateCost, ProviderRegistry } from '../providers/registry.js';
+import {
+  applyTokenBreakdownAttributes,
+  runInActiveSpanStack,
+  Span,
+  SpanStack,
+  type Telemetry,
+} from '../observability/telemetry.js';
 import type { RunRecorder } from '../observability/replay.js';
+import {
+  CAPABILITY,
+  enrichBreakdownWithCosts,
+  formatTokenBreakdown,
+  getTokenAccumulator,
+  withCapabilityScope,
+  withTokenAccounting,
+  withTokenAccountingGenerator,
+  type TokenAccumulator,
+} from '../observability/token-accounting/index.js';
+import type { TokenBreakdown } from '../observability/token-accounting/types.js';
 import { OpenAIProvider } from '../providers/openai.js';
 import { unknownCompletionLatency } from '../providers/latency.js';
 import {
@@ -59,6 +76,14 @@ import {
   parseAndValidateStructuredOutput,
   type StructuredOutputContext,
 } from './structured-output.js';
+import { createEvaluator } from './evaluation/composite-evaluator.js';
+import { buildRefinementInstruction } from './evaluation/refinement.js';
+import {
+  EvaluationConfigSchema,
+  type EvaluationConfig,
+  type EvaluationRecord,
+  type EvaluatorStrategy,
+} from './evaluation/types.js';
 
 const DEFAULT_MAX_STEPS = 10;
 const EMPTY_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -78,6 +103,8 @@ export class Agent {
   private readonly maxSteps: number;
   private readonly maxTokenBudget?: number;
   private readonly contextManager: ContextManager;
+  private readonly evaluationConfig?: EvaluationConfig;
+  private readonly evaluator?: EvaluatorStrategy;
 
   /**
    * @param config - Agent identity, provider, tools, guardrails, and hooks.
@@ -96,6 +123,20 @@ export class Agent {
       contextLimitTokens: config.contextLimitTokens,
       keepRecentMessages: config.keepRecentMessages,
     });
+    if (config.evaluation) {
+      const parsed = EvaluationConfigSchema.safeParse(config.evaluation);
+      if (!parsed.success) {
+        throw new Error(
+          `Invalid evaluation config: ${JSON.stringify(parsed.error.issues)}`,
+        );
+      }
+      this.config.evaluation = parsed.data;
+      this.evaluationConfig = parsed.data;
+      if (parsed.data.enabled) {
+        const evalProvider = config.evaluationProvider ?? this.provider;
+        this.evaluator = createEvaluator(evalProvider, parsed.data);
+      }
+    }
   }
 
   /** Agent display name from configuration. */
@@ -106,6 +147,16 @@ export class Agent {
   /** Optional reflector configured for this agent. */
   getReflector(): AgentConfig['reflector'] {
     return this.config.reflector;
+  }
+
+  /** Resolved evaluation config after Zod defaults (undefined when not configured). */
+  getEvaluationConfig(): EvaluationConfig | undefined {
+    return this.evaluationConfig;
+  }
+
+  /** Active evaluator when evaluation is enabled. */
+  getEvaluator(): EvaluatorStrategy | undefined {
+    return this.evaluator;
   }
 
   /** Tool registry when a {@link ToolRegistry} instance was provided in config. */
@@ -123,37 +174,55 @@ export class Agent {
     options?: AgentRunOptions<TSchema>,
   ): Promise<AgentResult<AgentRunMetadata, z.infer<TSchema>>> {
     return this.runInAgentContext(async () => {
-      const telemetry = this.telemetry;
-      if (!telemetry) {
-        return this.runCore(input, options) as Promise<
-          AgentResult<AgentRunMetadata, z.infer<TSchema>>
-        >;
-      }
+      const runId = getRunContext()?.runId ?? randomUUID();
+      return withTokenAccounting(runId, async (accumulator) => {
+        const telemetry = this.telemetry;
+        if (!telemetry) {
+          const result = (await this.runCore(input, options)) as AgentResult<
+            AgentRunMetadata,
+            z.infer<TSchema>
+          >;
+          return {
+            ...result,
+            tokenBreakdown: this.finalizeTokenBreakdown(
+              accumulator.getBreakdown(),
+              result.metadata.model,
+            ),
+          };
+        }
 
-      const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
-      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
-      let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
+        const rootSpan = telemetry.startSpan('agent.run', { 'agent.name': this.getName() });
+        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+        let result: AgentResult<AgentRunMetadata, z.infer<TSchema>> | undefined;
 
-      try {
-        const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
-          try {
-            result = (await this.runCore(input, options, telemetry)) as AgentResult<
-              AgentRunMetadata,
-              z.infer<TSchema>
-            >;
-            return result;
-          } catch (error) {
-            rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-            telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-            throw error;
-          }
-        });
-        return runResult;
-      } finally {
-        this.annotateRootTrace(rootSpan, input, result?.response);
-        rootSpan.end();
-        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
-      }
+        try {
+          const runResult = await telemetry.withActiveSpan(rootSpan, async () => {
+            try {
+              result = (await this.runCore(input, options, telemetry)) as AgentResult<
+                AgentRunMetadata,
+                z.infer<TSchema>
+              >;
+              return result;
+            } catch (error) {
+              rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+              telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+              throw error;
+            }
+          });
+          result = {
+            ...runResult,
+            tokenBreakdown: this.finalizeTokenBreakdown(
+              accumulator.getBreakdown(),
+              runResult.metadata.model,
+            ),
+          };
+          return result;
+        } finally {
+          this.annotateRootTrace(rootSpan, input, result?.response, result);
+          rootSpan.end();
+          telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
+        }
+      });
     });
   }
 
@@ -230,6 +299,9 @@ export class Agent {
     let warning: string | undefined;
     let finalResponse = '';
     let parsedOutput: unknown;
+    const evaluations: EvaluationRecord[] = [];
+    let refinementCount = 0;
+    let pendingRefinement = false;
 
     for (let iteration = 0; iteration < this.maxSteps; iteration++) {
       const loopControl = await runWith(withStep(`step_${iteration}`), async (): Promise<'break' | 'continue' | 'next'> => {
@@ -276,13 +348,30 @@ export class Agent {
             true,
             prepared.plan,
           );
-          if (reflectionStop) {
-            stopReason = 'completed';
-            return 'break';
+          if (!reflectionStop) {
+            return 'continue';
           }
+        }
+
+        const evalOutcome = await this.runSelfEvaluation({
+          originalGoal: input,
+          currentResponse: finalResponse,
+          messages,
+          steps,
+          evaluations,
+          refinementCount,
+        });
+        for (const event of evalOutcome.events) {
+          this.emitAgentEvent(event);
+        }
+        refinementCount = evalOutcome.refinementCount;
+
+        if (evalOutcome.shouldRefine) {
+          pendingRefinement = true;
           return 'continue';
         }
 
+        pendingRefinement = false;
         stopReason = 'completed';
         return 'break';
       }
@@ -342,6 +431,24 @@ export class Agent {
       if (loopControl === 'continue') {
         continue;
       }
+    }
+
+    if (pendingRefinement) {
+      stopReason = 'max_steps';
+      warning =
+        warning ??
+        `Maximum steps (${this.maxSteps}) reached during refinement`;
+      evaluations.push({
+        iteration: refinementCount,
+        evaluatedAt: Date.now(),
+        result: {
+          sufficient: false,
+          confidence: 1,
+          reason: 'Loop cut short: maxSteps reached during refinement',
+          suggestedAction: 'finalize',
+        },
+        durationMs: 0,
+      });
     }
 
     if (!finalResponse && stopReason === 'completed') {
@@ -404,6 +511,8 @@ export class Agent {
       parsedOutput,
       steps,
       totalTokens: sumTokenUsage(usages),
+      evaluations: evaluations.length > 0 ? evaluations : undefined,
+      refinementsUsed: evaluations.length > 0 ? refinementCount : undefined,
       metadata,
     };
 
@@ -436,6 +545,7 @@ export class Agent {
     span: Span | undefined,
     input: string,
     output?: string,
+    result?: AgentResult,
   ): void {
     if (!span) {
       return;
@@ -443,6 +553,35 @@ export class Agent {
     span.setAttribute('trace.input', input);
     if (output !== undefined) {
       span.setAttribute('trace.output', output);
+    }
+
+    if (result?.tokenBreakdown) {
+      applyTokenBreakdownAttributes(span, result.tokenBreakdown);
+      getLogger().debug(formatTokenBreakdown(result.tokenBreakdown));
+    }
+
+    const evaluationEnabled = Boolean(this.evaluationConfig?.enabled);
+    span.setAttribute('ottrix.evaluation.enabled', evaluationEnabled);
+    if (!evaluationEnabled) {
+      return;
+    }
+
+    const refinementsTriggered = result?.refinementsUsed ?? 0;
+    span.setAttribute('ottrix.evaluation.refinements_triggered', refinementsTriggered);
+
+    const evaluations = result?.evaluations ?? [];
+    if (evaluations.length > 0) {
+      const last = evaluations[evaluations.length - 1]!;
+      span.setAttribute('ottrix.evaluation.final_sufficient', last.result.sufficient);
+      const totalCostUsd = evaluations.reduce((sum, record) => {
+        if (!record.tokenUsage) {
+          return sum;
+        }
+        return sum + estimateEvaluationCostUsd(record.tokenUsage);
+      }, 0);
+      span.setAttribute('ottrix.evaluation.total_cost_usd', totalCostUsd);
+    } else {
+      span.setAttribute('ottrix.evaluation.total_cost_usd', 0);
     }
   }
 
@@ -486,45 +625,112 @@ export class Agent {
     };
 
     yield* runGeneratorWith(ctx, async function* (this: Agent) {
-      const telemetry = this.telemetry;
-      if (!telemetry) {
-        yield* this.streamCore(input);
-        return;
-      }
-
-      const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
-      const spanStack = new SpanStack();
-      spanStack.push(rootSpan);
-      rootSpan.setAttribute('trace.input', input);
-      telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
-      let streamOutput: string | undefined;
-
-      try {
-        yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
-          try {
-            for await (const event of this.streamCore(input)) {
-              if (event.type === 'done') {
-                const doneData = event.data as { response?: string };
-                streamOutput = doneData.response;
-              }
-              yield event;
-            }
-            rootSpan.setStatus('ok');
-          } catch (error) {
-            rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
-            telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
-            throw error;
+      yield* withTokenAccountingGenerator(ctx.runId, async function* (
+        this: Agent,
+        accumulator: TokenAccumulator,
+      ) {
+        const telemetry = this.telemetry;
+        if (!telemetry) {
+          for await (const event of this.streamCore(input)) {
+            yield this.attachTokenBreakdownToEvent(event, accumulator.getBreakdown());
           }
-        }.bind(this));
-      } finally {
-        if (streamOutput !== undefined) {
-          rootSpan.setAttribute('trace.output', streamOutput);
+          return;
         }
-        rootSpan.end();
-        spanStack.pop();
-        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
-      }
+
+        const rootSpan = telemetry.startSpan('agent.stream', { 'agent.name': this.getName() });
+        const spanStack = new SpanStack();
+        spanStack.push(rootSpan);
+        rootSpan.setAttribute('trace.input', input);
+        telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(1);
+        let streamOutput: string | undefined;
+        let streamResult: AgentResult | undefined;
+
+        try {
+          yield* runInActiveSpanStack(spanStack, async function* (this: Agent) {
+            try {
+              for await (const event of this.streamCore(input)) {
+                const withBreakdown = this.attachTokenBreakdownToEvent(
+                  event,
+                  accumulator.getBreakdown(),
+                );
+                if (withBreakdown.type === 'done') {
+                  const doneData = withBreakdown.data as {
+                    response?: string;
+                    evaluations?: EvaluationRecord[];
+                    refinementsUsed?: number;
+                    tokenBreakdown?: TokenBreakdown;
+                  };
+                  streamOutput = doneData.response;
+                  streamResult = {
+                    response: doneData.response ?? '',
+                    steps: [],
+                    totalTokens: EMPTY_USAGE,
+                    evaluations: doneData.evaluations,
+                    refinementsUsed: doneData.refinementsUsed,
+                    tokenBreakdown: doneData.tokenBreakdown,
+                    metadata: { stopReason: 'completed' },
+                  };
+                }
+                yield withBreakdown;
+              }
+              rootSpan.setStatus('ok');
+            } catch (error) {
+              rootSpan.setStatus('error', error instanceof Error ? error.message : String(error));
+              telemetry.counter('agent.errors', { 'agent.name': this.getName() }).add(1);
+              throw error;
+            }
+          }.bind(this));
+        } finally {
+          this.annotateRootTrace(rootSpan, input, streamOutput, streamResult);
+          rootSpan.end();
+          spanStack.pop();
+          telemetry.gauge('agent.active_runs', { 'agent.name': this.getName() }).set(0);
+        }
+      }.bind(this));
     }.bind(this));
+  }
+
+  private attachTokenBreakdownToEvent(
+    event: AgentEvent,
+    tokenBreakdown: TokenBreakdown,
+  ): AgentEvent {
+    if (event.type !== 'done') {
+      return event;
+    }
+    const model =
+      event.data && typeof event.data === 'object'
+        ? (event.data as { model?: string }).model
+        : undefined;
+    const enriched = this.finalizeTokenBreakdown(tokenBreakdown, model);
+    const data =
+      event.data && typeof event.data === 'object'
+        ? { ...(event.data as Record<string, unknown>), tokenBreakdown: enriched }
+        : { tokenBreakdown: enriched };
+    return { type: 'done', data };
+  }
+
+  private finalizeTokenBreakdown(
+    breakdown: TokenBreakdown,
+    model?: string,
+  ): TokenBreakdown {
+    const resolvedModel = model ?? this.config.defaultModel;
+    if (!resolvedModel) {
+      return breakdown;
+    }
+    return enrichBreakdownWithCosts(
+      breakdown,
+      this.resolveProviderLabel(),
+      resolvedModel,
+    );
+  }
+
+  private resolveProviderLabel(): string {
+    const provider = this.config.provider;
+    const ctorName = provider.constructor?.name;
+    if (typeof ctorName === 'string' && ctorName.length > 0 && ctorName !== 'Object') {
+      return ctorName.replace(/Provider$/, '').toLowerCase() || 'provider';
+    }
+    return 'provider';
   }
 
   private async *streamCore(input: string): AsyncIterable<AgentEvent> {
@@ -566,11 +772,15 @@ export class Agent {
     const usages: TokenUsage[] = [];
     let warning: string | undefined;
     let finalResponse = '';
+    const evaluations: EvaluationRecord[] = [];
+    let refinementCount = 0;
+    let pendingRefinement = false;
+    const steps: AgentStep[] = [];
 
     yield { type: 'thinking', data: { status: 'started' } };
 
     for (let iteration = 0; iteration < this.maxSteps; iteration++) {
-      const loopState = { break: false, abortStream: false };
+      const loopState = { break: false, abortStream: false, continueLoop: false };
       yield* runGeneratorWith(withStep(`step_${iteration}`), async function* (
         this: Agent,
       ): AsyncGenerator<AgentEvent, void, undefined> {
@@ -596,6 +806,33 @@ export class Agent {
 
         if (isTextOnlyResponse(result.content)) {
           finalResponse = extractTextFromContent(result.content);
+          await this.recordStep(steps, {
+            type: 'response',
+            content: { text: finalResponse },
+            tokenUsage: result.usage,
+          });
+
+          const evalOutcome = await this.runSelfEvaluation({
+            originalGoal: input,
+            currentResponse: finalResponse,
+            messages,
+            steps,
+            evaluations,
+            refinementCount,
+          });
+          for (const event of evalOutcome.events) {
+            this.emitAgentEvent(event);
+            yield event;
+          }
+          refinementCount = evalOutcome.refinementCount;
+
+          if (evalOutcome.shouldRefine) {
+            pendingRefinement = true;
+            loopState.continueLoop = true;
+            return;
+          }
+
+          pendingRefinement = false;
           stopReason = 'completed';
           loopState.break = true;
           return;
@@ -708,7 +945,29 @@ export class Agent {
       if (loopState.break) {
         break;
       }
+      if (loopState.continueLoop) {
+        stepCount += 1;
+        continue;
+      }
       stepCount += 1;
+    }
+
+    if (pendingRefinement) {
+      stopReason = 'max_steps';
+      warning =
+        warning ??
+        `Maximum steps (${this.maxSteps}) reached during refinement`;
+      evaluations.push({
+        iteration: refinementCount,
+        evaluatedAt: Date.now(),
+        result: {
+          sufficient: false,
+          confidence: 1,
+          reason: 'Loop cut short: maxSteps reached during refinement',
+          suggestedAction: 'finalize',
+        },
+        durationMs: 0,
+      });
     }
 
     if (!finalResponse && stopReason === 'completed') {
@@ -716,7 +975,15 @@ export class Agent {
       warning = `Maximum steps (${this.maxSteps}) reached`;
     }
 
-    const result = this.buildStreamResult(finalResponse, stopReason, warning, usages);
+    const result = this.buildStreamResult(
+      finalResponse,
+      stopReason,
+      warning,
+      usages,
+      steps,
+      evaluations,
+      refinementCount,
+    );
     this.scheduleObservationalExtraction(messages);
     this.syncRecorder(this.telemetry, result, spanStart);
 
@@ -727,6 +994,12 @@ export class Agent {
         warning,
         response: finalResponse,
         totalTokens: result.totalTokens,
+        evaluations: result.evaluations,
+        refinementsUsed: result.refinementsUsed,
+        tokenBreakdown: (() => {
+          const raw = getTokenAccumulator()?.getBreakdown() ?? result.tokenBreakdown;
+          return raw ? this.finalizeTokenBreakdown(raw) : undefined;
+        })(),
       },
     };
     } catch (error) {
@@ -751,13 +1024,235 @@ export class Agent {
     stopReason: AgentStopReason,
     warning: string | undefined,
     usages: TokenUsage[],
+    steps: AgentStep[] = [],
+    evaluations: EvaluationRecord[] = [],
+    refinementCount = 0,
   ): AgentResult {
     return {
       response,
-      steps: [],
+      steps,
       totalTokens: sumTokenUsage(usages),
+      evaluations: evaluations.length > 0 ? evaluations : undefined,
+      refinementsUsed: evaluations.length > 0 ? refinementCount : undefined,
+      tokenBreakdown: (() => {
+        const raw = getTokenAccumulator()?.getBreakdown();
+        return raw ? this.finalizeTokenBreakdown(raw) : undefined;
+      })(),
       metadata: { stopReason, warning },
     };
+  }
+
+  /**
+   * Evaluate a text-only response and optionally inject a refinement message.
+   * Emits evaluation events for {@link AgentConfig.onAgentEvent} / stream consumers.
+   */
+  private async runSelfEvaluation(args: {
+    originalGoal: string;
+    currentResponse: string;
+    messages: ChatMessage[];
+    steps: AgentStep[];
+    evaluations: EvaluationRecord[];
+    refinementCount: number;
+  }): Promise<{
+    shouldRefine: boolean;
+    refinementCount: number;
+    events: AgentEvent[];
+  }> {
+    const events: AgentEvent[] = [];
+    const evalConfig = this.evaluationConfig;
+    let { refinementCount } = args;
+
+    if (!evalConfig?.enabled || !this.evaluator) {
+      return { shouldRefine: false, refinementCount, events };
+    }
+
+    const maxRefinements = evalConfig.maxRefinements ?? 2;
+    const threshold = evalConfig.threshold ?? 0.8;
+
+    if (refinementCount >= maxRefinements) {
+      events.push({
+        type: 'max_refinements_reached',
+        data: { refinements: refinementCount },
+      });
+      return { shouldRefine: false, refinementCount, events };
+    }
+
+    events.push({
+      type: 'evaluation_start',
+      data: { refinement: refinementCount },
+    });
+
+    const toolsAvailable = this.toolRegistry.list().map((t) => t.name);
+    const shouldSkip = Boolean(evalConfig.skipIfNoTools && toolsAvailable.length === 0);
+    if (shouldSkip) {
+      events.push({
+        type: 'evaluation_skipped',
+        data: { reason: 'No tools available' },
+      });
+      return { shouldRefine: false, refinementCount, events };
+    }
+
+    const evalStart = Date.now();
+    const telemetry = this.telemetry;
+    const evalSpan = telemetry?.startSpan('ottrix.agent.evaluation', {
+      'agent.name': this.getName(),
+      'ottrix.evaluation.refinement_number': refinementCount,
+    });
+
+    const executeEvaluation = async () =>
+      this.evaluator!.evaluate({
+        originalGoal: args.originalGoal,
+        currentResponse: args.currentResponse,
+        conversationHistory: args.messages.map((m) => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? m.content : '[complex content]',
+        })),
+        refinementNumber: refinementCount,
+        stepsSoFar: args.steps.length,
+        toolsAvailable,
+        toolsUsed: args.steps
+          .filter((s) => s.type === 'tool_call')
+          .map((s) => {
+            const content = s.content as { name?: string };
+            return typeof content.name === 'string' ? content.name : 'unknown';
+          }),
+        criteria: evalConfig.criteria,
+      });
+
+    let evaluation;
+    try {
+      evaluation =
+        evalSpan && telemetry
+          ? await telemetry.withActiveSpan(evalSpan, executeEvaluation)
+          : await executeEvaluation();
+    } catch (error) {
+      evalSpan?.setStatus('error', error instanceof Error ? error.message : String(error));
+      evalSpan?.end();
+      throw error;
+    }
+
+    const durationMs = Date.now() - evalStart;
+    const observation = this.evaluator.getLastObservation?.();
+    const tokenUsage = observation?.tokenUsage;
+    const evalModel = observation?.model ?? evalConfig.model ?? this.config.defaultModel ?? '';
+    const costUsd = tokenUsage ? estimateEvaluationCostUsd(tokenUsage) : 0;
+
+    if (evalSpan) {
+      evalSpan.setAttribute('ottrix.evaluation.sufficient', evaluation.sufficient);
+      evalSpan.setAttribute('ottrix.evaluation.confidence', evaluation.confidence);
+      evalSpan.setAttribute(
+        'ottrix.evaluation.suggested_action',
+        evaluation.suggestedAction ?? 'finalize',
+      );
+      evalSpan.setAttribute(
+        'ottrix.evaluation.missing_aspects_count',
+        evaluation.missingAspects?.length ?? 0,
+      );
+      evalSpan.setAttribute('ottrix.evaluation.duration_ms', durationMs);
+      evalSpan.setAttribute('ottrix.evaluation.model', evalModel);
+      if (tokenUsage) {
+        evalSpan.setAttribute('gen_ai.usage.input_tokens', tokenUsage.inputTokens);
+        evalSpan.setAttribute('gen_ai.usage.output_tokens', tokenUsage.outputTokens);
+      }
+      evalSpan.setStatus('ok');
+      evalSpan.end();
+    }
+
+    this.recordEvaluationMetrics({
+      durationMs,
+      confidence: evaluation.confidence,
+      costUsd,
+    });
+
+    emitAuditEvent({
+      type: 'agent.evaluation.run',
+      actor: { type: 'agent', id: this.getName(), name: this.getName() },
+      action: 'evaluate',
+      resource: `agent:${this.getName()}`,
+      outcome: evaluation.sufficient ? 'success' : 'failure',
+      payload: {
+        refinement: refinementCount,
+        sufficient: evaluation.sufficient,
+        confidence: evaluation.confidence,
+        suggestedAction: evaluation.suggestedAction ?? 'finalize',
+      },
+      duration: durationMs,
+    });
+
+    const evalRecord: EvaluationRecord = {
+      iteration: refinementCount,
+      evaluatedAt: Date.now(),
+      result: evaluation,
+      durationMs,
+      tokenUsage,
+    };
+    args.evaluations.push(evalRecord);
+
+    const lastStep = args.steps[args.steps.length - 1];
+    if (lastStep?.type === 'response') {
+      lastStep.evaluation = evalRecord;
+    }
+
+    events.push({
+      type: 'evaluation_result',
+      data: { ...evaluation, durationMs },
+    });
+
+    if (!evaluation.sufficient && evaluation.confidence >= threshold) {
+      refinementCount += 1;
+      const instruction = buildRefinementInstruction(
+        evaluation,
+        args.originalGoal,
+        refinementCount,
+      );
+      args.messages.push({ role: instruction.role, content: instruction.message });
+      this.runRecorder?.recordMessage({
+        role: instruction.role,
+        content: instruction.message,
+      });
+
+      getMetricsCollector().record('evaluation_refinement_triggered_total', 1, {
+        agent: this.getName(),
+      });
+      this.telemetry
+        ?.counter('evaluation.refinement_triggered', { 'agent.name': this.getName() })
+        .add(1);
+
+      events.push({
+        type: 'refinement_start',
+        data: {
+          missingAspects: evaluation.missingAspects ?? [],
+          suggestedAction: evaluation.suggestedAction ?? 'refine_response',
+        },
+      });
+
+      return { shouldRefine: true, refinementCount, events };
+    }
+
+    return { shouldRefine: false, refinementCount, events };
+  }
+
+  private recordEvaluationMetrics(args: {
+    durationMs: number;
+    confidence: number;
+    costUsd: number;
+  }): void {
+    const labels = { agent: this.getName() };
+    const metrics = getMetricsCollector();
+    metrics.record('evaluation_triggered_total', 1, labels);
+    metrics.record('evaluation_duration_ms', args.durationMs, labels);
+    metrics.record('evaluation_confidence', args.confidence, labels);
+    metrics.record('evaluation_cost_usd', args.costUsd, labels);
+
+    const telemetry = this.telemetry;
+    if (!telemetry) {
+      return;
+    }
+    const agentAttrs = { 'agent.name': this.getName() };
+    telemetry.counter('evaluation.triggered', agentAttrs).add(1);
+    telemetry.histogram('evaluation.duration_ms', agentAttrs).record(args.durationMs);
+    telemetry.histogram('evaluation.confidence', agentAttrs).record(args.confidence);
+    telemetry.counter('evaluation.cost_usd', agentAttrs).add(args.costUsd);
   }
 
   private async prepareRun(input: string): Promise<{
@@ -1058,10 +1553,12 @@ export class Agent {
     }
 
     const started = Date.now();
-    let result = await this.provider.complete({
-      ...params,
-      messages: params.messages ?? guardedMessages,
-    });
+    let result = await withCapabilityScope(CAPABILITY.LLM, () =>
+      this.provider.complete({
+        ...params,
+        messages: params.messages ?? guardedMessages,
+      }),
+    );
 
     if (middleware) {
       const post = await middleware.afterLlm({
@@ -1451,23 +1948,25 @@ export class Agent {
     let model = 'stream';
     const contentBlocks: ContentBlock[] = [];
 
-    for await (const chunk of this.provider.stream({
-      ...params,
-      messages: params.messages ?? guardedMessages,
-    })) {
-      this.dispatchStreamChunk(chunk, {
-        textParts,
-        toolUses,
-        toolInputs,
-        contentBlocks,
-        setMeta: (sr, u, m, latency) => {
-          stopReason = sr;
-          if (u) usage = u;
-          if (m) model = m;
-          if (latency) streamLatency = latency;
-        },
-      });
-    }
+    await withCapabilityScope(CAPABILITY.LLM, async () => {
+      for await (const chunk of this.provider.stream({
+        ...params,
+        messages: params.messages ?? guardedMessages,
+      })) {
+        this.dispatchStreamChunk(chunk, {
+          textParts,
+          toolUses,
+          toolInputs,
+          contentBlocks,
+          setMeta: (sr, u, m, latency) => {
+            stopReason = sr;
+            if (u) usage = u;
+            if (m) model = m;
+            if (latency) streamLatency = latency;
+          },
+        });
+      }
+    });
 
     if (contentBlocks.length === 0 && textParts.length > 0) {
       contentBlocks.push({ type: 'text', text: textParts.join('') });
@@ -1600,6 +2099,23 @@ function auditOutcomeForAgentRun(
     return 'denied';
   }
   return 'failure';
+}
+
+/** Medium-tier rates for evaluation cost attribution when model rates are unknown. */
+const EVALUATION_COST_RATES = { inputPer1kTokens: 0.003, outputPer1kTokens: 0.015 };
+
+function estimateEvaluationCostUsd(usage: {
+  inputTokens: number;
+  outputTokens: number;
+}): number {
+  return estimateCost(
+    {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.inputTokens + usage.outputTokens,
+    },
+    EVALUATION_COST_RATES,
+  );
 }
 
 function toStopReason(reason?: string): AgentStopReason {

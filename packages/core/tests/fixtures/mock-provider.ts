@@ -1,3 +1,4 @@
+import { recordTokens } from '../../src/observability/token-accounting/context.js';
 import type { ChatMessage, ContentBlock } from '../../src/types/messages.js';
 import type {
   CompletionParams,
@@ -49,12 +50,21 @@ export class MockCompletionProvider implements CompletionProvider {
     if (!next) {
       throw new Error('MockCompletionProvider: no more complete() responses queued');
     }
-    return ensureCompletionLatency(next);
+    const result = ensureCompletionLatency(next);
+    recordTokens({
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      cacheReadTokens: result.usage.cacheReadTokens,
+      cacheWriteTokens: result.usage.cacheWriteTokens,
+      model: result.model,
+      provider: 'mock',
+    });
+    return result;
   }
 
   async *stream(params: CompletionParams): AsyncIterable<StreamChunk> {
     this.lastCompleteParams = params;
-    const next = this.streamQueue.shift() ?? this.completeQueue[0];
+    const next = this.streamQueue.shift() ?? this.completeQueue.shift();
     if (!next) {
       throw new Error('MockCompletionProvider: no more stream() responses queued');
     }
@@ -70,6 +80,15 @@ export class MockCompletionProvider implements CompletionProvider {
         };
       }
     }
+
+    recordTokens({
+      inputTokens: next.usage.inputTokens,
+      outputTokens: next.usage.outputTokens,
+      cacheReadTokens: next.usage.cacheReadTokens,
+      cacheWriteTokens: next.usage.cacheWriteTokens,
+      model: next.model,
+      provider: 'mock',
+    });
 
     yield {
       type: 'done',

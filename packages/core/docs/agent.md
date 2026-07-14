@@ -17,7 +17,11 @@ The **Agent** runs a ReAct-style loop: call the LLM, execute tool calls, append 
 | `getReflector()` | `Reflector \| undefined` | `config.reflector` |
 | `getToolRegistry()` | `ToolRegistry \| undefined` | Only if `config.toolRegistry` is a `ToolRegistry` instance |
 | `run(input)` | `Promise<AgentResult>` | Full loop with steps, reflector, guardrails, optional telemetry span `agent.run` |
-| `stream(input)` | `AsyncIterable<AgentEvent>` | Streaming loop; span `agent.stream`; yields `thinking`, `text`, `tool_call`, `tool_result`, `tool_denied`, `done` |
+| `stream(input)` | `AsyncIterable<AgentEvent>` | Streaming loop; span `agent.stream`; yields `thinking`, `text`, `tool_call`, `tool_result`, `tool_denied`, evaluation events (when enabled), `done` |
+| `getEvaluationConfig()` | `EvaluationConfig \| undefined` | Resolved evaluation config after Zod defaults |
+| `getEvaluator()` | `EvaluatorStrategy \| undefined` | Active evaluator when evaluation is enabled |
+
+See also: [Self-evaluation](./self-evaluation.md) for in-loop sufficiency checks and refinement.
 
 ### `run` vs `stream` (implemented differences)
 

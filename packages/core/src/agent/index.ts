@@ -30,3 +30,20 @@ export {
   isTextOnlyResponse,
   serializeToolOutput,
 } from './messages.js';
+export {
+  createEvaluator,
+  CompositeEvaluator,
+  HeuristicEvaluator,
+  LLMEvaluator,
+  buildRefinementInstruction,
+  SufficiencyResultSchema,
+  EvaluationRecordSchema,
+  EvaluationConfigSchema,
+  type SufficiencyResult,
+  type EvaluationRecord,
+  type EvaluationConfig,
+  type EvaluatorStrategy,
+  type EvaluationContext,
+  type EvaluationEvent,
+  type RefinementInstruction,
+} from './evaluation/index.js';
