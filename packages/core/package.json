@@ -1,7 +1,7 @@
 {
   "name": "ottrix",
   "private": false,
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "TypeScript LLM agent framework: ReAct loop, tool calling, MCP, multi-agent workflows, memory, guardrails. Anthropic Claude, OpenAI, Ollama via fetch — vendor-neutral, zero SDK deps.",
   "license": "MIT",
   "type": "module",
