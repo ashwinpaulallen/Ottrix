@@ -97,10 +97,10 @@ describe('BaseProvider token accounting', () => {
 
     await withTokenAccounting('run-stream', async (acc) => {
       await withCapabilityScope(CAPABILITY.EVALUATION, async () => {
-        for await (const _chunk of provider.stream({
+        for await (const chunk of provider.stream({
           messages: [{ role: 'user', content: 'hi' }],
         })) {
-          // drain
+          void chunk;
         }
       });
 
@@ -226,10 +226,10 @@ describe('BaseProvider token accounting', () => {
 
     expect(spy).toHaveBeenCalledOnce();
 
-    for await (const _chunk of provider.stream({
+    for await (const chunk of provider.stream({
       messages: [{ role: 'user', content: 'hi' }],
     })) {
-      // drain
+      void chunk;
     }
 
     expect(spy).toHaveBeenCalledTimes(2);

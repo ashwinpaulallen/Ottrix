@@ -47,7 +47,9 @@ describe('ToolRegistry token accounting', () => {
           properties: { text: { type: 'string' } },
           required: ['text'],
         },
-        execute: async (input) => ({ text: input.text }),
+        execute: async (input: Record<string, unknown>) => ({
+          text: typeof input.text === 'string' ? input.text : '',
+        }),
       }),
     );
 
@@ -85,9 +87,10 @@ describe('ToolRegistry token accounting', () => {
           properties: { text: { type: 'string' } },
           required: ['text'],
         },
-        execute: async (input) => {
+        execute: async (input: Record<string, unknown>) => {
+          const text = typeof input.text === 'string' ? input.text : '';
           const completion = await provider.complete({
-            messages: [{ role: 'user', content: String(input.text) }],
+            messages: [{ role: 'user', content: text }],
           });
           return { summary: completion.content };
         },

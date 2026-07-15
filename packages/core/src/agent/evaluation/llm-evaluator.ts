@@ -134,7 +134,7 @@ Evaluate and return JSON:
             (b: unknown) =>
               typeof b === 'object' &&
               b !== null &&
-              'type' in (b as object) &&
+              'type' in (b) &&
               (b as { type: string }).type === 'text',
           )
           .map((b: unknown) => (b as { text: string }).text)

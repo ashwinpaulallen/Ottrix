@@ -6,7 +6,7 @@ type HeuristicFailure = {
 };
 
 export class HeuristicEvaluator implements EvaluatorStrategy {
-  async evaluate(ctx: EvaluationContext): Promise<SufficiencyResult> {
+  evaluate(ctx: EvaluationContext): Promise<SufficiencyResult> {
     const checks = [
       this.checkForHedgingWithoutAction(ctx),
       this.checkForExplicitIncompleteness(ctx),
@@ -18,23 +18,24 @@ export class HeuristicEvaluator implements EvaluatorStrategy {
     const failures = checks.filter((c): c is HeuristicFailure => c !== null);
 
     if (failures.length === 0) {
-      return {
+      return Promise.resolve({
         sufficient: true,
         confidence: 0.65, // heuristics can't be highly confident — use LLM for final say
         reason: 'Passed all heuristic checks',
         suggestedAction: 'finalize',
-      };
+      });
     }
 
     // Clear heuristic failures: confidence is high enough to short-circuit the
     // LLM evaluator and to trigger refinement under the default threshold (0.8).
-    return {
+    const [firstFailure] = failures;
+    return Promise.resolve({
       sufficient: false,
       confidence: 0.85,
-      reason: failures[0]!.reason,
+      reason: firstFailure.reason,
       missingAspects: failures.map((f) => f.reason),
-      suggestedAction: failures[0]!.suggestedAction ?? 'refine_response',
-    };
+      suggestedAction: firstFailure.suggestedAction ?? 'refine_response',
+    });
   }
 
   // ── Individual heuristic checks ────────────────────────────────────────

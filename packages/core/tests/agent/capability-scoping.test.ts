@@ -93,9 +93,11 @@ describe('capability scoping for evaluation and summarization', () => {
       expect(breakdown.byCapability[CAPABILITY.SUMMARIZATION]?.inputTokens).toBe(50);
       expect(breakdown.byCapability[CAPABILITY.SUMMARIZATION]?.outputTokens).toBe(15);
       expect(breakdown.byCapability[CAPABILITY.LLM]?.inputTokens ?? 0).toBe(0);
-      expect(messages.some((m) => String(m.content).includes('Conversation summary'))).toBe(
-        true,
-      );
+      expect(
+        messages.some(
+          (m) => typeof m.content === 'string' && m.content.includes('Conversation summary'),
+        ),
+      ).toBe(true);
     });
   });
 

@@ -571,7 +571,7 @@ export class Agent {
 
     const evaluations = result?.evaluations ?? [];
     if (evaluations.length > 0) {
-      const last = evaluations[evaluations.length - 1]!;
+      const last = evaluations[evaluations.length - 1];
       span.setAttribute('ottrix.evaluation.final_sufficient', last.result.sufficient);
       const totalCostUsd = evaluations.reduce((sum, record) => {
         if (!record.tokenUsage) {
