@@ -1,5 +1,5 @@
 import { Agent, FunctionTool } from 'ottrix';
-import { createTool } from '@mastra/core/tools';
+import { createTool, noopObserve } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
 
 import { wrapOttrixAgent } from '../src/agent.js';
@@ -43,7 +43,9 @@ describe('tool conversion', () => {
     expect(mastraTools).toHaveLength(1);
     expect(mastraTools[0]!.id).toBe('echo');
 
-    const mastraResult = await mastraTools[0]!.execute?.({ message: 'hi' }, {});
+    const mastraResult = await mastraTools[0]!.execute?.({ message: 'hi' }, {
+      observe: noopObserve,
+    });
     expect(mastraResult).toEqual({ echoed: 'hi' });
 
     const ottrixTools = mastraToolsToOttrix([

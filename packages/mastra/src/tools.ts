@@ -1,7 +1,10 @@
-import { createTool, type Tool } from '@mastra/core/tools';
+import { createTool, noopObserve, type Tool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 import { BaseTool, FunctionTool } from 'ottrix';
 import type { JSONSchema } from 'ottrix';
+
+/** Minimal Mastra tool context for bridge invocations outside a Mastra agent run. */
+const EMPTY_TOOL_CONTEXT = { observe: noopObserve } as const;
 
 /** Mastra tool instance produced by {@link ottrixToolsToMastra}. */
 export type MastraTool = Tool;
@@ -37,7 +40,7 @@ export function mastraToolsToOttrix(tools: MastraTool[]): BaseTool[] {
         if (!tool.execute) {
           throw new Error(`Tool "${tool.id}" has no execute handler`);
         }
-        return tool.execute(input, {});
+        return tool.execute(input, EMPTY_TOOL_CONTEXT);
       },
     });
   });
