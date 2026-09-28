@@ -143,3 +143,9 @@ dist
 docs/api/
 *.tgz
 .tmp-smoke/
+
+# Local / private notes (not published)
+private/
+
+# macOS
+.DS_Store

@@ -125,7 +125,7 @@
   },
   "peerDependencies": {
     "ioredis": "^5.4.0",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.2",
     "pg": "^8.11.0",
     "zod": "^4.0.0"
   },
@@ -150,7 +150,7 @@
     "@types/node": "25.9.1",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
-    "vitest": "4.1.7",
+    "vitest": "4.1.11",
     "zod": "4.4.3"
   }
 }
