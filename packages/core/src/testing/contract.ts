@@ -295,8 +295,8 @@ export function runAdapterContractTests(config: AdapterTestConfig): void {
             if (testCase.retryAfter) {
               expect(header(result.headers, 'Retry-After')).toBeDefined();
             }
-            expect(JSON.stringify(result.body)).not.toContain('stack');
-            expect(JSON.stringify(result.body)).not.toContain('super secret');
+            expect(JSON.stringify(result.body).includes('stack')).toBe(false);
+            expect(JSON.stringify(result.body).includes('super secret')).toBe(false);
           } finally {
             await harness.close();
           }

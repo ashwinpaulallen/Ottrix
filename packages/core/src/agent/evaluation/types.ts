@@ -53,7 +53,11 @@ export const EvaluationConfigSchema = z.object({
   //        'Response is in the same language as the question']
 });
 
-export type EvaluationConfig = z.infer<typeof EvaluationConfigSchema>;
+/** User-facing evaluation options (defaults applied when parsed). */
+export type EvaluationConfig = z.input<typeof EvaluationConfigSchema>;
+
+/** Fully resolved evaluation config after schema defaults. */
+export type ResolvedEvaluationConfig = z.output<typeof EvaluationConfigSchema>;
 
 // ── Evaluator strategy interface ───────────────────────────────────────────
 

@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@types/node": "25.9.1",
-    "hono": "^4.12.23",
+    "hono": "^4.13.10",
     "ottrix": "*",
     "tsup": "8.5.1",
     "typescript": "6.0.3",

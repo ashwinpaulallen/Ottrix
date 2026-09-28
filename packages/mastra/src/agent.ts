@@ -116,5 +116,6 @@ function toFullOutput(
     runId: undefined,
     messages: [],
     rememberedMessages: [],
+    usedFallbackValue: false,
   };
 }

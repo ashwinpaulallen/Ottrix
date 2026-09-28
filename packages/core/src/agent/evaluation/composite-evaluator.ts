@@ -14,10 +14,7 @@ export class CompositeEvaluator implements EvaluatorStrategy {
   private llm: LLMEvaluator;
   private lastObservation: EvaluationObservation = { usedLlm: false };
 
-  constructor(
-    provider: CompletionProvider,
-    private config: EvaluationConfig,
-  ) {
+  constructor(provider: CompletionProvider, config: EvaluationConfig) {
     this.heuristic = new HeuristicEvaluator();
     this.llm = new LLMEvaluator(provider, config);
   }

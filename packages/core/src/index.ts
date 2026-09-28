@@ -145,6 +145,7 @@ export {
   type GuardrailCheckResult,
   type SufficiencyResult,
   type EvaluationConfig,
+  type ResolvedEvaluationConfig,
   type EvaluationRecord,
   type EvaluatorStrategy,
   type EvaluationContext,

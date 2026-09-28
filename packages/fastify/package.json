@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "25.9.1",
-    "fastify": "^5.8.5",
+    "fastify": "^5.12.5",
     "ottrix": "*",
     "tsup": "8.5.1",
     "typescript": "6.0.3",

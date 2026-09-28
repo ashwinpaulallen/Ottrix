@@ -1,24 +1,27 @@
+import type { CompletionProvider } from '../../types/provider.js';
 import {
   CAPABILITY,
   withCapabilityScope,
 } from '../../observability/token-accounting/index.js';
-import type { CompletionProvider } from '../../types/provider.js';
 import type {
   EvaluatorStrategy,
   EvaluationContext,
   EvaluationConfig,
   EvaluationObservation,
+  ResolvedEvaluationConfig,
   SufficiencyResult,
 } from './types.js';
-import { SufficiencyResultSchema } from './types.js';
+import { EvaluationConfigSchema, SufficiencyResultSchema } from './types.js';
 
 export class LLMEvaluator implements EvaluatorStrategy {
   private lastObservation: EvaluationObservation | undefined;
+  private readonly provider: CompletionProvider;
+  private readonly config: ResolvedEvaluationConfig;
 
-  constructor(
-    private provider: CompletionProvider,
-    private config: EvaluationConfig,
-  ) {}
+  constructor(provider: CompletionProvider, config: EvaluationConfig) {
+    this.provider = provider;
+    this.config = EvaluationConfigSchema.parse(config);
+  }
 
   getLastObservation(): EvaluationObservation | undefined {
     return this.lastObservation;

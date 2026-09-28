@@ -42,6 +42,7 @@ export {
   type SufficiencyResult,
   type EvaluationRecord,
   type EvaluationConfig,
+  type ResolvedEvaluationConfig,
   type EvaluatorStrategy,
   type EvaluationContext,
   type EvaluationEvent,

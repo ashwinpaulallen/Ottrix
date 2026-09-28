@@ -80,7 +80,7 @@ import { createEvaluator } from './evaluation/composite-evaluator.js';
 import { buildRefinementInstruction } from './evaluation/refinement.js';
 import {
   EvaluationConfigSchema,
-  type EvaluationConfig,
+  type ResolvedEvaluationConfig,
   type EvaluationRecord,
   type EvaluatorStrategy,
 } from './evaluation/types.js';
@@ -103,7 +103,7 @@ export class Agent {
   private readonly maxSteps: number;
   private readonly maxTokenBudget?: number;
   private readonly contextManager: ContextManager;
-  private readonly evaluationConfig?: EvaluationConfig;
+  private readonly evaluationConfig?: ResolvedEvaluationConfig;
   private readonly evaluator?: EvaluatorStrategy;
 
   /**
@@ -150,7 +150,7 @@ export class Agent {
   }
 
   /** Resolved evaluation config after Zod defaults (undefined when not configured). */
-  getEvaluationConfig(): EvaluationConfig | undefined {
+  getEvaluationConfig(): ResolvedEvaluationConfig | undefined {
     return this.evaluationConfig;
   }
 
