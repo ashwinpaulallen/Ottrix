@@ -28,6 +28,7 @@ export type {
   JSONSchemaType,
   JSONSchema,
   ToolMetadata,
+  ToolRoutingDescriptor,
   ToolDefinition,
   ToolErrorDetails,
   ToolResult,

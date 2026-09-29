@@ -1,3 +1,4 @@
+import type { ToolRegistry, ToolRoutingDescriptor } from 'ottrix';
 import { JevClient } from './client.js';
 import type { ConfidenceThresholds, JevRoutingDecision, TypeSafeClientConfig } from './types.js';
 
@@ -11,6 +12,8 @@ export interface RouterConfig<TAgentName extends string> extends TypeSafeClientC
   >;
   defaultAgent: TAgentName; // fallback when confidence is low
   thresholds?: Partial<ConfidenceThresholds>;
+  /** When set, Jev receives the tool routing catalog instead of bare tool names. */
+  toolRegistry?: ToolRegistry;
 }
 
 export class JevAgentRouter<TAgentName extends string> {
@@ -34,6 +37,7 @@ export class JevAgentRouter<TAgentName extends string> {
     const agentDescriptions = agentNames
       .map((name) => `${name}: ${this.config.agents[name].description}`)
       .join('\n');
+    const availableTools = formatRoutingCatalog(this.config.toolRegistry?.getRoutingDescriptors());
 
     try {
       const { answers, latencyMs } = await this.client.decide({
@@ -41,6 +45,7 @@ export class JevAgentRouter<TAgentName extends string> {
           userMessage: message,
           availableAgents: agentDescriptions,
           messageLength: message.length,
+          ...(availableTools ? { availableTools } : {}),
         },
         questions: {
           agentName: JevClient.choice(
@@ -94,4 +99,30 @@ export class JevAgentRouter<TAgentName extends string> {
     const decision = await this.route(message);
     return decision.agentName.value;
   }
+}
+
+function formatRoutingCatalog(descriptors: ToolRoutingDescriptor[] | undefined): string | undefined {
+  if (!descriptors || descriptors.length === 0) {
+    return undefined;
+  }
+
+  return descriptors
+    .map((tool) => {
+      const summary = tool.routingDescription ?? tool.description;
+      const parts = [`${tool.name}: ${summary}`];
+      if (tool.keywords && tool.keywords.length > 0) {
+        parts.push(`keywords: ${tool.keywords.join(', ')}`);
+      }
+      if (tool.examples && tool.examples.length > 0) {
+        parts.push(`examples: ${tool.examples.join(' | ')}`);
+      }
+      if (tool.safetyClass) {
+        parts.push(`safety: ${tool.safetyClass}`);
+      }
+      if (tool.priority !== 0) {
+        parts.push(`priority: ${tool.priority}`);
+      }
+      return parts.join('; ');
+    })
+    .join('\n');
 }

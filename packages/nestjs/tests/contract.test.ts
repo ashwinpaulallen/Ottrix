@@ -28,7 +28,7 @@ import { describe, expect, it } from 'vitest';
 import type { Agent } from 'ottrix';
 import type { ProviderRegistry } from 'ottrix';
 import type { SseEvent } from 'ottrix/http';
-import { checkHealth, corsHeaders, extractMessage } from 'ottrix/http';
+import { checkHealth, extractMessage, requestCorsHeaders, type CorsConfig } from 'ottrix/http';
 import {
   createMockAgent,
   createMockProviderRegistry,
@@ -85,29 +85,41 @@ function parseJsonBody(body: string): unknown {
   }
 }
 
+function applyHarnessCors(req: Request, res: Response, cors: boolean | CorsConfig): void {
+  if (cors === false) {
+    return;
+  }
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+  const headers = requestCorsHeaders(origin, cors);
+  if (!headers) {
+    return;
+  }
+  for (const [key, value] of Object.entries(headers)) {
+    res.setHeader(key, value);
+  }
+}
+
 function buildContractModule(options: {
   agent: Agent;
   bodyField?: string;
   injection?: 'block' | 'flag' | false;
-  cors?: boolean;
+  cors?: boolean | CorsConfig;
   healthCheck?: boolean;
   streaming?: boolean;
   registry?: ProviderRegistry;
 }) {
   const bodyField = options.bodyField ?? 'message';
-  const enableCors = options.cors ?? false;
+  const corsOption = options.cors ?? false;
   const enableInjection = options.injection !== false;
   const injectionMode = options.injection === 'flag' ? 'flag' : 'block';
 
   @Injectable()
   class ContractCorsInterceptor implements NestInterceptor {
     intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-      if (enableCors) {
+      if (corsOption !== false) {
         const response = context.switchToHttp().getResponse<Response>();
         const request = context.switchToHttp().getRequest<Request>();
-        for (const [key, value] of Object.entries(corsHeaders(request.headers.origin))) {
-          response.setHeader(key, value);
-        }
+        applyHarnessCors(request, response, corsOption);
       }
       return next.handle();
     }
@@ -158,12 +170,7 @@ function buildContractModule(options: {
     @Options('chat')
     @HttpCode(204)
     options(@Req() req: Request, @Res({ passthrough: true }) res: Response): void {
-      if (!enableCors) {
-        return;
-      }
-      for (const [key, value] of Object.entries(corsHeaders(req.headers.origin))) {
-        res.setHeader(key, value);
-      }
+      applyHarnessCors(req, res, corsOption);
     }
   }
 

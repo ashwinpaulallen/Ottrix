@@ -4,6 +4,7 @@ export {
   ottrixInjection,
   ottrixTelemetry,
   corsMiddleware,
+  rateLimitMiddleware,
   type OttrixContextOptions,
   type OttrixInjectionOptions,
   type OttrixTelemetryOptions,

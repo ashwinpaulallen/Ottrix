@@ -33,7 +33,10 @@ export interface ZodToolConfig<TInput, TOutput = unknown>
   output?: ZodType<TOutput>;
   /** Typed implementation invoked after input validation. */
   execute: ((input: TInput) => Promise<TOutput>) | ((input: TInput, ctx: RunContext | undefined) => Promise<TOutput>);
-  /** Optional operational metadata (merged with top-level safety fields). */
+  /**
+   * Optional operational metadata (merged with top-level safety fields).
+   * Routing hints belong on `metadata.routing`.
+   */
   metadata?: ToolMetadata;
   /** Execution timeout in milliseconds. */
   timeoutMs?: number;

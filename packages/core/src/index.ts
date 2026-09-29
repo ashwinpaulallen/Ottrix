@@ -241,6 +241,7 @@ export type {
   ApprovalHandler,
   ToolExecuteOptions,
   ToolMetadata,
+  ToolRoutingDescriptor,
   ApprovalRequirement,
   AuditConfig,
   ToolDescriptor,

@@ -3,10 +3,12 @@ import type { Agent } from 'ottrix';
 import type { ProviderRegistry } from 'ottrix';
 import { ottrixErrorHandler } from './errors.js';
 import { agentHandler, agentStreamHandler, ottrixHealth } from './handlers.js';
+import type { CorsConfig, RateLimitHook } from 'ottrix/http';
 import {
   corsMiddleware,
   ottrixContext,
   ottrixInjection,
+  rateLimitMiddleware,
   type OttrixEnv,
 } from './middleware.js';
 
@@ -19,8 +21,13 @@ export interface OttrixOptions {
   bodyField?: string;
   /** Prompt injection handling. @defaultValue `'block'` */
   injection?: 'block' | 'flag' | false;
-  /** Enable CORS headers and `OPTIONS` handler. @defaultValue `true` */
-  cors?: boolean;
+  /**
+   * CORS policy. `true` keeps the legacy wildcard headers.
+   * A {@link CorsConfig} uses an explicit allowlist. @defaultValue `true`
+   */
+  cors?: boolean | CorsConfig;
+  /** Optional application-owned rate limit check. Denied requests receive 429. */
+  rateLimitHook?: RateLimitHook;
   /** Register `GET /health` endpoint. @defaultValue `true` */
   healthCheck?: boolean;
   /** Register `GET /stream` SSE endpoint. @defaultValue `true` */
@@ -43,6 +50,7 @@ export function ottrix(options: OttrixOptions): Hono<OttrixEnv> {
     streaming = true,
     runContext = true,
     registry,
+    rateLimitHook,
   } = options;
 
   const sub = new Hono<OttrixEnv>();
@@ -55,8 +63,12 @@ export function ottrix(options: OttrixOptions): Hono<OttrixEnv> {
     sub.use('*', ottrixInjection({ mode: injection, bodyField }));
   }
 
+  if (rateLimitHook) {
+    sub.use('*', rateLimitMiddleware(rateLimitHook));
+  }
+
   if (cors !== false) {
-    sub.use('*', corsMiddleware());
+    sub.use('*', corsMiddleware(cors === true ? true : cors));
   }
 
   sub.post(path, agentHandler(agent, { bodyField }));

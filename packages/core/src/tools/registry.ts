@@ -5,6 +5,7 @@ import type {
   ToolDescriptor,
   ToolExecuteOptions,
   ToolResult,
+  ToolRoutingDescriptor,
 } from '../types/tools.js';
 import { Logger } from '../observability/logger.js';
 import { emitAuditEvent } from '../guardrails/audit.js';
@@ -240,6 +241,14 @@ export class ToolRegistry {
    */
   toolDescriptors(): ToolDescriptor[] {
     return [...this.tools.values()].map((tool) => buildToolDescriptor(tool));
+  }
+
+  /**
+   * Read-only routing catalog for every registered tool.
+   * Callers observe this snapshot; it does not mutate the registry.
+   */
+  getRoutingDescriptors(): ToolRoutingDescriptor[] {
+    return [...this.tools.values()].map((tool) => toRoutingDescriptor(tool));
   }
 
   /**
@@ -666,4 +675,22 @@ function emitPolicyDeny(
     outcome: 'denied',
     payload: { code },
   });
+}
+
+function toRoutingDescriptor(tool: BaseTool): ToolRoutingDescriptor {
+  const metadata = normalizeToolMetadata(tool.metadata);
+  const routing = tool.metadata?.routing;
+  return {
+    name: tool.name,
+    description: tool.description,
+    ...(routing?.description ? { routingDescription: routing.description } : {}),
+    ...(routing?.keywords ? { keywords: [...routing.keywords] } : {}),
+    ...(routing?.examples ? { examples: [...routing.examples] } : {}),
+    priority: routing?.priority ?? 0,
+    ...(routing?.hints ? { hints: { ...routing.hints } } : {}),
+    ...(routing?.safetyClass ? { safetyClass: routing.safetyClass } : {}),
+    sideEffect: metadata.sideEffect,
+    requiresApproval: requiresApprovalEnabled(metadata.requiresApproval),
+    idempotent: metadata.idempotent ?? false,
+  };
 }

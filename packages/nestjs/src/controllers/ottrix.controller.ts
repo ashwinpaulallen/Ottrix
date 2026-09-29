@@ -21,7 +21,13 @@ import type { Request, Response } from 'express';
 import type { Observable } from 'rxjs';
 import type { Agent } from 'ottrix';
 import type { ProviderRegistry } from 'ottrix';
-import { checkHealth, corsHeaders, extractMessage } from 'ottrix/http';
+import {
+  checkHealth,
+  extractMessage,
+  rateLimitClientKey,
+  requestCorsHeaders,
+  retryAfterHeader,
+} from 'ottrix/http';
 import { InjectAgent } from '../decorators.js';
 import { OttrixExceptionFilter } from '../filters/ottrix-exception.filter.js';
 import { InjectionGuard } from '../guards/injection.guard.js';
@@ -48,7 +54,8 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
 
     @Post()
     @HttpCode(200)
-    async run(@Body() body: unknown) {
+    async run(@Body() body: unknown, @Req() req: Request) {
+      await this.enforceRateLimit(req);
       const extracted = extractMessage(body);
       if (!extracted.ok) {
         throw new HttpException({ error: extracted.error }, extracted.status);
@@ -57,7 +64,8 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
     }
 
     @Sse('stream')
-    stream(@Query('message') message: string): Observable<SseMessageEvent> {
+    async stream(@Query('message') message: string, @Req() req: Request): Promise<Observable<SseMessageEvent>> {
+      await this.enforceRateLimit(req);
       const extracted = extractMessage({ message }, 'message');
       if (!extracted.ok) {
         throw new HttpException({ error: extracted.error }, extracted.status);
@@ -66,19 +74,53 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
     }
 
     @Get('health')
-    async health() {
+    async health(@Req() req: Request) {
+      await this.enforceRateLimit(req);
       return checkHealth(this.registry);
     }
 
     @Options()
     @HttpCode(204)
-    options(@Req() req: Request, @Res({ passthrough: true }) res: Response): void {
-      if (this.httpOptions?.cors === false) {
+    async options(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
+      await this.enforceRateLimit(req);
+      this.applyCors(req, res);
+    }
+
+    private applyCors(req: Request, res: Response): void {
+      const cors = this.httpOptions?.cors;
+      if (cors === false) {
         return;
       }
-      for (const [key, value] of Object.entries(corsHeaders(req.headers.origin))) {
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+      const headers = requestCorsHeaders(origin, cors === undefined || cors === true ? true : cors);
+      if (!headers) {
+        return;
+      }
+      for (const [key, value] of Object.entries(headers)) {
         res.setHeader(key, value);
       }
+    }
+
+    private async enforceRateLimit(req: Request): Promise<void> {
+      const hook = this.httpOptions?.rateLimitHook;
+      if (!hook) {
+        return;
+      }
+      const decision = await hook.check(
+        rateLimitClientKey({
+          forwardedFor: req.headers['x-forwarded-for'],
+          remoteAddress: req.socket?.remoteAddress,
+          origin: typeof req.headers.origin === 'string' ? req.headers.origin : undefined,
+        }),
+      );
+      if (decision.allowed) {
+        return;
+      }
+      const retryAfter = retryAfterHeader(decision.retryAfterMs);
+      if (retryAfter !== undefined) {
+        req.res?.setHeader('Retry-After', retryAfter);
+      }
+      throw new HttpException({ error: 'Too many requests' }, 429);
     }
   }
 

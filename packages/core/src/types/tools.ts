@@ -76,6 +76,51 @@ export interface ToolMetadata {
   audit?: AuditConfig;
   /** Semantic version of the tool definition. */
   version?: string;
+  /**
+   * Optional hints for routing. Omitted tools stay valid.
+   * `description` here can differ from the LLM-facing tool description.
+   */
+  routing?: {
+    /** Short description used for routing decisions. */
+    description?: string;
+    /** Keywords for fast keyword-based routing. */
+    keywords?: string[];
+    /** Example inputs that indicate this tool should be selected. */
+    examples?: string[];
+    /** Priority when multiple tools match. Higher is preferred. @defaultValue 0 */
+    priority?: number;
+    /** Performance hints for routing decisions. */
+    hints?: {
+      costTier?: 'free' | 'low' | 'medium' | 'high';
+      latencyTier?: 'fast' | 'medium' | 'slow';
+    };
+    /** Safety classification for routing gates. */
+    safetyClass?: 'safe' | 'sensitive' | 'restricted' | 'dangerous';
+  };
+}
+
+/**
+ * Read-only routing view of a registered tool.
+ * Produced by {@link import('../tools/registry.js').ToolRegistry.getRoutingDescriptors}.
+ */
+export interface ToolRoutingDescriptor {
+  name: string;
+  /** The tool's main description. */
+  description: string;
+  /** `metadata.routing.description` when set. */
+  routingDescription?: string;
+  keywords?: string[];
+  examples?: string[];
+  /** @defaultValue 0 */
+  priority: number;
+  hints?: {
+    costTier?: 'free' | 'low' | 'medium' | 'high';
+    latencyTier?: 'fast' | 'medium' | 'slow';
+  };
+  safetyClass?: 'safe' | 'sensitive' | 'restricted' | 'dangerous';
+  sideEffect?: string;
+  requiresApproval?: boolean;
+  idempotent?: boolean;
 }
 
 /** Policy metadata describing who must approve a gated tool. */
