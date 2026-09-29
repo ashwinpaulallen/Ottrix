@@ -21,4 +21,15 @@ export {
 } from './injection.js';
 export { type ContextExtractors, defaultExtractors, buildRunContext } from './context.js';
 export { type HealthCheckResult, checkHealth } from './health.js';
-export { corsHeaders } from './cors.js';
+export {
+  corsHeaders,
+  buildCorsHeaders,
+  requestCorsHeaders,
+  validateCorsConfig,
+  type CorsConfig,
+} from './cors.js';
+export {
+  rateLimitClientKey,
+  retryAfterHeader,
+  type RateLimitHook,
+} from './rate-limit.js';

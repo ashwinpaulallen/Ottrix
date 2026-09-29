@@ -25,7 +25,7 @@ import type { Observable } from 'rxjs';
 import request from 'supertest';
 import type { Agent, ProviderRegistry } from 'ottrix';
 import type { SseEvent } from 'ottrix/http';
-import { checkHealth, corsHeaders, extractMessage } from 'ottrix/http';
+import { checkHealth, extractMessage, requestCorsHeaders, type CorsConfig } from 'ottrix/http';
 import { InjectAgent } from '../decorators.js';
 import { OttrixExceptionFilter } from '../filters/ottrix-exception.filter.js';
 import { InjectionGuard } from '../guards/injection.guard.js';
@@ -61,7 +61,7 @@ export interface ContractTestHarness {
 export interface ContractHarnessOptions {
   agent: Agent;
   injection?: 'block' | 'flag' | false;
-  cors?: boolean;
+  cors?: boolean | CorsConfig;
   healthCheck?: boolean;
   registry?: ProviderRegistry;
   bodyField?: string;
@@ -111,21 +111,33 @@ function parseJsonBody(body: string): unknown {
   }
 }
 
+function applyHarnessCors(req: Request, res: Response, cors: boolean | CorsConfig): void {
+  if (cors === false) {
+    return;
+  }
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+  const headers = requestCorsHeaders(origin, cors);
+  if (!headers) {
+    return;
+  }
+  for (const [key, value] of Object.entries(headers)) {
+    res.setHeader(key, value);
+  }
+}
+
 function buildContractModule(options: ContractHarnessOptions) {
   const bodyField = options.bodyField ?? 'message';
-  const enableCors = options.cors ?? false;
+  const corsOption = options.cors ?? false;
   const enableInjection = options.injection !== false;
   const injectionMode = options.injection === 'flag' ? 'flag' : 'block';
 
   @Injectable()
   class ContractCorsInterceptor implements NestInterceptor {
     intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-      if (enableCors) {
+      if (corsOption !== false) {
         const response = context.switchToHttp().getResponse<Response>();
         const req = context.switchToHttp().getRequest<Request>();
-        for (const [key, value] of Object.entries(corsHeaders(req.headers.origin))) {
-          response.setHeader(key, value);
-        }
+        applyHarnessCors(req, response, corsOption);
       }
       return next.handle();
     }
@@ -176,12 +188,7 @@ function buildContractModule(options: ContractHarnessOptions) {
     @Options('chat')
     @HttpCode(204)
     options(@Req() req: Request, @Res({ passthrough: true }) res: Response): void {
-      if (!enableCors) {
-        return;
-      }
-      for (const [key, value] of Object.entries(corsHeaders(req.headers.origin))) {
-        res.setHeader(key, value);
-      }
+      applyHarnessCors(req, res, corsOption);
     }
   }
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FunctionTool, ToolRegistry } from 'ottrix';
 import { JevClient } from '../src/client.js';
 import { JevAgentRouter, type RouterConfig } from '../src/router.js';
 
@@ -136,5 +137,35 @@ describe('JevAgentRouter', () => {
       latencyMs: 11,
     });
     expect(result.confidence).toBe(result.agentName.confidence);
+  });
+
+  it('sends the tool routing catalog to Jev when a registry is configured', async () => {
+    decide.mockResolvedValue(decision('shopping', 0.9));
+    const toolRegistry = new ToolRegistry();
+    toolRegistry.register(
+      new FunctionTool({
+        name: 'search_catalog',
+        description: 'Search the product catalog',
+        inputSchema: { type: 'object' },
+        metadata: {
+          routing: {
+            description: 'Find products',
+            keywords: ['shoes', 'catalog'],
+            examples: ['show me running shoes'],
+            safetyClass: 'safe',
+          },
+        },
+        execute: async () => [],
+      }),
+    );
+    const router = new JevAgentRouter(routerConfig({ toolRegistry }));
+
+    await router.route('I want to buy shoes');
+
+    const state = decide.mock.calls[0]?.[0]?.state as { availableTools?: string };
+    expect(state.availableTools).toContain('search_catalog: Find products');
+    expect(state.availableTools).toContain('keywords: shoes, catalog');
+    expect(state.availableTools).toContain('examples: show me running shoes');
+    expect(state.availableTools).toContain('safety: safe');
   });
 });

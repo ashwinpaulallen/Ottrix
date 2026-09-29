@@ -31,6 +31,8 @@ import {
   isToolApprovalDenied,
 } from '../tools/tool-approval.js';
 import { ContextManager } from './context.js';
+import { CompactionConfigSchema, type ResolvedCompactionConfig } from './context/compaction-types.js';
+import { DigestCache } from './context/digest-cache.js';
 import { PiiDetector, redactPii } from '../guardrails/validators.js';
 import type { GuardrailBlockCode } from '../guardrails/types.js';
 import { checkRunGuardrails, sumTokenUsage } from './guardrails.js';
@@ -47,6 +49,7 @@ import { instrumentProvider, instrumentAgentToolRegistry } from '../observabilit
 import { getLogger, getMetricsCollector } from '../observability/global.js';
 import { emitAuditEvent } from '../guardrails/audit.js';
 import { estimateCost, ProviderRegistry } from '../providers/registry.js';
+import type { CompletionIntent, IntentResolutionResult } from '../providers/intent/types.js';
 import {
   applyTokenBreakdownAttributes,
   runInActiveSpanStack,
@@ -103,6 +106,7 @@ export class Agent {
   private readonly maxSteps: number;
   private readonly maxTokenBudget?: number;
   private readonly contextManager: ContextManager;
+  private readonly compactionConfig?: ResolvedCompactionConfig;
   private readonly evaluationConfig?: ResolvedEvaluationConfig;
   private readonly evaluator?: EvaluatorStrategy;
 
@@ -117,11 +121,40 @@ export class Agent {
     this.toolRegistry = resolveToolRegistry(config, this.telemetry);
     this.maxSteps = config.maxSteps ?? config.guardrails?.maxSteps ?? DEFAULT_MAX_STEPS;
     this.maxTokenBudget = config.maxTokenBudget ?? config.guardrails?.maxTokenBudget;
+    if (config.compaction) {
+      const parsed = CompactionConfigSchema.parse(config.compaction);
+      const recentMessagesToPreserve =
+        config.compaction.recentMessagesToPreserve ??
+        config.keepRecentMessages ??
+        parsed.recentMessagesToPreserve;
+      this.compactionConfig = { ...parsed, recentMessagesToPreserve };
+      if (config.catalog && config.compaction.provider === undefined) {
+        const intent = { role: 'summarization', prefer: 'economy' } as const;
+        const resolution = config.catalog.resolve(intent);
+        this.traceIntentResolution(intent, resolution);
+        this.compactionConfig = {
+          ...this.compactionConfig,
+          provider: annotateProvider(resolution.provider, intent, resolution),
+          model: config.compaction.model ?? resolution.model,
+        };
+      }
+      this.config.compaction = this.compactionConfig;
+    }
+    if (config.catalog && config.planner?.usesLlm() && !config.planner.hasExplicitProvider()) {
+      const intent = { role: 'planning', prefer: 'balanced' } as const;
+      const resolution = config.catalog.resolve(intent);
+      this.traceIntentResolution(intent, resolution);
+      config.planner.bindProvider(annotateProvider(resolution.provider, intent, resolution));
+    }
     this.contextManager = new ContextManager({
       provider: this.provider,
       systemPrompt: config.systemPrompt,
       contextLimitTokens: config.contextLimitTokens,
       keepRecentMessages: config.keepRecentMessages,
+      compaction: this.compactionConfig,
+      digestCache: this.compactionConfig
+        ? new DigestCache(this.compactionConfig.digestCacheCapacity)
+        : undefined,
     });
     if (config.evaluation) {
       const parsed = EvaluationConfigSchema.safeParse(config.evaluation);
@@ -133,10 +166,34 @@ export class Agent {
       this.config.evaluation = parsed.data;
       this.evaluationConfig = parsed.data;
       if (parsed.data.enabled) {
-        const evalProvider = config.evaluationProvider ?? this.provider;
+        let evalProvider = config.evaluationProvider ?? this.provider;
+        if (config.catalog && config.evaluation.model === undefined && !config.evaluationProvider) {
+          const intent = { role: 'evaluation', prefer: 'economy' } as const;
+          const resolution = config.catalog.resolve(intent);
+          this.traceIntentResolution(intent, resolution);
+          parsed.data.model = resolution.model;
+          this.evaluationConfig = parsed.data;
+          this.config.evaluation = parsed.data;
+          evalProvider = annotateProvider(resolution.provider, intent, resolution);
+        }
         this.evaluator = createEvaluator(evalProvider, parsed.data);
       }
     }
+  }
+
+  /** Record a construction-time catalog choice on a telemetry span. */
+  private traceIntentResolution(intent: CompletionIntent, resolution: IntentResolutionResult): void {
+    const telemetry = this.telemetry;
+    if (!telemetry) {
+      return;
+    }
+    const span = telemetry.startSpan('ottrix.intent.resolve', {
+      'ottrix.intent.role': intent.role,
+      'ottrix.intent.prefer': intent.prefer,
+      'ottrix.intent.resolution': resolution.reason,
+      'ottrix.intent.model': resolution.model,
+    });
+    span.end();
   }
 
   /** Agent display name from configuration. */
@@ -149,6 +206,11 @@ export class Agent {
     return this.config.reflector;
   }
 
+  /** Resolved compaction config after Zod defaults (undefined when not configured). */
+  getCompactionConfig(): ResolvedCompactionConfig | undefined {
+    return this.compactionConfig;
+  }
+
   /** Resolved evaluation config after Zod defaults (undefined when not configured). */
   getEvaluationConfig(): ResolvedEvaluationConfig | undefined {
     return this.evaluationConfig;
@@ -157,6 +219,11 @@ export class Agent {
   /** Active evaluator when evaluation is enabled. */
   getEvaluator(): EvaluatorStrategy | undefined {
     return this.evaluator;
+  }
+
+  /** Telemetry instance used for this agent's spans, when configured. */
+  getTelemetry(): Telemetry | undefined {
+    return this.telemetry;
   }
 
   /** Tool registry when a {@link ToolRegistry} instance was provided in config. */
@@ -182,12 +249,14 @@ export class Agent {
             AgentRunMetadata,
             z.infer<TSchema>
           >;
+          const tokenBreakdown = this.finalizeTokenBreakdown(
+            accumulator.getBreakdown(),
+            result.metadata.model,
+          );
+          this.observeUsageThresholds(tokenBreakdown);
           return {
             ...result,
-            tokenBreakdown: this.finalizeTokenBreakdown(
-              accumulator.getBreakdown(),
-              result.metadata.model,
-            ),
+            tokenBreakdown,
           };
         }
 
@@ -341,14 +410,14 @@ export class Agent {
         });
 
         if (this.config.reflector) {
-          const reflectionStop = await this.applyReflection(
+          const reflection = await this.applyReflection(
             steps,
             messages,
             input,
             true,
             prepared.plan,
           );
-          if (!reflectionStop) {
+          if (!reflection.shouldStop) {
             return 'continue';
           }
         }
@@ -387,14 +456,14 @@ export class Agent {
       }
 
       if (this.config.reflector) {
-        const reflectionStop = await this.applyReflection(
+        const reflection = await this.applyReflection(
           steps,
           messages,
           input,
           false,
           prepared.plan,
         );
-        if (reflectionStop && (finalResponse || steps.some((s) => s.type === 'response'))) {
+        if (reflection.shouldStop && (finalResponse || steps.some((s) => s.type === 'response'))) {
           stopReason = 'completed';
           finalResponse =
             finalResponse ||
@@ -558,6 +627,7 @@ export class Agent {
     if (result?.tokenBreakdown) {
       applyTokenBreakdownAttributes(span, result.tokenBreakdown);
       getLogger().debug(formatTokenBreakdown(result.tokenBreakdown));
+      this.observeUsageThresholds(result.tokenBreakdown, span);
     }
 
     const evaluationEnabled = Boolean(this.evaluationConfig?.enabled);
@@ -632,7 +702,12 @@ export class Agent {
         const telemetry = this.telemetry;
         if (!telemetry) {
           for await (const event of this.streamCore(input)) {
-            yield this.attachTokenBreakdownToEvent(event, accumulator.getBreakdown());
+            const withBreakdown = this.attachTokenBreakdownToEvent(
+              event,
+              accumulator.getBreakdown(),
+            );
+            this.observeThresholdsOnDone(withBreakdown);
+            yield withBreakdown;
           }
           return;
         }
@@ -709,6 +784,90 @@ export class Agent {
     return { type: 'done', data };
   }
 
+  private observeThresholdsOnDone(event: AgentEvent): void {
+    if (event.type !== 'done' || !event.data || typeof event.data !== 'object') {
+      return;
+    }
+    const breakdown = (event.data as { tokenBreakdown?: TokenBreakdown }).tokenBreakdown;
+    if (breakdown) {
+      this.observeUsageThresholds(breakdown);
+    }
+  }
+
+  /**
+   * Compare opt-in usage thresholds against a finished run. Records audit and
+   * span events only; budget guardrails remain responsible for enforcement.
+   */
+  private observeUsageThresholds(breakdown: TokenBreakdown, span?: Span): void {
+    const thresholds = this.config.thresholds;
+    if (!thresholds) {
+      return;
+    }
+
+    const checks: Array<{ metric: string; configured?: number; actual?: number }> = [
+      {
+        metric: 'inputTokens',
+        configured: thresholds.warnInputTokens,
+        actual: breakdown.totalInputTokens,
+      },
+      {
+        metric: 'outputTokens',
+        configured: thresholds.warnOutputTokens,
+        actual: breakdown.totalOutputTokens,
+      },
+      {
+        metric: 'totalTokens',
+        configured: thresholds.warnTotalTokens,
+        actual: breakdown.totalTokens,
+      },
+      {
+        metric: 'costUsd',
+        configured: thresholds.warnCostUsd,
+        actual: breakdown.totalCostUsd,
+      },
+      {
+        metric: 'llmCalls',
+        configured: thresholds.warnLlmCalls,
+        actual: breakdown.totalCalls,
+      },
+    ];
+
+    const runId = getRunContext()?.runId ?? breakdown.runId;
+    const agentName = this.getName();
+
+    for (const check of checks) {
+      if (check.configured === undefined || check.actual === undefined) {
+        continue;
+      }
+      if (check.actual <= check.configured) {
+        continue;
+      }
+
+      emitAuditEvent({
+        type: 'budget.warn',
+        actor: { type: 'system', id: 'ottrix' },
+        action: 'threshold_exceeded',
+        resource: `agent:${agentName}`,
+        outcome: 'success',
+        payload: {
+          threshold: {
+            metric: check.metric,
+            configured: check.configured,
+            actual: check.actual,
+          },
+          runId,
+          agentName,
+        },
+      });
+
+      span?.addEvent('budget.warn', {
+        'threshold.metric': check.metric,
+        'threshold.configured': check.configured,
+        'threshold.actual': check.actual,
+      });
+    }
+  }
+
   private finalizeTokenBreakdown(
     breakdown: TokenBreakdown,
     model?: string,
@@ -768,6 +927,9 @@ export class Agent {
 
     try {
     const prepared = await this.prepareRun(input);
+    for (const event of prepared.planEvents) {
+      yield event;
+    }
     const messages = prepared.messages;
     const usages: TokenUsage[] = [];
     let warning: string | undefined;
@@ -811,6 +973,23 @@ export class Agent {
             content: { text: finalResponse },
             tokenUsage: result.usage,
           });
+
+          if (this.config.reflector) {
+            const reflection = await this.applyReflection(
+              steps,
+              messages,
+              input,
+              true,
+              prepared.plan,
+            );
+            for (const event of reflection.events) {
+              yield event;
+            }
+            if (!reflection.shouldStop) {
+              loopState.continueLoop = true;
+              return;
+            }
+          }
 
           const evalOutcome = await this.runSelfEvaluation({
             originalGoal: input,
@@ -916,6 +1095,28 @@ export class Agent {
                 totalTokens: aborted.totalTokens,
               },
             };
+            return;
+          }
+        }
+
+        if (this.config.reflector) {
+          const reflection = await this.applyReflection(
+            steps,
+            messages,
+            input,
+            false,
+            prepared.plan,
+          );
+          for (const event of reflection.events) {
+            yield event;
+          }
+          if (reflection.shouldStop && (finalResponse || steps.some((s) => s.type === 'response'))) {
+            stopReason = 'completed';
+            finalResponse =
+              finalResponse ||
+              this.getLastResponseText(steps) ||
+              extractTextFromContent(result.content);
+            loopState.break = true;
             return;
           }
         }
@@ -1259,8 +1460,10 @@ export class Agent {
     messages: ChatMessage[];
     plan?: Plan;
     planValidation?: PlanValidationResult;
+    planEvents: AgentEvent[];
   }> {
     const messages: ChatMessage[] = [];
+    const planEvents: AgentEvent[] = [];
     let plan: Plan | undefined;
     let planValidation: PlanValidationResult | undefined;
 
@@ -1275,6 +1478,10 @@ export class Agent {
     let userContent = input;
 
     if (this.config.planner) {
+      this.config.planner.setEventEmitter((event) => {
+        planEvents.push(event);
+        this.emitAgentEvent(event);
+      });
       plan = await this.config.planner.plan(input);
       planValidation = this.config.planner.validate(plan);
       userContent = `${userContent}\n\n${this.config.planner.formatPlanForContext(plan)}`;
@@ -1290,7 +1497,7 @@ export class Agent {
 
     const validatedInput = await this.validateInput(userContent);
     messages.push({ role: 'user', content: validatedInput });
-    return { messages, plan, planValidation };
+    return { messages, plan, planValidation, planEvents };
   }
 
   private async validateInput(input: string): Promise<string> {
@@ -1324,7 +1531,8 @@ export class Agent {
   }
 
   /**
-   * Run reflection after an iteration. Returns true when the run should stop.
+   * Run reflection after an iteration. Returns whether the run should stop
+   * and any plan events to yield from {@link Agent.stream}.
    */
   private async applyReflection(
     steps: AgentStep[],
@@ -1332,12 +1540,13 @@ export class Agent {
     goal: string,
     hadTextResponse: boolean,
     plan?: Plan,
-  ): Promise<boolean> {
+  ): Promise<{ shouldStop: boolean; events: AgentEvent[] }> {
     const reflector = this.config.reflector;
     if (!reflector) {
-      return false;
+      return { shouldStop: false, events: [] };
     }
 
+    const events: AgentEvent[] = [];
     const lastStep = steps[steps.length - 1];
     if (lastStep) {
       const evaluation = await reflector.evaluateStep(lastStep, goal);
@@ -1359,10 +1568,28 @@ export class Agent {
         const partialResults = steps
           .filter((s) => s.type === 'tool_result' || s.type === 'response')
           .map((s) => s.content);
+        const previousStepCount = plan?.steps.length ?? 0;
         const revised = await planner.replan(goal, completedSteps, partialResults);
+        const planId = plan?.id ?? revised.id ?? randomUUID();
+        if (plan) {
+          plan.id = planId;
+          plan.steps = revised.steps;
+          plan.reasoning = revised.reasoning;
+        }
+        const revisedEvent: AgentEvent = {
+          type: 'plan_revised',
+          data: {
+            planId,
+            reason: revised.reasoning,
+            previousStepCount,
+            newStepCount: revised.steps.length,
+          },
+        };
+        this.emitAgentEvent(revisedEvent);
+        events.push(revisedEvent);
         messages.push({
           role: 'user',
-          content: `Updated plan:\n${planner.formatPlanForContext(revised)}`,
+          content: `Updated plan:\n${planner.formatPlanForContext(plan ?? revised)}`,
         });
       }
     }
@@ -1370,13 +1597,13 @@ export class Agent {
     const shouldContinue = await reflector.shouldContinue(steps, goal);
     if (!shouldContinue) {
       if (hadTextResponse || steps.some((s) => s.type === 'response')) {
-        return true;
+        return { shouldStop: true, events };
       }
       messages.push({
         role: 'user',
         content: 'Please provide your final answer to the user now.',
       });
-      return false;
+      return { shouldStop: false, events };
     }
 
     if (hadTextResponse) {
@@ -1384,9 +1611,10 @@ export class Agent {
         role: 'user',
         content: 'Continue refining your answer until the goal is fully met.',
       });
+      return { shouldStop: false, events };
     }
 
-    return false;
+    return { shouldStop: false, events };
   }
 
   /**
@@ -1861,6 +2089,71 @@ export class Agent {
     this.config.onAgentEvent?.(event);
   }
 
+  /**
+   * Run one plan step whose dependencies Ottrix has already satisfied.
+   *
+   * This is not used by the ReAct loop. A plan injected into the prompt does
+   * not mean Ottrix chose the next step, so those iterations do not emit
+   * `plan_step_*` events.
+   */
+  async executeControlledPlanStep(options: {
+    plan: Plan;
+    stepId: string;
+    completedStepIds?: ReadonlySet<string>;
+    attempt?: number;
+    execute: () => Promise<{ tokenUsage?: TokenUsage } | void>;
+  }): Promise<'completed' | 'failed' | 'blocked'> {
+    const step = options.plan.steps.find((candidate) => candidate.id === options.stepId);
+    if (!step) {
+      throw new Error(`Unknown plan step "${options.stepId}"`);
+    }
+
+    const completed = options.completedStepIds ?? new Set<string>();
+    const ready = step.dependencies.every((dependency) => completed.has(dependency));
+    if (!ready) {
+      return 'blocked';
+    }
+
+    const planId = options.plan.id ?? randomUUID();
+    const attempt = options.attempt ?? 1;
+    this.emitAgentEvent({
+      type: 'plan_step_started',
+      data: {
+        planId,
+        stepId: step.id,
+        description: step.description,
+        attempt,
+      },
+    });
+
+    const started = Date.now();
+    try {
+      const outcome = await options.execute();
+      this.emitAgentEvent({
+        type: 'plan_step_completed',
+        data: {
+          planId,
+          stepId: step.id,
+          durationMs: Date.now() - started,
+          ...(outcome?.tokenUsage ? { tokenUsage: outcome.tokenUsage } : {}),
+        },
+      });
+      return 'completed';
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.emitAgentEvent({
+        type: 'plan_step_failed',
+        data: {
+          planId,
+          stepId: step.id,
+          reason,
+          retryable: isRetryablePlanStepError(error),
+        },
+      });
+      return 'failed';
+    }
+  }
+
   private handleErrorAction(
     action: AgentErrorAction | void,
   ): { retry?: boolean; abort?: boolean } {
@@ -2129,6 +2422,25 @@ function mapGuardrailBlockCode(code?: GuardrailBlockCode): AgentStopReason {
   return 'guardrail';
 }
 
+function annotateProvider(
+  provider: CompletionProvider,
+  intent: CompletionIntent,
+  resolution: IntentResolutionResult,
+): CompletionProvider {
+  const apply = (params: CompletionParams): CompletionParams => ({
+    ...params,
+    model: params.model ?? resolution.model,
+    intent: params.intent ?? intent,
+    intentResolution: params.intentResolution ?? resolution.reason,
+  });
+
+  return {
+    complete: (params) => provider.complete(apply(params)),
+    stream: (params) => provider.stream(apply(params)),
+    countTokens: (messages) => provider.countTokens(messages),
+  };
+}
+
 function resolveProvider(config: AgentConfig, telemetry?: Telemetry): CompletionProvider {
   if (!telemetry) {
     return config.provider;
@@ -2170,4 +2482,15 @@ function resolveToolRegistry(config: AgentConfig, telemetry?: Telemetry): AgentT
     }
   }
   return registry;
+}
+
+function isRetryablePlanStepError(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'retryable' in error) {
+    const retryable = (error as { retryable?: unknown }).retryable;
+    if (retryable === undefined) {
+      return true;
+    }
+    return Boolean(retryable);
+  }
+  return true;
 }

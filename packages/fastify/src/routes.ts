@@ -5,12 +5,17 @@ import { runWith } from 'ottrix';
 import {
   agentEventToSse,
   checkHealth,
-  corsHeaders,
   extractMessage,
   formatSseComment,
   formatSseEvent,
   KEEPALIVE_INTERVAL_MS,
+  rateLimitClientKey,
+  requestCorsHeaders,
+  retryAfterHeader,
   SSE_HEADERS,
+  validateCorsConfig,
+  type CorsConfig,
+  type RateLimitHook,
 } from 'ottrix/http';
 import { readRequestBody } from './helpers.js';
 
@@ -23,8 +28,13 @@ export interface AgentRoutesOptions {
   streaming?: boolean;
   /** JSON body field for the user message on `POST`. @defaultValue `'message'` */
   bodyField?: string;
-  /** Enable CORS headers and `OPTIONS` handler. @defaultValue `true` */
-  cors?: boolean;
+  /**
+   * CORS policy. `true` keeps the legacy wildcard headers.
+   * A {@link CorsConfig} uses an explicit allowlist. @defaultValue `true`
+   */
+  cors?: boolean | CorsConfig;
+  /** Optional application-owned rate limit check. Denied requests receive 429. */
+  rateLimitHook?: RateLimitHook;
   /** Register `GET /health` endpoint. @defaultValue `true` */
   healthCheck?: boolean;
   /** Provider registry for health checks. Defaults to `fastify.ottrix.providers`. */
@@ -41,15 +51,43 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (fastif
     cors = true,
     healthCheck = true,
     registry = fastify.ottrix?.providers,
+    rateLimitHook,
   } = options;
 
-  if (cors) {
-    fastify.addHook('onRequest', (request, reply, done) => {
-      const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
-      for (const [key, value] of Object.entries(corsHeaders(origin))) {
-        reply.header(key, value as string);
-      }
-      done();
+  if (cors !== false && cors !== true) {
+    validateCorsConfig(cors);
+  }
+
+  if (rateLimitHook || cors !== false) {
+    const corsOption = cors;
+    fastify.addHook('onRequest', async (request, reply) => {
+        const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+        if (corsOption !== false) {
+          const headers = requestCorsHeaders(origin, corsOption === true ? true : corsOption);
+          if (headers) {
+            for (const [key, value] of Object.entries(headers)) {
+              reply.header(key, value);
+            }
+          }
+        }
+
+        if (rateLimitHook) {
+          const decision = await rateLimitHook.check(
+            rateLimitClientKey({
+              forwardedFor: request.headers['x-forwarded-for'],
+              remoteAddress: request.ip,
+              origin,
+            }),
+          );
+          if (!decision.allowed) {
+            const retryAfter = retryAfterHeader(decision.retryAfterMs);
+            if (retryAfter !== undefined) {
+              reply.header('Retry-After', retryAfter);
+            }
+            await reply.code(429).send({ error: 'Too many requests' });
+            return;
+          }
+        }
     });
   }
 

@@ -54,7 +54,60 @@ export type AgentEvent =
       data: { missingAspects: string[]; suggestedAction: string };
     }
   | { type: 'evaluation_skipped'; data: { reason: string } }
-  | { type: 'max_refinements_reached'; data: { refinements: number } };
+  | { type: 'max_refinements_reached'; data: { refinements: number } }
+  | {
+      type: 'plan_created';
+      data: {
+        planId: string;
+        stepCount: number;
+        steps: Array<{ id: string; description: string; dependencies: string[] }>;
+        reasoning?: string;
+      };
+    }
+  | {
+      type: 'plan_validated';
+      data: {
+        planId: string;
+        valid: boolean;
+        issues?: string[];
+      };
+    }
+  | {
+      type: 'plan_step_started';
+      data: {
+        planId: string;
+        stepId: string;
+        description: string;
+        attempt: number;
+      };
+    }
+  | {
+      type: 'plan_step_completed';
+      data: {
+        planId: string;
+        stepId: string;
+        durationMs: number;
+        tokenUsage?: TokenUsage;
+      };
+    }
+  | {
+      type: 'plan_step_failed';
+      data: {
+        planId: string;
+        stepId: string;
+        reason: string;
+        retryable: boolean;
+      };
+    }
+  | {
+      type: 'plan_revised';
+      data: {
+        planId: string;
+        reason: string;
+        previousStepCount: number;
+        newStepCount: number;
+      };
+    };
 
 /**
  * Discriminated step types recorded during an agent run.
@@ -94,6 +147,11 @@ export interface AgentConfig<
   /** LLM backend used for reasoning and tool selection. */
   provider: CompletionProvider<TModel>;
   /**
+   * Optional catalog used once at construction to choose providers for
+   * summarization, evaluation, and LLM planning.
+   */
+  catalog?: import('../providers/intent/catalog.js').ModelCatalog;
+  /**
    * Tool registry for the ReAct loop. Prefer this over `tools` when using
    * {@link import('../tools/registry.js').ToolRegistry} or {@link import('../tools/tool.js').BaseTool}.
    */
@@ -122,6 +180,22 @@ export interface AgentConfig<
   maxSteps?: number;
   /** Cumulative token budget across the entire run. */
   maxTokenBudget?: number;
+  /**
+   * Observational usage thresholds checked after a run finishes.
+   * Each exceeded value emits a `budget.warn` audit event. The run result is unchanged.
+   */
+  thresholds?: {
+    /** Emit an audit event when input tokens exceed this value. */
+    warnInputTokens?: number;
+    /** Emit an audit event when output tokens exceed this value. */
+    warnOutputTokens?: number;
+    /** Emit an audit event when total tokens exceed this value. */
+    warnTotalTokens?: number;
+    /** Emit an audit event when estimated cost in USD exceeds this value. */
+    warnCostUsd?: number;
+    /** Emit an audit event when the number of LLM calls in one run exceeds this value. */
+    warnLlmCalls?: number;
+  };
   /** Callback invoked after each recorded {@link AgentStep}. May return a Promise to defer the next loop iteration. */
   onStep?: (step: AgentStep) => void | Promise<void>;
   /**
@@ -147,6 +221,32 @@ export interface AgentConfig<
    * @defaultValue 6
    */
   keepRecentMessages?: number;
+  /**
+   * Context compaction configuration. When set, replaces the default single-
+   * threshold summarization with a three-phase hierarchical strategy.
+   *
+   * Phases:
+   * - Soft (60%): offload large tool results to ContextStore (if configured)
+   * - Medium (75%): replace old tool results with one-line outcome summaries
+   * - Hard (85%): LLM summarization of the folded segment
+   *
+   * When omitted, the agent uses the legacy single-threshold summarization
+   * (85% of the context window). When set, unspecified fields default to
+   * prose strategy with truncate fallback. `recentMessagesToPreserve` falls
+   * back to {@link keepRecentMessages} when omitted.
+   *
+   * @example
+   * compaction: {
+   *   strategy: 'hierarchical',
+   *   recentMessagesToPreserve: 4,
+   *   maxSummaryTokens: 800,
+   *   provider: cheapProvider,   // uses haiku or equivalent
+   *   model: 'claude-haiku-3.5',
+   *   digestCacheCapacity: 50,
+   *   failurePolicy: 'truncate',
+   * }
+   */
+  compaction?: import('../agent/context/compaction-types.js').CompactionConfig;
   /**
    * Optional task planner. When set, the agent plans before the ReAct loop and
    * injects the plan into the initial user message.

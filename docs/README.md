@@ -30,6 +30,7 @@ Thin wrappers for RunContext, telemetry, injection guards, SSE streaming, and er
 | **`@ottrix/express`** | `npm install @ottrix/express ottrix express` | Express middleware & router | [README](../packages/express/README.md) · [docs](../packages/express/docs/README.md) |
 | **`@ottrix/fastify`** | `npm install @ottrix/fastify ottrix fastify` | Fastify plugin & routes | [README](../packages/fastify/README.md) · [docs](../packages/fastify/docs/README.md) |
 | **`@ottrix/hono`** | `npm install @ottrix/hono ottrix hono` | Hono middleware (Node, Bun, Deno, edge) | [README](../packages/hono/README.md) · [docs](../packages/hono/docs/README.md) |
+| **`@ottrix/nextjs`** | `npm install @ottrix/nextjs ottrix next` | Next.js API route handlers for ottrix agents | [README](../packages/nextjs/README.md) |
 
 ### Framework bridges
 
@@ -40,6 +41,12 @@ Use Ottrix providers, tools, and agents inside other AI ecosystems.
 | **`@ottrix/vercel-ai`** | `npm install @ottrix/vercel-ai ottrix ai` | [Vercel AI SDK](https://sdk.vercel.ai/) — `LanguageModelV1`, tools | [README](../packages/vercel-ai/README.md) |
 | **`@ottrix/langchain`** | `npm install @ottrix/langchain ottrix @langchain/core` | [LangChain.js](https://js.langchain.com/) — chat model, tools, memory | [README](../packages/langchain/README.md) |
 | **`@ottrix/mastra`** | `npm install @ottrix/mastra ottrix @mastra/core` | [Mastra](https://mastra.ai/) — models, tools, agent wrapper | [README](../packages/mastra/README.md) |
+
+### Integrations
+
+| Package | npm install | Description | Docs |
+|---------|-------------|-------------|------|
+| **`@ottrix/typesafe`** | `npm install @ottrix/typesafe ottrix @typesafe-ai/sdk` | TypeSafe AI / Jev integration — fast typed decisions for evaluation, routing, and guardrails | [README](../packages/typesafe/README.md) |
 
 ### Observability exporters
 

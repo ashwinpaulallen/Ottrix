@@ -3,12 +3,11 @@ import type { RunContext } from 'ottrix';
 import { PromptInjectionGuardrail, runWith } from 'ottrix';
 import {
   buildRunContext,
-  corsHeaders,
   extractMessage,
   mapOttrixError,
   scanMessageForInjection,
 } from 'ottrix/http';
-import type { AgentHandlerOptions } from './handlers.js';
+import { assertCors, enforceRateLimit, resolveCors, type AgentHandlerOptions } from './handlers.js';
 import {
   extractLastUserMessage,
   isRunContextSupported,
@@ -110,13 +109,15 @@ export function createAIStreamResponse(
 
 /** POST Route Handler for Vercel AI SDK `useChat` clients. */
 export function createChatHandler(options: AgentHandlerOptions) {
+  assertCors(options.cors);
   const bodyField = options.bodyField ?? 'message';
 
   return async function POST(request: Request): Promise<Response> {
-    const cors =
-      options.cors === false
-        ? {}
-        : corsHeaders(request.headers.get('origin') ?? undefined);
+    const cors = resolveCors(request, options.cors);
+    const limited = await enforceRateLimit(request, options, cors);
+    if (limited) {
+      return limited;
+    }
 
     try {
       const body = await readJsonBody(request);

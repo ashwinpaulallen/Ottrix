@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { AgentEvent } from '../types/agent.js';
 import type { CompletionProvider } from '../types/provider.js';
 import { extractTextFromContent } from './messages.js';
 
@@ -15,6 +17,8 @@ export interface PlanStep {
 
 /** A validated execution plan for a goal. */
 export interface Plan {
+  /** Stable id assigned when the plan is created. */
+  id?: string;
   /** Ordered list of plan steps (may include dependency ordering). */
   steps: PlanStep[];
   /** Planner reasoning or rationale. */
@@ -108,25 +112,74 @@ const DEFAULT_RULES: PlanningRule[] = [
  * Supports LLM-based decomposition and configurable rule-based patterns.
  */
 export class Planner {
-  private readonly provider?: CompletionProvider;
+  private provider?: CompletionProvider;
+  private readonly explicitProvider: boolean;
   private readonly mode: PlannerMode;
   private readonly rules: PlanningRule[];
   private readonly planningSystemPrompt: string;
+  private eventEmitter?: (event: AgentEvent) => void;
 
   /**
    * @param options - Provider, mode, and optional planning rules.
    */
   constructor(options: PlannerOptions = {}) {
     this.provider = options.provider;
+    this.explicitProvider = options.provider !== undefined;
     this.mode = options.mode ?? (options.provider ? 'llm' : 'rules');
     this.rules = options.rules ?? DEFAULT_RULES;
     this.planningSystemPrompt = options.planningSystemPrompt ?? DEFAULT_PLANNING_SYSTEM_PROMPT;
+  }
+
+  /** Whether planning calls an LLM (`mode: 'llm'`). */
+  usesLlm(): boolean {
+    return this.mode === 'llm';
+  }
+
+  /** True when the planner was constructed with an explicit provider. */
+  hasExplicitProvider(): boolean {
+    return this.explicitProvider;
+  }
+
+  /**
+   * Replace the planning provider. Used once at agent construction when a
+   * {@link ModelCatalog} resolves the planning intent.
+   */
+  bindProvider(provider: CompletionProvider): void {
+    this.provider = provider;
+  }
+
+  /**
+   * Receive plan lifecycle events. The agent sets this so creation and
+   * validation are observable without treating the plan as an executor.
+   */
+  setEventEmitter(emitEvent: ((event: AgentEvent) => void) | undefined): void {
+    this.eventEmitter = emitEvent;
   }
 
   /**
    * Create a plan for the given goal.
    */
   async plan(goal: string): Promise<Plan> {
+    const created = await this.createPlan(goal);
+    const planId = randomUUID();
+    const plan: Plan = { ...created, id: planId };
+    this.emitEvent({
+      type: 'plan_created',
+      data: {
+        planId,
+        stepCount: plan.steps.length,
+        steps: plan.steps.map((step) => ({
+          id: step.id,
+          description: step.description,
+          dependencies: step.dependencies,
+        })),
+        ...(plan.reasoning ? { reasoning: plan.reasoning } : {}),
+      },
+    });
+    return plan;
+  }
+
+  private async createPlan(goal: string): Promise<Plan> {
     if (this.mode === 'rules') {
       return this.planWithRules(goal);
     }
@@ -184,12 +237,25 @@ export class Planner {
       errors.push(`Unreachable steps: ${unreachableSteps.join(', ')}`);
     }
 
-    return {
+    const result: PlanValidationResult = {
       valid: errors.length === 0,
       errors,
       unreachableSteps,
       circularDependencies,
     };
+    this.emitEvent({
+      type: 'plan_validated',
+      data: {
+        planId: plan.id ?? '',
+        valid: result.valid,
+        ...(result.errors.length > 0 ? { issues: result.errors } : {}),
+      },
+    });
+    return result;
+  }
+
+  private emitEvent(event: AgentEvent): void {
+    this.eventEmitter?.(event);
   }
 
   /**

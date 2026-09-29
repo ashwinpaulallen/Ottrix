@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-09-29
+
+### Fixed
+
+- `OTTRIX_VERSION` (and the deprecated `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, and `AGENT_FABRIC_VERSION` aliases) now matches `package.json` at `2.2.1`
+- Package index in `README.md` and `docs/README.md` lists `@ottrix/nextjs` and `@ottrix/typesafe`
+
+### Changed
+
+- `telemetry.exporter` values `'langfuse'` and `'braintrust'` throw `ConfigurationError` instead of logging and continuing without an exporter. Install `@ottrix/exporter-langfuse` or `@ottrix/exporter-braintrust` and call `getTelemetry().addExporter(...)`
+
 ## [2.0.0] - 2026-05-23
 
 ### Added
@@ -307,5 +318,6 @@ const open = createAgent({ guardrails: { promptInjection: false } });
 - Anthropic/OpenAI missing API key throws `ProviderError` with `code: 'auth'`
 - MCP JSON-RPC parse failures throw `MCPProtocolError` instead of generic `Error`
 
+[2.2.1]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v2.2.1
 [2.0.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v2.0.0
 [1.0.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v1.0.0

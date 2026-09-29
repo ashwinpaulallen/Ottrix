@@ -70,6 +70,10 @@ export interface CompletionParams<TModel extends string = string> {
    * @defaultValue `"text"`
    */
   responseFormat?: 'json' | 'text';
+  /** Informational call intent. Does not affect routing. */
+  intent?: import('../providers/intent/types.js').CompletionIntent;
+  /** Why the model for this call was selected. Informational, for telemetry. */
+  intentResolution?: string;
 }
 
 /** Latency metrics for a single provider request. */

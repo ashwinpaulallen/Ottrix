@@ -32,6 +32,10 @@ export interface EvalResult {
   duration: number;
   /** Set when the agent run threw before producing a result. */
   error?: string;
+  /** Telemetry trace ID of the agent run, when telemetry is configured. */
+  traceId?: string;
+  /** Ottrix run ID for this eval case ({@link RunContext.runId}). */
+  runId: string;
 }
 
 /** Aggregated statistics for a scorer across all eval results. */
@@ -58,6 +62,8 @@ export interface EvalRunConfig {
 /** Full outcome of an evaluation run. */
 export interface EvalReport {
   name: string;
+  /** One identifier for the whole eval run. */
+  evalRunId: string;
   timestamp: number;
   results: EvalResult[];
   /** Scorer name → aggregated statistics. */

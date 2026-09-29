@@ -2,11 +2,16 @@ import { createMiddleware } from 'hono/factory';
 import type { MiddlewareHandler } from 'hono';
 import {
   buildRunContext,
-  corsHeaders,
   extractMessage,
   isStreamInjectionRequest,
+  rateLimitClientKey,
+  requestCorsHeaders,
+  retryAfterHeader,
   scanMessageForInjection,
+  validateCorsConfig,
   type ContextExtractors,
+  type CorsConfig,
+  type RateLimitHook,
 } from 'ottrix/http';
 import {
   getTelemetry,
@@ -51,12 +56,42 @@ export function ottrixContext(options?: OttrixContextOptions): MiddlewareHandler
   });
 }
 
-/** Sets CORS headers on every response. */
-export function corsMiddleware(): MiddlewareHandler {
+/**
+ * Sets CORS headers on every response.
+ * `true` keeps the legacy wildcard headers. A {@link CorsConfig} uses an allowlist.
+ */
+export function corsMiddleware(cors: true | CorsConfig = true): MiddlewareHandler {
+  if (cors !== true) {
+    validateCorsConfig(cors);
+  }
+
   return createMiddleware(async (c, next) => {
     const origin = c.req.header('origin');
-    for (const [key, value] of Object.entries(corsHeaders(origin))) {
-      c.header(key, value);
+    const headers = requestCorsHeaders(origin, cors);
+    if (headers) {
+      for (const [key, value] of Object.entries(headers)) {
+        c.header(key, value);
+      }
+    }
+    await next();
+  });
+}
+
+/** Rejects the request with 429 when {@link RateLimitHook} denies the client key. */
+export function rateLimitMiddleware(hook: RateLimitHook): MiddlewareHandler {
+  return createMiddleware(async (c, next) => {
+    const decision = await hook.check(
+      rateLimitClientKey({
+        forwardedFor: c.req.header('x-forwarded-for'),
+        origin: c.req.header('origin'),
+      }),
+    );
+    if (!decision.allowed) {
+      const retryAfter = retryAfterHeader(decision.retryAfterMs);
+      if (retryAfter !== undefined) {
+        c.header('Retry-After', retryAfter);
+      }
+      return c.json({ error: 'Too many requests' }, 429);
     }
     await next();
   });

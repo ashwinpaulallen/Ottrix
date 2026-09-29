@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { Agent } from '../agent/agent.js';
 import { StructuredOutputError } from '../agent/structured-output.js';
-import { BudgetExhaustedError, type SseEvent } from '../http/index.js';
+import { BudgetExhaustedError, type CorsConfig, type SseEvent } from '../http/index.js';
 import { SSE_HEADERS } from '../http/sse.js';
 import type { ProviderRegistry } from '../providers/registry.js';
 import {
@@ -44,7 +44,7 @@ export interface AdapterTestConfig {
     streaming?: boolean;
     injection?: 'block' | 'flag' | false;
     bodyField?: string;
-    cors?: boolean;
+    cors?: boolean | CorsConfig;
     healthCheck?: boolean;
     registry?: ProviderRegistry;
   }) => Promise<AdapterTestHarness>;
@@ -455,6 +455,29 @@ export function runAdapterContractTests(config: AdapterTestConfig): void {
           expect(result.status).toBe(204);
           expect(header(result.headers, 'Access-Control-Allow-Origin')).toBeDefined();
           expect(header(result.headers, 'Access-Control-Allow-Methods')).toContain('POST');
+        } finally {
+          await harness.close();
+        }
+      });
+
+      it('OPTIONS with an origin allowlist echoes that origin', async () => {
+        const harness = await config.createApp({
+          agent: createMockAgent(),
+          cors: { origins: ['https://app.example.com'] },
+        });
+
+        try {
+          const allowed = await harness.request('OPTIONS', POST_PATH, {
+            headers: { Origin: 'https://app.example.com' },
+          });
+          const denied = await harness.request('OPTIONS', POST_PATH, {
+            headers: { Origin: 'https://evil.example' },
+          });
+
+          expect(allowed.status).toBe(204);
+          expect(header(allowed.headers, 'Access-Control-Allow-Origin')).toBe('https://app.example.com');
+          expect(header(allowed.headers, 'Vary')).toBe('Origin');
+          expect(header(denied.headers, 'Access-Control-Allow-Origin')).toBeUndefined();
         } finally {
           await harness.close();
         }

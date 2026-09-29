@@ -50,6 +50,9 @@ export function instrumentProvider(
         component,
         'llm.model': params.model ?? 'default',
       });
+      if (params.intentResolution) {
+        span.setAttribute('ottrix.intent.resolution', params.intentResolution);
+      }
 
       return telemetry.withActiveSpan(span, async () => {
         const started = performance.now();
@@ -105,6 +108,9 @@ async function* instrumentStream(
     component,
     'llm.model': params.model ?? 'default',
   });
+  if (params.intentResolution) {
+    span.setAttribute('ottrix.intent.resolution', params.intentResolution);
+  }
 
   telemetry.enterActiveSpan(span);
   const started = performance.now();

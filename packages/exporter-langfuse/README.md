@@ -43,9 +43,7 @@ POST `{baseUrl}/api/public/ingestion` with Basic auth (`publicKey:secretKey`).
 
 ---
 
-## Also available in core config
-
-For `telemetry.exporter: 'langfuse'`, install this package and register `LangfuseExporter` manually — core no longer bundles the Langfuse exporter. See [MIGRATION.md](../../MIGRATION.md).
+`telemetry.exporter: 'langfuse'` throws `ConfigurationError`. Core does not bundle this exporter. Register it with `getTelemetry().addExporter(new LangfuseExporter(config))` as shown above. See [MIGRATION.md](../../MIGRATION.md).
 
 ## Related packages
 

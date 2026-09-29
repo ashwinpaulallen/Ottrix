@@ -162,7 +162,7 @@ Or manually:
 import { getTelemetry } from 'ottrix';
 import { LangfuseExporter } from '@ottrix/exporter-langfuse';
 
-getTelemetry().setExporter(new LangfuseExporter({
+getTelemetry().addExporter(new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
 }));

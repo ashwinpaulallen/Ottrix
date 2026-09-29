@@ -1,5 +1,6 @@
 import type { Provider } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { validateCorsConfig } from 'ottrix/http';
 import type { OttrixHttpOptions, ResolvedOttrixHttpOptions } from '../interfaces.js';
 import {
   OTTRIX_HTTP_OPTIONS,
@@ -31,12 +32,17 @@ export function resolveHttpOptions(http?: OttrixHttpOptions): ResolvedOttrixHttp
     return { ...DEFAULT_HTTP };
   }
 
-  return {
+  const resolved: ResolvedOttrixHttpOptions = {
     runContext: http.runContext ?? DEFAULT_HTTP.runContext,
     telemetry: http.telemetry ?? DEFAULT_HTTP.telemetry,
     injectionGuard: http.injectionGuard ?? DEFAULT_HTTP.injectionGuard,
     cors: http.cors ?? DEFAULT_HTTP.cors,
+    rateLimitHook: http.rateLimitHook,
   };
+  if (resolved.cors !== false && resolved.cors !== true) {
+    validateCorsConfig(resolved.cors);
+  }
+  return resolved;
 }
 
 /** Register global Nest HTTP interceptors and guards for Ottrix. */

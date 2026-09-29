@@ -10,13 +10,18 @@ import type { ProviderRegistry } from 'ottrix';
 import {
   agentEventToSse,
   checkHealth,
-  corsHeaders,
+  rateLimitClientKey,
+  requestCorsHeaders,
+  retryAfterHeader,
+  validateCorsConfig,
   extractMessage,
   formatSseComment,
   formatSseEvent,
   KEEPALIVE_INTERVAL_MS,
   SSE_HEADERS,
   type ContextExtractors,
+  type CorsConfig,
+  type RateLimitHook,
 } from 'ottrix/http';
 import { runWith } from 'ottrix';
 import { ottrixErrorHandler } from './errors.js';
@@ -33,8 +38,13 @@ export interface AgentRouterOptions {
   bodyField?: string;
   /** Prompt injection handling. @defaultValue `'block'` */
   injection?: 'block' | 'flag' | false;
-  /** Enable CORS headers and `OPTIONS` handler. @defaultValue `true` */
-  cors?: boolean;
+  /**
+   * CORS policy. `true` keeps the legacy wildcard headers.
+   * A {@link CorsConfig} uses an explicit allowlist. @defaultValue `true`
+   */
+  cors?: boolean | CorsConfig;
+  /** Optional application-owned rate limit check. Denied requests receive 429. */
+  rateLimitHook?: RateLimitHook;
   /** Register `GET /health` endpoint. @defaultValue `true` */
   healthCheck?: boolean;
   /** Provider registry for health checks. */
@@ -55,7 +65,12 @@ export function createAgentRouter(options: AgentRouterOptions): ExpressRouter {
     healthCheck = true,
     registry,
     runContext = true,
+    rateLimitHook,
   } = options;
+
+  if (cors !== false && cors !== true) {
+    validateCorsConfig(cors);
+  }
 
   const router = Router();
 
@@ -64,13 +79,42 @@ export function createAgentRouter(options: AgentRouterOptions): ExpressRouter {
     router.use(runContextMiddleware(extractors));
   }
 
-  if (cors) {
+  if (cors !== false) {
+    const corsOption = cors;
     router.use((req, res, next) => {
       const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
-      for (const [key, value] of Object.entries(corsHeaders(origin))) {
-        res.setHeader(key, value as string);
+      const headers = requestCorsHeaders(origin, corsOption === true ? true : corsOption);
+      if (headers) {
+        for (const [key, value] of Object.entries(headers)) {
+          res.setHeader(key, value);
+        }
       }
       next();
+    });
+  }
+
+  if (rateLimitHook) {
+    router.use(async (req, res, next) => {
+      try {
+        const decision = await rateLimitHook.check(
+          rateLimitClientKey({
+            forwardedFor: req.headers['x-forwarded-for'],
+            remoteAddress: req.socket?.remoteAddress,
+            origin: typeof req.headers.origin === 'string' ? req.headers.origin : undefined,
+          }),
+        );
+        if (!decision.allowed) {
+          const retryAfter = retryAfterHeader(decision.retryAfterMs);
+          if (retryAfter !== undefined) {
+            res.setHeader('Retry-After', retryAfter);
+          }
+          res.status(429).json({ error: 'Too many requests' });
+          return;
+        }
+        next();
+      } catch (error) {
+        next(error);
+      }
     });
   }
 

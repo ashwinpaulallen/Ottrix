@@ -41,8 +41,14 @@ export type OttrixHttpOptions =
       runContext?: boolean | RunContextInterceptorOptions;
       telemetry?: boolean;
       injectionGuard?: boolean | InjectionGuardOptions;
-      /** Enable CORS headers on {@link OttrixController} OPTIONS handler. @defaultValue `true` when `http: true` */
-      cors?: boolean;
+      /**
+       * CORS policy for {@link OttrixController}.
+       * `true` keeps the legacy wildcard headers. A config object uses an allowlist.
+       * @defaultValue `true` when `http: true`
+       */
+      cors?: boolean | import('ottrix/http').CorsConfig;
+      /** Optional application-owned rate limit check. Denied requests receive 429. */
+      rateLimitHook?: import('ottrix/http').RateLimitHook;
     };
 
 /** Root module configuration for {@link OttrixModule.forRoot}. */
@@ -109,5 +115,6 @@ export interface ResolvedOttrixHttpOptions {
   runContext: boolean | RunContextInterceptorOptions;
   telemetry: boolean;
   injectionGuard: boolean | InjectionGuardOptions;
-  cors: boolean;
+  cors: boolean | import('ottrix/http').CorsConfig;
+  rateLimitHook?: import('ottrix/http').RateLimitHook;
 }

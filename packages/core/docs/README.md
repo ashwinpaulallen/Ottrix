@@ -22,6 +22,7 @@ Implementation-accurate guides for the **`ottrix`** npm package (`packages/core`
 | [Guardrails](./guardrails.md) | Middleware, multi-scope budget, audit emitter, prompt injection |
 | [Observability](./observability.md) | Logger, telemetry, built-in exporters, standalone `@ottrix/exporter-*` |
 | [Orchestration](./orchestration.md) | Sequential, supervisor, DAG, state stores, approval gates |
+| [Composition](./composition.md) | Planner, evaluator, supervisor, DAG resume, compaction, HTTP adapters |
 | [Evals](./evals.md) | `evaluate()`, scorers, `EvalReporter` |
 | [Types](./types.md) | Shared TypeScript contracts |
 
@@ -41,6 +42,7 @@ Implementation-accurate guides for the **`ottrix`** npm package (`packages/core`
 | Telemetry | `getTelemetry`, replay, built-in exporters | [observability.md](./observability.md) |
 | OTEL / Langfuse / Braintrust | `@ottrix/exporter-otel`, `-langfuse`, `-braintrust` | [observability.md](./observability.md) |
 | Workflows | `SequentialWorkflow`, `SupervisorWorkflow`, `DAGBuilder` | [orchestration.md](./orchestration.md) |
+| Composition | Planner + evaluator, supervisor isolation, DAG resume, compaction + catalog | [composition.md](./composition.md) |
 | State stores | `InMemoryStateStore`, `PostgresStateStore`, `RedisStateStore` | [orchestration.md](./orchestration.md) |
 | Run context | `runWith`, `getRunContext`, ALS propagation | [context.md](./context.md) |
 | Evals | `evaluate`, scorers, CSV/Markdown reports | [evals.md](./evals.md) |
