@@ -112,7 +112,7 @@ Ottrix is a **monorepo**: a focused **`ottrix`** core plus optional **`@ottrix/*
 
 | Package | Install | Description |
 |---------|---------|-------------|
-| **`ottrix`** | `npm install ottrix` | **v2.1.0** — ReAct agents, providers, tools, MCP client, memory, guardrails, workflows, evals, webhook/console exporters |
+| **`ottrix`** | `npm install ottrix` | **v2.2.1** — ReAct agents, providers, tools, MCP client, memory, guardrails, workflows, evals, webhook/console exporters |
 
 Optional peers: `zod`, `js-yaml`, `ioredis`, `pg` — see [Installation](#installation).
 
@@ -124,7 +124,7 @@ Optional peers: `zod`, `js-yaml`, `ioredis`, `pg` — see [Installation](#instal
 | **`@ottrix/express`** | `npm install @ottrix/express ottrix express` | Implemented — [README](packages/express/README.md) |
 | **`@ottrix/fastify`** | `npm install @ottrix/fastify ottrix fastify` | Implemented — [README](packages/fastify/README.md) |
 | **`@ottrix/hono`** | `npm install @ottrix/hono ottrix hono` | Implemented — [README](packages/hono/README.md) |
-| **`@ottrix/nextjs`** | `npm install @ottrix/nextjs ottrix next` | Published — [README](packages/nextjs/README.md) |
+| **`@ottrix/nextjs`** | `npm install @ottrix/nextjs ottrix next` | Next.js API route handlers for ottrix agents — [README](packages/nextjs/README.md) |
 
 ### Framework bridges
 
@@ -133,6 +133,12 @@ Optional peers: `zod`, `js-yaml`, `ioredis`, `pg` — see [Installation](#instal
 | **`@ottrix/vercel-ai`** | `npm install @ottrix/vercel-ai ottrix ai` | [Vercel AI SDK](https://sdk.vercel.ai/) — [README](packages/vercel-ai/README.md) |
 | **`@ottrix/langchain`** | `npm install @ottrix/langchain ottrix @langchain/core` | [LangChain.js](https://js.langchain.com/) — [README](packages/langchain/README.md) |
 | **`@ottrix/mastra`** | `npm install @ottrix/mastra ottrix @mastra/core` | [Mastra](https://mastra.ai/) — [README](packages/mastra/README.md) |
+
+### Integrations
+
+| Package | Install | Description |
+|---------|---------|-------------|
+| **`@ottrix/typesafe`** | `npm install @ottrix/typesafe ottrix @typesafe-ai/sdk` | TypeSafe AI / Jev integration — fast typed decisions for evaluation, routing, and guardrails — [README](packages/typesafe/README.md) |
 
 ### Observability exporters
 
@@ -392,12 +398,18 @@ npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs
 ```ts
 import { Module } from '@nestjs/common';
 import { OttrixModule } from '@ottrix/nestjs';
+import { getTelemetry } from 'ottrix';
+import { OtelExporter } from '@ottrix/exporter-otel';
+
+getTelemetry().addExporter(new OtelExporter({
+  endpoint: 'http://localhost:4318',
+  serviceName: 'my-agent',
+}));
 
 @Module({
   imports: [
     OttrixModule.forRoot({
       providers: { anthropic: { apiKey: process.env.ANTHROPIC_API_KEY! } },
-      telemetry: { exporter: 'otel', otel: { endpoint: 'http://localhost:4318' } },
     }),
   ],
 })

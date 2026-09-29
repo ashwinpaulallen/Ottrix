@@ -96,3 +96,20 @@ export type {
   FallbackBackoffOptions,
   ProviderFallbackEvent,
 } from './registry.js';
+
+export {
+  CompletionIntentSchema,
+  ModelDescriptorSchema,
+} from './intent/types.js';
+export type {
+  CompletionIntent,
+  ModelDescriptor,
+  IntentResolutionResult,
+  ModelCatalogConfig,
+} from './intent/types.js';
+
+export {
+  ModelCatalog,
+  CatalogResolutionError,
+  createModelCatalog,
+} from './intent/catalog.js';

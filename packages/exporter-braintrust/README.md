@@ -17,7 +17,7 @@ npm install @ottrix/exporter-braintrust ottrix
 import { getTelemetry } from 'ottrix';
 import { BraintrustExporter } from '@ottrix/exporter-braintrust';
 
-getTelemetry().setExporter(
+getTelemetry().addExporter(
   new BraintrustExporter({
     apiKey: process.env.BRAINTRUST_API_KEY!,
     projectName: 'my-agent',
@@ -25,7 +25,7 @@ getTelemetry().setExporter(
 );
 ```
 
-Or via config (`telemetry.exporter: 'braintrust'`) after wiring the exporter manually — see [MIGRATION.md](../../MIGRATION.md).
+`telemetry.exporter: 'braintrust'` throws `ConfigurationError`. Register `BraintrustExporter` with `addExporter()` as shown above. See [MIGRATION.md](../../MIGRATION.md).
 
 ## Related packages
 

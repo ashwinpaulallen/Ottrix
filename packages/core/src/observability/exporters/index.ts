@@ -1,4 +1,5 @@
 import type { AgenticTelemetryConfig } from '../../config.js';
+import { ConfigurationError } from '../../tools/errors.js';
 import {
   applyTelemetryRetention,
   getTelemetry,
@@ -19,7 +20,12 @@ export { WebhookExporter, type WebhookExporterOptions } from './webhook.js';
 export { TraceConsoleExporter, InMemoryTraceExporter } from './console.js';
 export { MultiExporter } from './multi.js';
 
-/** Create a {@link TraceExporter} from Ottrix telemetry configuration. */
+/**
+ * Create a {@link TraceExporter} from Ottrix telemetry configuration.
+ *
+ * @throws {ConfigurationError} When `exporter` is `'langfuse'` or `'braintrust'`.
+ * Those exporters live in standalone packages and must be registered with `addExporter()`.
+ */
 export function createTraceExporterFromConfig(
   config: AgenticTelemetryConfig,
 ): TraceExporter | undefined {
@@ -31,17 +37,13 @@ export function createTraceExporterFromConfig(
     case 'memory':
       return new InMemoryTraceExporter();
     case 'langfuse':
-      logExporterError(
-        'telemetry',
-        'Langfuse exporter moved to @ottrix/exporter-langfuse — install it and call getTelemetry().addExporter(new LangfuseExporter(...))',
+      throw new ConfigurationError(
+        "The 'langfuse' exporter has moved to @ottrix/exporter-langfuse. Install it and call: telemetry.addExporter(new LangfuseExporter(config))",
       );
-      return undefined;
     case 'braintrust':
-      logExporterError(
-        'telemetry',
-        'Braintrust exporter moved to @ottrix/exporter-braintrust — install it and call getTelemetry().addExporter(new BraintrustExporter(...))',
+      throw new ConfigurationError(
+        "The 'braintrust' exporter has moved to @ottrix/exporter-braintrust. Install it and call: telemetry.addExporter(new BraintrustExporter(config))",
       );
-      return undefined;
     case 'webhook': {
       const webhook = config.webhook;
       if (!webhook?.url) {
@@ -76,7 +78,11 @@ export function applyTelemetryRetentionFromConfig(config: AgenticTelemetryConfig
   });
 }
 
-/** Configure global telemetry trace export from config (no-op when disabled). */
+/**
+ * Configure global telemetry trace export from config (no-op when disabled).
+ *
+ * @throws {ConfigurationError} When `exporter` is `'langfuse'` or `'braintrust'`.
+ */
 export function configureTraceExportFromConfig(config: AgenticTelemetryConfig): TraceExporter | undefined {
   applyTelemetryRetentionFromConfig(config);
 

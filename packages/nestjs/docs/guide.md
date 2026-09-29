@@ -124,18 +124,35 @@ OttrixModule.forFeature({
 
 ## Telemetry backends
 
+Built-in exporters still use `telemetry.exporter`:
+
 | Backend | Config |
 |---------|--------|
 | Console | `{ exporter: 'console' }` |
-| Langfuse | `{ exporter: 'langfuse', langfuse: { publicKey, secretKey } }` |
-| Braintrust | `{ exporter: 'braintrust', braintrust: { apiKey, projectName } }` |
 | Webhook | `{ exporter: 'webhook', webhook: { url } }` |
-| Jaeger / Tempo / Datadog / Honeycomb | `{ exporter: 'otel', otel: { endpoint, headers?, serviceName? } }` |
 
-Import runtime APIs from main `ottrix` entry (not subpaths) to avoid duplicate singletons:
+Langfuse, Braintrust, and OpenTelemetry are standalone packages. Register them with `addExporter()`. Passing `'langfuse'` or `'braintrust'` throws `ConfigurationError`.
 
 ```typescript
-import { getTelemetry, OtelExporter } from 'ottrix';
+import { getTelemetry } from 'ottrix';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
+import { BraintrustExporter } from '@ottrix/exporter-braintrust';
+import { OtelExporter } from '@ottrix/exporter-otel';
+
+getTelemetry().addExporter(new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+}));
+
+getTelemetry().addExporter(new BraintrustExporter({
+  apiKey: process.env.BRAINTRUST_API_KEY!,
+  projectName: 'my-agent',
+}));
+
+getTelemetry().addExporter(new OtelExporter({
+  endpoint: 'http://localhost:4318',
+  serviceName: 'my-agent',
+}));
 ```
 
 ## SSE

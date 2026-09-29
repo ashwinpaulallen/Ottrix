@@ -1,4 +1,9 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Agent } from '../agent/agent.js';
+import { runWith } from '../context/run-context.js';
+import { withTokenAccounting } from '../observability/token-accounting/context.js';
+import type { Span } from '../observability/telemetry.js';
 import type { AgentResult } from '../types/agent.js';
 import { runWithConcurrency } from '../orchestration/runner.js';
 import { clampScore, type Scorer } from './scorers.js';
@@ -62,11 +67,12 @@ export class EvalRunner {
   /** Evaluate every dataset entry and return a full report. */
   async run(): Promise<EvalReport> {
     const started = Date.now();
+    const evalRunId = randomUUID();
     let completed = 0;
 
     const tasks = this.dataset.map(
-      (entry) => () =>
-        this.evaluateEntry(entry).then((result) => {
+      (entry, index) => () =>
+        this.evaluateEntry(entry, index, evalRunId).then((result) => {
           completed += 1;
           this.onProgress?.(completed, this.dataset.length);
           return result;
@@ -86,6 +92,7 @@ export class EvalRunner {
 
     return {
       name: this.name,
+      evalRunId,
       timestamp: Date.now(),
       results,
       aggregates,
@@ -110,19 +117,99 @@ export class EvalRunner {
     );
   }
 
-  private async evaluateEntry(entry: EvalDatasetEntry): Promise<EvalResult> {
+  private async evaluateEntry(
+    entry: EvalDatasetEntry,
+    index: number,
+    evalRunId: string,
+  ): Promise<EvalResult> {
+    const evalCaseId = `${evalRunId}-${index}`;
+
+    return runWith(
+      {
+        runId: evalCaseId,
+        evalRunId,
+        evalCaseId,
+        evalCase: entry.input.slice(0, 50),
+        evalCaseIndex: index,
+        evalDatasetSize: this.dataset.length,
+      },
+      async () => {
+        const telemetry = this.agent.getTelemetry();
+        const evalSpan = telemetry?.startSpan('eval.case');
+
+        try {
+          const executed =
+            telemetry && evalSpan
+              ? await telemetry.withActiveSpan(evalSpan, () =>
+                  this.executeAgent(entry.input, evalCaseId),
+                )
+              : await this.executeAgent(entry.input, evalCaseId);
+
+          const scores = await this.scoreEntry(entry, executed.agentOutput, executed.duration, executed.error);
+          this.recordScoreEvents(evalSpan, scores);
+
+          return {
+            entry,
+            agentOutput: executed.agentOutput,
+            scores,
+            duration: executed.duration,
+            error: executed.error,
+            traceId: executed.traceId,
+            runId: evalCaseId,
+          };
+        } finally {
+          evalSpan?.end();
+        }
+      },
+    );
+  }
+
+  private async executeAgent(
+    input: string,
+    evalCaseId: string,
+  ): Promise<{ agentOutput: AgentResult; error?: string; duration: number; traceId?: string }> {
     const started = Date.now();
     let agentOutput: AgentResult;
     let error: string | undefined;
 
     try {
-      agentOutput = await this.agent.run(entry.input);
+      agentOutput = await withTokenAccounting(evalCaseId, () => this.agent.run(input));
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
       agentOutput = errorAgentResult(error);
     }
 
-    const duration = Date.now() - started;
+    return {
+      agentOutput,
+      error,
+      duration: Date.now() - started,
+      traceId: this.captureTraceId(evalCaseId),
+    };
+  }
+
+  private captureTraceId(evalCaseId: string): string | undefined {
+    const telemetry = this.agent.getTelemetry();
+    if (!telemetry) {
+      return undefined;
+    }
+
+    const active = telemetry.activeSpan;
+    if (active?.name === 'agent.run') {
+      return active.traceId;
+    }
+
+    const agentSpan = [...telemetry.finishedSpans].reverse().find(
+      (span) => span.name === 'agent.run' && span.attributes['ottrix.eval.case_id'] === evalCaseId,
+    );
+    return agentSpan?.traceId ?? active?.traceId;
+  }
+
+  private async scoreEntry(
+    entry: EvalDatasetEntry,
+    agentOutput: AgentResult,
+    duration: number,
+    error: string | undefined,
+  ): Promise<Record<string, ScoreResult>> {
     const scoringMetadata = {
       ...entry.metadata,
       durationMs: duration,
@@ -137,14 +224,24 @@ export class EvalRunner {
         ? { score: 0, reason: `Agent error: ${error}` }
         : await safeScore(scorer, entry, agentOutput.response, scoringMetadata);
     }
+    return scores;
+  }
 
-    return {
-      entry,
-      agentOutput,
-      scores,
-      duration,
-      error,
-    };
+  private recordScoreEvents(span: Span | undefined, scores: Record<string, ScoreResult>): void {
+    if (!span) {
+      return;
+    }
+
+    for (const [scorerName, scoreResult] of Object.entries(scores)) {
+      const attributes: Record<string, string | number | boolean> = {
+        scorer: scorerName,
+        score: scoreResult.score,
+      };
+      if (scoreResult.reason) {
+        attributes.reason = scoreResult.reason.slice(0, 200);
+      }
+      span.addEvent('eval.score', attributes);
+    }
   }
 }
 

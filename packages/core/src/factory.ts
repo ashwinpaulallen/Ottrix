@@ -49,6 +49,7 @@ export interface CreateAgentConfig
     | 'evaluation'
     | 'contextLimitTokens'
     | 'keepRecentMessages'
+    | 'compaction'
     | 'defaultModel'
     | 'runRecorder'
   > {
@@ -149,6 +150,25 @@ function toConfigOverrides(config: CreateAgentConfig): AgenticConfigInput {
  * });
  * const result = await agent.run('Hello');
  * ```
+ *
+ * Pass `compaction` to replace single-threshold summarization with the
+ * three-phase strategy (soft offload, medium outcome summaries, hard LLM
+ * digest). The object is forwarded to {@link AgentConfig} unchanged; the
+ * agent validates it with `CompactionConfigSchema`.
+ *
+ * @example
+ * ```ts
+ * createAgent({
+ *   provider: 'anthropic',
+ *   compaction: {
+ *     strategy: 'hierarchical',
+ *     recentMessagesToPreserve: 4,
+ *     maxSummaryTokens: 800,
+ *     model: 'claude-haiku-3.5',
+ *     failurePolicy: 'truncate',
+ *   },
+ * });
+ * ```
  */
 export function createAgent(config: CreateAgentConfig = {}): Agent {
   const { config: agentic } = loadConfig({ overrides: toConfigOverrides(config) });
@@ -191,6 +211,7 @@ export function createAgent(config: CreateAgentConfig = {}): Agent {
     evaluationProvider,
     contextLimitTokens: config.contextLimitTokens ?? 128_000,
     keepRecentMessages: config.keepRecentMessages ?? 6,
+    compaction: config.compaction,
     runRecorder: config.runRecorder,
     memory: resolveMemory(config.memory),
     telemetry: resolveTelemetry(config, agentic),

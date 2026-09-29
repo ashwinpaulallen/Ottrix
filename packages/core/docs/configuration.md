@@ -24,9 +24,7 @@ After merge, `applyProviderApiKeysFromEnv` re-applies `ANTHROPIC_API_KEY`, `OPEN
 | `maxTokenBudget` | `undefined` |
 | `logLevel` | `'info'` |
 | `telemetry.enabled` | `true` |
-| `telemetry.exporter` | `'memory'` |
-| `telemetry.langfuse` | Langfuse keys when `exporter: 'langfuse'` |
-| `telemetry.braintrust` | Braintrust config when `exporter: 'braintrust'` |
+| `telemetry.exporter` | `'memory'` (`console`, `memory`, `none`, `webhook`). `'langfuse'` and `'braintrust'` throw `ConfigurationError` |
 | `telemetry.webhook` | Webhook URL when `exporter: 'webhook'` |
 | `telemetry.maxFinishedSpans` | Optional retention cap |
 | `guardrails.piiDetection` | `true` |
@@ -42,9 +40,7 @@ After merge, `applyProviderApiKeysFromEnv` re-applies `ANTHROPIC_API_KEY`, `OPEN
 | `OTTRIX_MAX_TOKEN_BUDGET` | `maxTokenBudget` |
 | `OTTRIX_LOG_LEVEL` | `logLevel` (`debug`, `info`, `warn`, `error`, `silent`) |
 | `OTTRIX_TELEMETRY_ENABLED` | `telemetry.enabled` (`1`/`true`/`yes`/`on` or `0`/`false`/`no`/`off`) |
-| `OTTRIX_TELEMETRY_EXPORTER` | `telemetry.exporter` (`console`, `memory`, `none`, `langfuse`, `braintrust`, `webhook`) |
-| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | `telemetry.langfuse` |
-| `BRAINTRUST_API_KEY`, `BRAINTRUST_PROJECT_NAME` | `telemetry.braintrust` |
+| `OTTRIX_TELEMETRY_EXPORTER` | `telemetry.exporter` (`console`, `memory`, `none`, `webhook`). `'langfuse'` and `'braintrust'` throw `ConfigurationError` |
 | `OTTRIX_TELEMETRY_WEBHOOK_URL` | `telemetry.webhook.url` |
 | `OTTRIX_GUARDRAILS_PII_DETECTION` | `guardrails.piiDetection` |
 | `OTTRIX_GUARDRAILS_MAX_COST_USD` | `guardrails.maxCostUsd` |
@@ -56,6 +52,24 @@ After merge, `applyProviderApiKeysFromEnv` re-applies `ANTHROPIC_API_KEY`, `OPEN
 | `OTTRIX_OPENAI_*`, `OTTRIX_OLLAMA_*` | Same pattern for other providers |
 
 Legacy `AGENT_KIT_*` and `AGENTIC_*` variables map to the same fields when `OTTRIX_*` is unset.
+
+Langfuse and Braintrust are not configured through `telemetry.exporter`. Install the standalone package and register the exporter yourself:
+
+```ts
+import { getTelemetry } from 'ottrix';
+import { LangfuseExporter } from '@ottrix/exporter-langfuse';
+import { BraintrustExporter } from '@ottrix/exporter-braintrust';
+
+getTelemetry().addExporter(new LangfuseExporter({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+}));
+
+getTelemetry().addExporter(new BraintrustExporter({
+  apiKey: process.env.BRAINTRUST_API_KEY!,
+  projectName: process.env.BRAINTRUST_PROJECT_NAME!,
+}));
+```
 
 Invalid `OTTRIX_LOG_LEVEL` or `OTTRIX_MAX_STEPS` in env produce **warnings**, not fatal errors.
 

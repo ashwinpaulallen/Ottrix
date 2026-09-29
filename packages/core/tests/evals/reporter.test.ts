@@ -5,6 +5,7 @@ import type { EvalReport } from '../../src/evals/types.js';
 function sampleReport(): EvalReport {
   return {
     name: 'sample-eval',
+    evalRunId: 'eval-run-1',
     timestamp: 1_700_000_000_000,
     duration: 120,
     config: {

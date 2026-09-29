@@ -7,6 +7,7 @@ import type {
   StreamChunk,
 } from '../types/provider.js';
 import { getMetricsCollector } from '../observability/global.js';
+import { annotateActiveSpan } from '../observability/telemetry.js';
 import * as tokenAccounting from '../observability/token-accounting/context.js';
 import type { TokenUsage } from '../types/provider.js';
 import {
@@ -194,6 +195,7 @@ export abstract class BaseProvider<TModel extends string = string>
    * Generate a completion with rate limiting and exponential-backoff retries.
    */
   async complete(params: CompletionParams<TModel>): Promise<CompletionResult<TModel>> {
+    this.annotateIntent(params);
     const operation = () => this.withRetry(() => this.executeComplete(params));
     if (this.circuitBreaker) {
       return this.circuitBreaker.execute(operation);
@@ -205,6 +207,7 @@ export abstract class BaseProvider<TModel extends string = string>
    * Stream completion chunks; retries only on connection-level failures before the first chunk.
    */
   stream(params: CompletionParams<TModel>): AsyncIterable<StreamChunk> {
+    this.annotateIntent(params);
     if (!this.circuitBreaker) {
       return this.createStreamIterable(params);
     }
@@ -239,6 +242,13 @@ export abstract class BaseProvider<TModel extends string = string>
    * Vendor-specific token counting. Called by {@link BaseProvider.countTokens}.
    */
   protected abstract _countTokens(messages: ChatMessage[]): Promise<number>;
+
+  /** Record why a model was selected. Does not change provider routing. */
+  private annotateIntent(params: CompletionParams<TModel>): void {
+    if (params.intentResolution) {
+      annotateActiveSpan('ottrix.intent.resolution', params.intentResolution);
+    }
+  }
 
   /**
    * Perform an HTTP request with timeout, JSON parsing, hooks, and error normalization.

@@ -10,6 +10,16 @@ export interface RunContext {
   agentName?: string;
   /** Upstream request identifier (HTTP, queue message, etc.). */
   requestId?: string;
+  /** Offline eval run identifier shared by every case in one evaluation. */
+  evalRunId?: string;
+  /** Eval case identifier (`${evalRunId}-${index}`). */
+  evalCaseId?: string;
+  /** Truncated eval case input (first 50 characters). */
+  evalCase?: string;
+  /** Zero-based index of this case in the eval dataset. */
+  evalCaseIndex?: number;
+  /** Number of entries in the eval dataset. */
+  evalDatasetSize?: number;
   /** Extensible — apps add their own fields via {@link runWith}. */
   readonly [key: string]: unknown;
 }

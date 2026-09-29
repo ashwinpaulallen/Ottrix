@@ -1,5 +1,5 @@
 /** Matches `package.json` version — update both when releasing. */
-export const OTTRIX_VERSION = '2.1.0' as const;
+export const OTTRIX_VERSION = '2.2.1' as const;
 
 /** @deprecated Use {@link OTTRIX_VERSION}. */
 export const AGENT_KIT_VERSION = OTTRIX_VERSION;
@@ -149,6 +149,20 @@ export {
   type EvaluationRecord,
   type EvaluatorStrategy,
   type EvaluationContext,
+  CompactionStrategySchema,
+  CompactionFailurePolicySchema,
+  CompactionConfigSchema,
+  type CompactionStrategy,
+  type CompactionFailurePolicy,
+  type CompactionConfig,
+  type ResolvedCompactionConfig,
+  type CompactionOutput,
+  type CompactionTelemetryEvent,
+  DigestCache,
+  type DigestEntry,
+  buildTopicIndexPrompt,
+  buildProseDigestPrompt,
+  buildOutcomeSummaryText,
 } from './agent/index.js';
 
 // --- Providers ---
@@ -177,6 +191,15 @@ export {
   OLLAMA_DEFAULT_MODEL,
   OLLAMA_DEFAULT_BASE_URL,
   type BaseProviderConfig,
+  CompletionIntentSchema,
+  ModelDescriptorSchema,
+  ModelCatalog,
+  CatalogResolutionError,
+  createModelCatalog,
+  type CompletionIntent,
+  type ModelDescriptor,
+  type IntentResolutionResult,
+  type ModelCatalogConfig,
 } from './providers/index.js';
 
 // --- Tools ---

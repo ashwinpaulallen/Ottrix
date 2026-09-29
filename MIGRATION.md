@@ -54,7 +54,7 @@ import { serveMCP } from '@ottrix/mcp-server';
 
 ### Config-based exporters
 
-`telemetry.exporter: 'langfuse' | 'braintrust'` no longer auto-wires exporters. Ottrix logs a migration hint at startup. Install the standalone package and register manually:
+`telemetry.exporter: 'langfuse' | 'braintrust'` throws `ConfigurationError`. Install the standalone package and register manually:
 
 ```ts
 import { getTelemetry } from 'ottrix';

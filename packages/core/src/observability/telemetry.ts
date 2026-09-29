@@ -94,6 +94,11 @@ function currentSpanStack(): SpanStack {
   return activeSpanStorage.getStore() ?? fallbackSpanStack;
 }
 
+/** Set an attribute on the active span, if one exists. */
+export function annotateActiveSpan(key: string, value: AttributeValue): void {
+  currentSpanStack().active?.setAttribute(key, value);
+}
+
 /** Run an async generator within an isolated active-span stack. */
 export function runInActiveSpanStack<T>(
   stack: SpanStack,
@@ -578,6 +583,10 @@ const RUN_CONTEXT_ATTRIBUTE_KEYS: Record<string, string> = {
   stepId: 'run.step_id',
   agentName: 'agent.name',
   requestId: 'run.request_id',
+  evalRunId: 'ottrix.eval.run_id',
+  evalCaseId: 'ottrix.eval.case_id',
+  evalCaseIndex: 'ottrix.eval.case_index',
+  evalDatasetSize: 'ottrix.eval.dataset_size',
 };
 
 function runContextToSpanAttributes(ctx: RunContext | undefined): Record<string, AttributeValue> {

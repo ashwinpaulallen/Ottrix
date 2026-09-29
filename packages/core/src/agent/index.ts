@@ -20,6 +20,23 @@ export {
   type StepEvaluation,
 } from './reflector.js';
 export { ContextManager } from './context.js';
+export {
+  CompactionStrategySchema,
+  CompactionFailurePolicySchema,
+  CompactionConfigSchema,
+  type CompactionStrategy,
+  type CompactionFailurePolicy,
+  type CompactionConfig,
+  type ResolvedCompactionConfig,
+  type CompactionOutput,
+  type CompactionTelemetryEvent,
+} from './context/compaction-types.js';
+export { DigestCache, type DigestEntry } from './context/digest-cache.js';
+export {
+  buildTopicIndexPrompt,
+  buildProseDigestPrompt,
+  buildOutcomeSummaryText,
+} from './context/compaction-prompts.js';
 export { checkRunGuardrails, sumTokenUsage, type GuardrailCheckResult } from './guardrails.js';
 export {
   buildAssistantMessage,

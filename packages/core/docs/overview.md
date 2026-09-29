@@ -1,7 +1,7 @@
 # Overview
 
 **Package name:** `ottrix`  
-**Version constant:** `OTTRIX_VERSION` → `'2.1.0'` (deprecated aliases: `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, `AGENT_FABRIC_VERSION`)  
+**Version constant:** `OTTRIX_VERSION` → `'2.2.1'` (deprecated aliases: `AGENT_KIT_VERSION`, `AGENTIC_FABRIC_VERSION`, `AGENT_FABRIC_VERSION`)  
 **Node.js:** `>=20` (20.x, 22.x, 24.x; CI tests 20, 22, and 24)  
 **Module format:** ESM (`"type": "module"`); CommonJS builds ship as `.cjs` alongside `.js`.
 

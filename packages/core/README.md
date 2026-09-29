@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/ottrix.svg)](https://www.npmjs.com/package/ottrix)
 [![Node](https://img.shields.io/node/v/ottrix)](https://www.npmjs.com/package/ottrix)
 
-**Version:** 2.1.0 · **Node:** ≥20 · **License:** MIT
+**Version:** 2.2.1 · **Node:** ≥20 · **License:** MIT
 
 Full project docs: [github.com/ashwinpaulallen/ottrix](https://github.com/ashwinpaulallen/ottrix) · **Core module guides:** [docs/README.md](docs/README.md) · Monorepo index: [../../docs/README.md](../../docs/README.md)
 
@@ -203,7 +203,7 @@ import { getTelemetry } from 'ottrix';
 import { LangfuseExporter } from '@ottrix/exporter-langfuse';
 import { createOtelExporter } from '@ottrix/exporter-otel';
 
-getTelemetry().setExporter(new LangfuseExporter({
+getTelemetry().addExporter(new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
 }));
@@ -247,7 +247,7 @@ Environment variables (legacy `AGENT_KIT_*` / `AGENTIC_*` aliases still supporte
 | `OTTRIX_MODEL` | Default model id |
 | `OTTRIX_MAX_STEPS` | Max ReAct iterations (default `10`) |
 | `OTTRIX_CONFIG_PATH` | Path to `.ottrixrc.json` |
-| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `webhook`, `memory`, `none` (Langfuse/Braintrust/OTel → standalone packages) |
+| `OTTRIX_TELEMETRY_EXPORTER` | `console`, `webhook`, `memory`, `none`. `'langfuse'` and `'braintrust'` throw `ConfigurationError` — register with `getTelemetry().addExporter()` |
 
 ```ts
 import { loadConfig, createAgent } from 'ottrix';
@@ -276,7 +276,7 @@ Use **`ottrix`** directly in any Node.js HTTP framework, or install a first-part
 
 ```ts
 import { OTTRIX_VERSION } from 'ottrix';
-// '2.1.0'
+// '2.2.1'
 ```
 
 ---

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../src/agent/agent.js';
 import { instrumentProvider } from '../../src/observability/instrument.js';
 import {
+  createTraceExporterFromConfig,
   InMemoryTraceExporter,
   MultiExporter,
   TraceConsoleExporter,
   WebhookExporter,
   type TraceData,
 } from '../../src/observability/exporters/index.js';
+import { ConfigurationError } from '../../src/tools/errors.js';
 import { Telemetry } from '../../src/observability/telemetry.js';
 import { FunctionTool } from '../../src/tools/function-tool.js';
 import { ToolRegistry } from '../../src/tools/registry.js';
@@ -76,6 +78,43 @@ function sampleTrace(overrides: Partial<TraceData> = {}): TraceData {
     ...overrides,
   };
 }
+
+describe('createTraceExporterFromConfig', () => {
+  const base = { enabled: true as const };
+
+  it('throws ConfigurationError for moved langfuse and braintrust exporters', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(() => createTraceExporterFromConfig({ ...base, exporter: 'langfuse' })).toThrow(
+      ConfigurationError,
+    );
+    expect(() => createTraceExporterFromConfig({ ...base, exporter: 'langfuse' })).toThrow(
+      /@ottrix\/exporter-langfuse/,
+    );
+    expect(() => createTraceExporterFromConfig({ ...base, exporter: 'langfuse' })).toThrow(
+      /telemetry\.addExporter\(new LangfuseExporter\(config\)\)/,
+    );
+    expect(() => createTraceExporterFromConfig({ ...base, exporter: 'braintrust' })).toThrow(
+      /@ottrix\/exporter-braintrust/,
+    );
+    expect(() => createTraceExporterFromConfig({ ...base, exporter: 'braintrust' })).toThrow(
+      /telemetry\.addExporter\(new BraintrustExporter\(config\)\)/,
+    );
+    expect(warn).not.toHaveBeenCalled();
+
+    warn.mockRestore();
+  });
+
+  it('still builds built-in exporters', () => {
+    expect(createTraceExporterFromConfig({ ...base, exporter: 'console' })).toBeInstanceOf(
+      TraceConsoleExporter,
+    );
+    expect(createTraceExporterFromConfig({ ...base, exporter: 'memory' })).toBeInstanceOf(
+      InMemoryTraceExporter,
+    );
+    expect(createTraceExporterFromConfig({ ...base, exporter: 'none' })).toBeUndefined();
+  });
+});
 
 describe('WebhookExporter', () => {
   beforeEach(() => {
