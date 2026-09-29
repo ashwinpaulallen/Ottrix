@@ -57,7 +57,7 @@ export interface NextHandlerAppOptions {
   streaming?: boolean;
   injection?: 'block' | 'flag' | false;
   bodyField?: string;
-  cors?: boolean;
+  cors?: boolean | import('ottrix/http').CorsConfig;
   healthCheck?: boolean;
   registry?: ProviderRegistry;
 }

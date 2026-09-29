@@ -5,14 +5,16 @@ import {
   agentEventToSse,
   buildRunContext,
   checkHealth,
-  corsHeaders,
   extractMessage,
   formatSseComment,
   formatSseEvent,
   KEEPALIVE_INTERVAL_MS,
   mapOttrixError,
+  requestCorsHeaders,
   scanMessageForInjection,
   SSE_HEADERS,
+  validateCorsConfig,
+  type CorsConfig,
 } from 'ottrix/http';
 import {
   isRunContextSupported,
@@ -29,19 +31,32 @@ export interface AgentHandlerOptions {
   bodyField?: string;
   /** Prompt injection handling. @defaultValue `'block'` */
   injection?: 'block' | 'flag' | false;
-  /** Enable CORS headers and OPTIONS handler. @defaultValue `true` */
-  cors?: boolean;
+  /**
+   * CORS policy. `true` keeps the legacy wildcard headers.
+   * A {@link CorsConfig} uses an explicit allowlist. @defaultValue `true`
+   */
+  cors?: boolean | CorsConfig;
   /** Enable RunContext via AsyncLocalStorage (Node.js runtime only). @defaultValue `true` */
   runContext?: boolean;
   /** Query param for GET streaming. @defaultValue `'message'` */
   queryField?: string;
 }
 
-function resolveCors(request: Request, enabled: boolean | undefined): Record<string, string> {
-  if (enabled === false) {
+/** CORS headers for this request. An allowlist that rejects the origin yields an empty set. */
+export function resolveCors(
+  request: Request,
+  cors: boolean | CorsConfig | undefined,
+): Record<string, string> {
+  if (cors === false) {
     return {};
   }
-  return corsHeaders(request.headers.get('origin') ?? undefined);
+  return requestCorsHeaders(request.headers.get('origin') ?? undefined, cors ?? true) ?? {};
+}
+
+export function assertCors(cors: boolean | CorsConfig | undefined): void {
+  if (cors && cors !== true) {
+    validateCorsConfig(cors);
+  }
 }
 
 function shouldUseRunContext(enabled: boolean | undefined): boolean {
@@ -85,6 +100,7 @@ async function withOptionalRunContext<T>(
 
 /** POST Route Handler — runs {@link Agent.run} and returns JSON. */
 export function createPostHandler(options: AgentHandlerOptions) {
+  assertCors(options.cors);
   const bodyField = options.bodyField ?? 'message';
 
   return async function POST(request: Request): Promise<Response> {
@@ -115,6 +131,7 @@ export function createPostHandler(options: AgentHandlerOptions) {
 
 /** GET Route Handler — streams {@link Agent.stream} as Server-Sent Events. */
 export function createStreamHandler(options: AgentHandlerOptions) {
+  assertCors(options.cors);
   const queryField = options.queryField ?? 'message';
 
   return async function GET(request: Request): Promise<Response> {
