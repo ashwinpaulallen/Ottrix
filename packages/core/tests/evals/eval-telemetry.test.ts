@@ -124,25 +124,24 @@ describe('EvalRunner telemetry correlation', () => {
       span.events.filter((event) => event.name === 'eval.score'),
     );
 
-    expect(scoreEvents).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'eval.score',
-          attributes: expect.objectContaining({
-            scorer: 'exact_match',
-            score: 1,
-            reason: 'Exact match',
-          }),
-        }),
-        expect.objectContaining({
-          name: 'eval.score',
-          attributes: expect.objectContaining({
-            scorer: 'verbose',
-            score: 0.25,
-            reason: 'x'.repeat(200),
-          }),
-        }),
-      ]),
-    );
+    const exact = scoreEvents.find((event) => event.attributes?.scorer === 'exact_match');
+    const verbose = scoreEvents.find((event) => event.attributes?.scorer === 'verbose');
+
+    expect(exact).toMatchObject({
+      name: 'eval.score',
+      attributes: {
+        scorer: 'exact_match',
+        score: 1,
+        reason: 'Exact match',
+      },
+    });
+    expect(verbose).toMatchObject({
+      name: 'eval.score',
+      attributes: {
+        scorer: 'verbose',
+        score: 0.25,
+        reason: 'x'.repeat(200),
+      },
+    });
   });
 });

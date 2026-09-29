@@ -4,7 +4,7 @@ import {
 } from '../observability/token-accounting/index.js';
 import { recordActiveSpanEvent } from '../observability/telemetry.js';
 import { Logger } from '../observability/logger.js';
-import type { ChatMessage, ContentBlock, ToolResultBlock, ToolUseBlock } from '../types/messages.js';
+import type { ChatMessage, ContentBlock } from '../types/messages.js';
 import type { CompletionProvider } from '../types/provider.js';
 import type {
   CompactionTelemetryEvent,
@@ -368,7 +368,7 @@ function collectToolUseNames(messages: ChatMessage[]): Map<string, string> {
     }
     for (const block of message.content) {
       if (block.type === 'tool_use') {
-        names.set((block as ToolUseBlock).id, block.name);
+        names.set(block.id, block.name);
       }
     }
   }
@@ -388,15 +388,14 @@ function summarizeToolResultMessage(
     if (block.type !== 'tool_result') {
       return block;
     }
-    const result = block as ToolResultBlock;
     const preview =
-      typeof result.content === 'string' ? result.content : extractTextFromContent(result.content);
+      typeof block.content === 'string' ? block.content : extractTextFromContent(block.content);
     if (preview.startsWith("[Tool '")) {
       return block;
     }
     changed = true;
-    const name = toolNames.get(result.tool_use_id) ?? 'tool';
-    return { ...result, content: buildOutcomeSummaryText(name, preview) };
+    const name = toolNames.get(block.tool_use_id) ?? 'tool';
+    return { ...block, content: buildOutcomeSummaryText(name, preview) };
   });
 
   return changed ? { ...message, content } : message;
