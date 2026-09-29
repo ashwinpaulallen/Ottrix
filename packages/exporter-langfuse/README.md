@@ -5,7 +5,7 @@
 
 Standalone Langfuse trace exporter for Ottrix — batch ingestion via the Langfuse public API.
 
-**Peer dependency:** `ottrix` ≥2.0.0 · **Zero runtime dependencies**
+**Peer dependency:** `ottrix` ≥2.3.0 · **Zero runtime dependencies**
 
 ---
 

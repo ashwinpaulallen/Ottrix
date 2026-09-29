@@ -87,7 +87,7 @@ If you use the NestJS adapter:
 npm install @ottrix/nestjs ottrix@2 @nestjs/common @nestjs/core rxjs
 ```
 
-`@ottrix/nestjs` requires **`ottrix` ≥2.0.0** as a peer dependency.
+`@ottrix/nestjs` requires **`ottrix` ≥2.3.0** as a peer dependency.
 
 ### Version constant
 

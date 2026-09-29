@@ -1,7 +1,7 @@
 {
   "name": "@ottrix/nestjs",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "First-party NestJS integration for Ottrix — DI, lifecycle, guards, interceptors, and SSE streaming.",
   "license": "MIT",
   "type": "module",
@@ -53,8 +53,8 @@
     "@nestjs/common": ">=10.0.0",
     "@nestjs/core": ">=10.0.0",
     "@nestjs/terminus": ">=10.0.0",
-    "@ottrix/exporter-otel": ">=0.1.0",
-    "ottrix": ">=2.0.0",
+    "@ottrix/exporter-otel": ">=0.2.0",
+    "ottrix": ">=2.3.0",
     "rxjs": ">=7.0.0"
   },
   "peerDependenciesMeta": {

@@ -10,7 +10,7 @@ Package README: [`../README.md`](../README.md)
 npm install @ottrix/nestjs ottrix @nestjs/common @nestjs/core rxjs
 ```
 
-Requires **`ottrix` ≥2.0.0**. Optional: `@nestjs/terminus`.
+Requires **`ottrix` ≥2.3.0**. Optional: `@nestjs/terminus`.
 
 ## Architecture
 

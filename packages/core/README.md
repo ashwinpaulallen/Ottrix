@@ -7,7 +7,7 @@
 [![npm version](https://img.shields.io/npm/v/ottrix.svg)](https://www.npmjs.com/package/ottrix)
 [![Node](https://img.shields.io/node/v/ottrix)](https://www.npmjs.com/package/ottrix)
 
-**Version:** 2.2.1 · **Node:** ≥20 · **License:** MIT
+**Version:** 2.3.0 · **Node:** ≥20 · **License:** MIT
 
 Full project docs: [github.com/ashwinpaulallen/ottrix](https://github.com/ashwinpaulallen/ottrix) · **Core module guides:** [docs/README.md](docs/README.md) · Monorepo index: [../../docs/README.md](../../docs/README.md)
 
@@ -276,7 +276,7 @@ Use **`ottrix`** directly in any Node.js HTTP framework, or install a first-part
 
 ```ts
 import { OTTRIX_VERSION } from 'ottrix';
-// '2.2.1'
+// '2.3.0'
 ```
 
 ---

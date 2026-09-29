@@ -5,7 +5,7 @@
 
 Standalone OTLP/HTTP trace exporter for Ottrix — send spans to **Jaeger**, **Grafana Tempo**, **Datadog**, **Honeycomb**, or any OTLP-compatible collector.
 
-**Peer dependency:** `ottrix` ≥2.0.0 · **Zero runtime dependencies** (uses native `fetch`)
+**Peer dependency:** `ottrix` ≥2.3.0 · **Zero runtime dependencies** (uses native `fetch`)
 
 ---
 

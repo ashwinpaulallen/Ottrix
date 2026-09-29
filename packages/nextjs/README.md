@@ -2,7 +2,7 @@
 
 Drop an ottrix agent into any Next.js app. App Router Route Handlers, Server Actions, middleware injection guards, and Vercel AI SDK-compatible streaming.
 
-**Version:** 0.1.0 · **Requires:** `ottrix` ≥2.0.0 · **Node:** ≥20 · **License:** MIT
+**Version:** 0.2.0 · **Requires:** `ottrix` ≥2.3.0 · **Node:** ≥20 · **License:** MIT
 
 ---
 

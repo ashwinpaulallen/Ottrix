@@ -1,5 +1,5 @@
 /** Matches `package.json` version — update both when releasing. */
-export const OTTRIX_VERSION = '2.2.1' as const;
+export const OTTRIX_VERSION = '2.3.0' as const;
 
 /** @deprecated Use {@link OTTRIX_VERSION}. */
 export const AGENT_KIT_VERSION = OTTRIX_VERSION;

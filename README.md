@@ -112,7 +112,7 @@ Ottrix is a **monorepo**: a focused **`ottrix`** core plus optional **`@ottrix/*
 
 | Package | Install | Description |
 |---------|---------|-------------|
-| **`ottrix`** | `npm install ottrix` | **v2.2.1** — ReAct agents, providers, tools, MCP client, memory, guardrails, workflows, evals, webhook/console exporters |
+| **`ottrix`** | `npm install ottrix` | **v2.3.0** — ReAct agents, providers, tools, MCP client, memory, guardrails, workflows, evals, webhook/console exporters |
 
 Optional peers: `zod`, `js-yaml`, `ioredis`, `pg` — see [Installation](#installation).
 

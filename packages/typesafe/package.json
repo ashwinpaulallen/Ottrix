@@ -1,6 +1,7 @@
 {
   "name": "@ottrix/typesafe",
-  "version": "0.1.0",
+  "private": false,
+  "version": "0.2.0",
   "description": "TypeSafe AI / Jev integration for ottrix — fast typed decisions for evaluation, routing, and guardrails",
   "license": "MIT",
   "type": "module",
@@ -26,7 +27,7 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "ottrix": ">=2.0.0",
+    "ottrix": ">=2.3.0",
     "@typesafe-ai/sdk": ">=0.6.0"
   },
   "devDependencies": {

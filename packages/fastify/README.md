@@ -7,7 +7,7 @@ Thin Fastify adapter for Ottrix — plugin, agent routes, hooks, and error mappi
 
 Documentation: [docs/README.md](./docs/README.md)
 
-**Peer dependencies:** `ottrix` ≥2.0.0, `fastify` ≥4.0.0
+**Peer dependencies:** `ottrix` ≥2.3.0, `fastify` ≥4.0.0
 
 ---
 

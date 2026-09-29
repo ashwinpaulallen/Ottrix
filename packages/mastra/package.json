@@ -1,7 +1,7 @@
 {
   "name": "@ottrix/mastra",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bridge ottrix providers, tools, and agents into Mastra",
   "license": "MIT",
   "type": "module",
@@ -29,8 +29,8 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0",
-    "@ottrix/vercel-ai": "*",
-    "ottrix": ">=2.0.0"
+    "@ottrix/vercel-ai": ">=0.2.0",
+    "ottrix": ">=2.3.0"
   },
   "peerDependenciesMeta": {
     "@ottrix/vercel-ai": {

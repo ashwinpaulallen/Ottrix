@@ -7,7 +7,7 @@ Thin Express adapter for Ottrix — router factory, middleware, SSE streaming, a
 
 Documentation: [docs/README.md](./docs/README.md)
 
-**Peer dependencies:** `ottrix` ≥2.0.0, `express` ≥4.18.0
+**Peer dependencies:** `ottrix` ≥2.3.0, `express` ≥4.18.0
 
 ---
 

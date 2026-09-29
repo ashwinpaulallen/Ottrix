@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-09-29
+
+### Added
+
+- Hierarchical context compaction: three-phase (soft / medium / hard) thresholds, `DigestCache`, `keepRecentMessages` overlay, compacted-context markers, and `ottrix.compaction` span events
+- Plan lifecycle events: `plan_created` and `plan_validated` from the planner; `plan_revised` from reflection on `run()` and `stream()`; `plan_step_*` only when Ottrix controls step execution
+- Observational thresholds that record audits without changing run results
+- Eval telemetry correlation: `evalRunId`, per-case `evalCaseId`, `ottrix.eval.case` span attribute; `EvalResult.runId` is required
+- Catalog-driven model selection (`CompletionIntent` / `ModelCatalog`); compaction provider, `evaluationProvider`, and planners with an explicit provider skip catalog binding
+- Optional tool routing metadata (`ToolMetadata.routing`) and `ToolRegistry.getRoutingDescriptors()`
+- CORS helpers (`buildCorsHeaders` / `requestCorsHeaders`); wildcard + credentials throws; CORS is applied before rate-limit so 429 responses keep `Access-Control-Allow-Origin`
+- Planner / supervisor / evaluator composition guide (`packages/core/docs/composition.md`)
+
+### Changed
+
+- `@ottrix/*` packages are **0.2.0** and declare peer `ottrix` **≥2.3.0**
+- NestJS CORS headers apply to POST, SSE, and health responses; Next.js adapters honor the CORS allowlist and `rateLimitHook`
+- Undefined `retryable` on plan-step errors is treated as retryable
+
 ## [2.2.1] - 2026-09-29
 
 ### Fixed
@@ -318,6 +337,7 @@ const open = createAgent({ guardrails: { promptInjection: false } });
 - Anthropic/OpenAI missing API key throws `ProviderError` with `code: 'auth'`
 - MCP JSON-RPC parse failures throw `MCPProtocolError` instead of generic `Error`
 
+[2.3.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v2.3.0
 [2.2.1]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v2.2.1
 [2.0.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v2.0.0
 [1.0.0]: https://github.com/ashwinpaulallen/ottrix/releases/tag/v1.0.0

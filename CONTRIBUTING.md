@@ -116,8 +116,28 @@ From the repo root, after bumping versions:
 
 ```bash
 npm run prepublish:check
+
+# Core first — adapters peer on ottrix >=2.3.0
 npm publish -w ottrix --access public
+
+# HTTP adapters
 npm publish -w @ottrix/nestjs --access public
+npm publish -w @ottrix/express --access public
+npm publish -w @ottrix/fastify --access public
+npm publish -w @ottrix/hono --access public
+npm publish -w @ottrix/nextjs --access public
+
+# Framework bridges
+npm publish -w @ottrix/vercel-ai --access public
+npm publish -w @ottrix/langchain --access public
+npm publish -w @ottrix/mastra --access public
+npm publish -w @ottrix/typesafe --access public
+
+# MCP + exporters
+npm publish -w @ottrix/mcp-server --access public
+npm publish -w @ottrix/exporter-otel --access public
+npm publish -w @ottrix/exporter-langfuse --access public
+npm publish -w @ottrix/exporter-braintrust --access public
 ```
 
 **Provenance:** Do not set `"provenance": true` in `publishConfig` — npm then requires a supported CI

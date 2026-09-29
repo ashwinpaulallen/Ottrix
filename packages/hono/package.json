@@ -1,7 +1,7 @@
 {
   "name": "@ottrix/hono",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Hono middleware and handlers for ottrix agents",
   "license": "MIT",
   "type": "module",
@@ -29,7 +29,7 @@
   },
   "peerDependencies": {
     "hono": ">=4.0.0",
-    "ottrix": ">=2.0.0"
+    "ottrix": ">=2.3.0"
   },
   "engines": {
     "node": ">=20"

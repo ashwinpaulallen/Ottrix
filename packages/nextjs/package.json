@@ -1,7 +1,7 @@
 {
   "name": "@ottrix/nextjs",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Next.js API route handlers for ottrix agents",
   "license": "MIT",
   "type": "module",
@@ -28,7 +28,7 @@
     "clean": "rm -rf dist"
   },
   "peerDependencies": {
-    "ottrix": ">=2.0.0",
+    "ottrix": ">=2.3.0",
     "next": ">=14.0.0"
   },
   "peerDependenciesMeta": {

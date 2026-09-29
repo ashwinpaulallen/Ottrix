@@ -5,7 +5,7 @@
 
 Thin **NestJS adapter** for [Ottrix](https://github.com/ashwinpaulallen/ottrix) — dependency injection, lifecycle hooks, HTTP interceptors, guards, SSE streaming, and health checks. Shared HTTP logic lives in **`ottrix/http`**.
 
-**Version:** 0.1.0 · **Requires:** `ottrix` ≥2.0.0 · **Node:** ≥20 · **License:** MIT
+**Version:** 0.2.0 · **Requires:** `ottrix` ≥2.3.0 · **Node:** ≥20 · **License:** MIT
 
 Documentation: [docs/README.md](./docs/README.md) · Full guide: [docs/guide.md](./docs/guide.md)
 

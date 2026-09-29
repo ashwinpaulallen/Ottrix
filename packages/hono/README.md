@@ -7,7 +7,7 @@ Thin Hono adapter for Ottrix — one-call setup, middleware, handlers, and error
 
 Documentation: [docs/README.md](./docs/README.md)
 
-**Peer dependencies:** `ottrix` ≥2.0.0, `hono` ≥4.0.0
+**Peer dependencies:** `ottrix` ≥2.3.0, `hono` ≥4.0.0
 
 ---
 
