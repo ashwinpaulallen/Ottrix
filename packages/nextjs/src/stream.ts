@@ -7,7 +7,7 @@ import {
   mapOttrixError,
   scanMessageForInjection,
 } from 'ottrix/http';
-import { assertCors, resolveCors, type AgentHandlerOptions } from './handlers.js';
+import { assertCors, enforceRateLimit, resolveCors, type AgentHandlerOptions } from './handlers.js';
 import {
   extractLastUserMessage,
   isRunContextSupported,
@@ -114,6 +114,10 @@ export function createChatHandler(options: AgentHandlerOptions) {
 
   return async function POST(request: Request): Promise<Response> {
     const cors = resolveCors(request, options.cors);
+    const limited = await enforceRateLimit(request, options, cors);
+    if (limited) {
+      return limited;
+    }
 
     try {
       const body = await readJsonBody(request);

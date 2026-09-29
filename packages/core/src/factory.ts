@@ -50,6 +50,8 @@ export interface CreateAgentConfig
     | 'contextLimitTokens'
     | 'keepRecentMessages'
     | 'compaction'
+    | 'catalog'
+    | 'thresholds'
     | 'defaultModel'
     | 'runRecorder'
   > {
@@ -212,6 +214,8 @@ export function createAgent(config: CreateAgentConfig = {}): Agent {
     contextLimitTokens: config.contextLimitTokens ?? 128_000,
     keepRecentMessages: config.keepRecentMessages ?? 6,
     compaction: config.compaction,
+    catalog: config.catalog,
+    thresholds: config.thresholds,
     runRecorder: config.runRecorder,
     memory: resolveMemory(config.memory),
     telemetry: resolveTelemetry(config, agentic),

@@ -63,12 +63,12 @@ export function ottrix(options: OttrixOptions): Hono<OttrixEnv> {
     sub.use('*', ottrixInjection({ mode: injection, bodyField }));
   }
 
-  if (rateLimitHook) {
-    sub.use('*', rateLimitMiddleware(rateLimitHook));
-  }
-
   if (cors !== false) {
     sub.use('*', corsMiddleware(cors === true ? true : cors));
+  }
+
+  if (rateLimitHook) {
+    sub.use('*', rateLimitMiddleware(rateLimitHook));
   }
 
   sub.post(path, agentHandler(agent, { bodyField }));

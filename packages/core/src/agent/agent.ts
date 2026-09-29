@@ -122,7 +122,12 @@ export class Agent {
     this.maxSteps = config.maxSteps ?? config.guardrails?.maxSteps ?? DEFAULT_MAX_STEPS;
     this.maxTokenBudget = config.maxTokenBudget ?? config.guardrails?.maxTokenBudget;
     if (config.compaction) {
-      this.compactionConfig = CompactionConfigSchema.parse(config.compaction);
+      const parsed = CompactionConfigSchema.parse(config.compaction);
+      const recentMessagesToPreserve =
+        config.compaction.recentMessagesToPreserve ??
+        config.keepRecentMessages ??
+        parsed.recentMessagesToPreserve;
+      this.compactionConfig = { ...parsed, recentMessagesToPreserve };
       if (config.catalog && config.compaction.provider === undefined) {
         const intent = { role: 'summarization', prefer: 'economy' } as const;
         const resolution = config.catalog.resolve(intent);
@@ -135,7 +140,7 @@ export class Agent {
       }
       this.config.compaction = this.compactionConfig;
     }
-    if (config.catalog && config.planner?.usesLlm()) {
+    if (config.catalog && config.planner?.usesLlm() && !config.planner.hasExplicitProvider()) {
       const intent = { role: 'planning', prefer: 'balanced' } as const;
       const resolution = config.catalog.resolve(intent);
       this.traceIntentResolution(intent, resolution);
@@ -162,16 +167,14 @@ export class Agent {
       this.evaluationConfig = parsed.data;
       if (parsed.data.enabled) {
         let evalProvider = config.evaluationProvider ?? this.provider;
-        if (config.catalog && config.evaluation.model === undefined) {
+        if (config.catalog && config.evaluation.model === undefined && !config.evaluationProvider) {
           const intent = { role: 'evaluation', prefer: 'economy' } as const;
           const resolution = config.catalog.resolve(intent);
           this.traceIntentResolution(intent, resolution);
           parsed.data.model = resolution.model;
           this.evaluationConfig = parsed.data;
           this.config.evaluation = parsed.data;
-          if (!config.evaluationProvider) {
-            evalProvider = annotateProvider(resolution.provider, intent, resolution);
-          }
+          evalProvider = annotateProvider(resolution.provider, intent, resolution);
         }
         this.evaluator = createEvaluator(evalProvider, parsed.data);
       }
@@ -407,14 +410,14 @@ export class Agent {
         });
 
         if (this.config.reflector) {
-          const reflectionStop = await this.applyReflection(
+          const reflection = await this.applyReflection(
             steps,
             messages,
             input,
             true,
             prepared.plan,
           );
-          if (!reflectionStop) {
+          if (!reflection.shouldStop) {
             return 'continue';
           }
         }
@@ -453,14 +456,14 @@ export class Agent {
       }
 
       if (this.config.reflector) {
-        const reflectionStop = await this.applyReflection(
+        const reflection = await this.applyReflection(
           steps,
           messages,
           input,
           false,
           prepared.plan,
         );
-        if (reflectionStop && (finalResponse || steps.some((s) => s.type === 'response'))) {
+        if (reflection.shouldStop && (finalResponse || steps.some((s) => s.type === 'response'))) {
           stopReason = 'completed';
           finalResponse =
             finalResponse ||
@@ -971,6 +974,23 @@ export class Agent {
             tokenUsage: result.usage,
           });
 
+          if (this.config.reflector) {
+            const reflection = await this.applyReflection(
+              steps,
+              messages,
+              input,
+              true,
+              prepared.plan,
+            );
+            for (const event of reflection.events) {
+              yield event;
+            }
+            if (!reflection.shouldStop) {
+              loopState.continueLoop = true;
+              return;
+            }
+          }
+
           const evalOutcome = await this.runSelfEvaluation({
             originalGoal: input,
             currentResponse: finalResponse,
@@ -1075,6 +1095,28 @@ export class Agent {
                 totalTokens: aborted.totalTokens,
               },
             };
+            return;
+          }
+        }
+
+        if (this.config.reflector) {
+          const reflection = await this.applyReflection(
+            steps,
+            messages,
+            input,
+            false,
+            prepared.plan,
+          );
+          for (const event of reflection.events) {
+            yield event;
+          }
+          if (reflection.shouldStop && (finalResponse || steps.some((s) => s.type === 'response'))) {
+            stopReason = 'completed';
+            finalResponse =
+              finalResponse ||
+              this.getLastResponseText(steps) ||
+              extractTextFromContent(result.content);
+            loopState.break = true;
             return;
           }
         }
@@ -1489,7 +1531,8 @@ export class Agent {
   }
 
   /**
-   * Run reflection after an iteration. Returns true when the run should stop.
+   * Run reflection after an iteration. Returns whether the run should stop
+   * and any plan events to yield from {@link Agent.stream}.
    */
   private async applyReflection(
     steps: AgentStep[],
@@ -1497,12 +1540,13 @@ export class Agent {
     goal: string,
     hadTextResponse: boolean,
     plan?: Plan,
-  ): Promise<boolean> {
+  ): Promise<{ shouldStop: boolean; events: AgentEvent[] }> {
     const reflector = this.config.reflector;
     if (!reflector) {
-      return false;
+      return { shouldStop: false, events: [] };
     }
 
+    const events: AgentEvent[] = [];
     const lastStep = steps[steps.length - 1];
     if (lastStep) {
       const evaluation = await reflector.evaluateStep(lastStep, goal);
@@ -1532,7 +1576,7 @@ export class Agent {
           plan.steps = revised.steps;
           plan.reasoning = revised.reasoning;
         }
-        this.emitAgentEvent({
+        const revisedEvent: AgentEvent = {
           type: 'plan_revised',
           data: {
             planId,
@@ -1540,7 +1584,9 @@ export class Agent {
             previousStepCount,
             newStepCount: revised.steps.length,
           },
-        });
+        };
+        this.emitAgentEvent(revisedEvent);
+        events.push(revisedEvent);
         messages.push({
           role: 'user',
           content: `Updated plan:\n${planner.formatPlanForContext(plan ?? revised)}`,
@@ -1551,13 +1597,13 @@ export class Agent {
     const shouldContinue = await reflector.shouldContinue(steps, goal);
     if (!shouldContinue) {
       if (hadTextResponse || steps.some((s) => s.type === 'response')) {
-        return true;
+        return { shouldStop: true, events };
       }
       messages.push({
         role: 'user',
         content: 'Please provide your final answer to the user now.',
       });
-      return false;
+      return { shouldStop: false, events };
     }
 
     if (hadTextResponse) {
@@ -1565,9 +1611,10 @@ export class Agent {
         role: 'user',
         content: 'Continue refining your answer until the goal is fully met.',
       });
+      return { shouldStop: false, events };
     }
 
-    return false;
+    return { shouldStop: false, events };
   }
 
   /**
@@ -2439,7 +2486,11 @@ function resolveToolRegistry(config: AgentConfig, telemetry?: Telemetry): AgentT
 
 function isRetryablePlanStepError(error: unknown): boolean {
   if (typeof error === 'object' && error !== null && 'retryable' in error) {
-    return Boolean((error as { retryable?: unknown }).retryable);
+    const retryable = (error as { retryable?: unknown }).retryable;
+    if (retryable === undefined) {
+      return true;
+    }
+    return Boolean(retryable);
   }
   return true;
 }

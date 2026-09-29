@@ -163,4 +163,18 @@ describe('Agent catalog model selection', () => {
     expect(prompts.some((params) => promptText(params).includes('CONCISE DIGEST'))).toBe(true);
     expect(prompts.some((params) => params.intentResolution)).toBe(false);
   });
+
+  it('does not apply catalog evaluation when evaluationProvider is set', () => {
+    const cheap = new MockCompletionProvider();
+    const evalProvider = new MockCompletionProvider();
+    new Agent({
+      name: 'eval-provider',
+      provider: new MockCompletionProvider(),
+      evaluationProvider: evalProvider,
+      catalog: economyCatalog(cheap),
+      evaluation: { enabled: true },
+    });
+
+    expect(cheap.completeCalls).toBe(0);
+  });
 });

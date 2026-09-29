@@ -55,6 +55,7 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
     @Post()
     @HttpCode(200)
     async run(@Body() body: unknown, @Req() req: Request) {
+      this.applyCors(req, req.res);
       await this.enforceRateLimit(req);
       const extracted = extractMessage(body);
       if (!extracted.ok) {
@@ -65,6 +66,7 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
 
     @Sse('stream')
     async stream(@Query('message') message: string, @Req() req: Request): Promise<Observable<SseMessageEvent>> {
+      this.applyCors(req, req.res);
       await this.enforceRateLimit(req);
       const extracted = extractMessage({ message }, 'message');
       if (!extracted.ok) {
@@ -75,6 +77,7 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
 
     @Get('health')
     async health(@Req() req: Request) {
+      this.applyCors(req, req.res);
       await this.enforceRateLimit(req);
       return checkHealth(this.registry);
     }
@@ -86,7 +89,10 @@ export function createOttrixController(path = 'chat'): Type<unknown> {
       this.applyCors(req, res);
     }
 
-    private applyCors(req: Request, res: Response): void {
+    private applyCors(req: Request, res?: Response): void {
+      if (!res) {
+        return;
+      }
       const cors = this.httpOptions?.cors;
       if (cors === false) {
         return;

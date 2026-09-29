@@ -35,7 +35,7 @@ export interface EvalResult {
   /** Telemetry trace ID of the agent run, when telemetry is configured. */
   traceId?: string;
   /** Ottrix run ID for this eval case ({@link RunContext.runId}). */
-  runId?: string;
+  runId: string;
 }
 
 /** Aggregated statistics for a scorer across all eval results. */

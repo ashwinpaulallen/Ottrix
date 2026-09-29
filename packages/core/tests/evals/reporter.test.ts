@@ -37,6 +37,7 @@ function sampleReport(): EvalReport {
         },
         scores: { exact_match: { score: 1, reason: 'Exact match' } },
         duration: 10,
+        runId: 'eval-run-1-0',
       },
     ],
   };

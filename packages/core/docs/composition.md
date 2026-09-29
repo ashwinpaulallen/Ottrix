@@ -6,7 +6,7 @@ Related guides: [agent.md](./agent.md), [self-evaluation.md](./self-evaluation.m
 
 ## Agent with Planner + Evaluator
 
-`Planner` turns a goal into a `Plan` (`plan()`, then `validate()`). In `rules` mode it matches `PlanningRule` patterns and does not call the model. In `llm` mode it asks a `CompletionProvider` for JSON steps and falls back to rules if parsing fails. The agent does not execute the plan as a graph. Before the ReAct loop it injects `formatPlanForContext()` into the first user message, emits `plan_created` and `plan_validated`, and the loop still chooses tools.
+`Planner` turns a goal into a `Plan` (`plan()`, then `validate()`). In `rules` mode it matches `PlanningRule` patterns and does not call the model. In `llm` mode it asks a `CompletionProvider` for JSON steps and falls back to rules if parsing fails. The agent does not execute the plan as a graph. Before the ReAct loop it injects `formatPlanForContext()` into the first user message and emits `plan_created` and `plan_validated` (`run()` and `stream()`). A `Reflector` can emit `plan_revised` on both `run()` and `stream()`. Step events (`plan_step_started` / `completed` / `failed`) come only from `executeControlledPlanStep`, when the caller drives the DAG.
 
 `evaluation` on `AgentConfig` builds an `EvaluatorStrategy` through `createEvaluator()`. After a final answer, heuristics run first. An LLM sufficiency check follows unless heuristics are already confident the answer is insufficient. `threshold` is the confidence below which the agent refines. `maxRefinements` caps those extra turns (default `2`, maximum `5`). `criteria` tells the judge what "sufficient" means.
 
@@ -134,7 +134,7 @@ new Agent({
 
 ## Multi-framework deployment
 
-`OttrixModule.forRoot({ http: true })` registers `RunContextInterceptor`. `OttrixModule.forFeature()` registers `CreateAgentConfig` agents and, with `controller: true`, `OttrixController` (default path `chat`).
+`OttrixModule.forRoot({ http: true })` registers `RunContextInterceptor`. `OttrixModule.forFeature()` registers `CreateAgentConfig` agents and, with `controller: true`, `OttrixController` (default path `chat`). CORS headers from `http.cors` are applied on POST, SSE, health, and OPTIONS.
 
 ```ts
 import { Module } from '@nestjs/common';

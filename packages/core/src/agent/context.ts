@@ -2,11 +2,17 @@ import {
   CAPABILITY,
   withCapabilityScope,
 } from '../observability/token-accounting/index.js';
-import type { ChatMessage } from '../types/messages.js';
+import { recordActiveSpanEvent } from '../observability/telemetry.js';
+import { Logger } from '../observability/logger.js';
+import type { ChatMessage, ContentBlock, ToolResultBlock, ToolUseBlock } from '../types/messages.js';
 import type { CompletionProvider } from '../types/provider.js';
-import type { ResolvedCompactionConfig } from './context/compaction-types.js';
+import type {
+  CompactionTelemetryEvent,
+  ResolvedCompactionConfig,
+} from './context/compaction-types.js';
 import { DigestCache } from './context/digest-cache.js';
 import {
+  buildOutcomeSummaryText,
   buildProseDigestPrompt,
   buildTopicIndexPrompt,
 } from './context/compaction-prompts.js';
@@ -14,6 +20,7 @@ import { estimateMessageTokens, extractTextFromContent } from './messages.js';
 
 const DEFAULT_CONTEXT_LIMIT = 128_000;
 const DEFAULT_KEEP_RECENT = 6;
+const COMPACTED_PREFIX = '<compacted_context>\n[COMPACTED CONTEXT]\n';
 
 /**
  * Tracks cumulative token usage and condenses message history when needed.
@@ -26,6 +33,7 @@ export class ContextManager {
   private readonly compaction?: ResolvedCompactionConfig;
   private readonly digestCache?: DigestCache;
   private readonly summaryProvider: CompletionProvider;
+  private readonly logger = new Logger({ component: 'context' });
 
   /**
    * @param options - Provider used for token counting and summarization.
@@ -60,7 +68,7 @@ export class ContextManager {
    * If messages approach the context limit, summarize the middle segment.
    *
    * Keeps the system prompt and the last `keepRecentMessages` intact.
-   * With compaction configured, the hard threshold runs the selected strategy.
+   * With compaction configured, soft/medium/hard thresholds select the phase.
    */
   async maybeSummarize(messages: ChatMessage[]): Promise<void> {
     if (this.compaction) {
@@ -92,6 +100,11 @@ export class ContextManager {
 
     messages.length = 0;
     messages.push(...systemMessages, summaryMessage, ...recent);
+  }
+
+  /** Alias for {@link maybeSummarize} — three-phase entry point. */
+  async manageContext(messages: ChatMessage[]): Promise<void> {
+    return this.maybeSummarize(messages);
   }
 
   private async summarizeSegment(segment: ChatMessage[]): Promise<string> {
@@ -126,57 +139,148 @@ export class ContextManager {
     }
 
     const estimated = await this.safeCountTokens(messages);
-    if (estimated / this.contextLimit < compaction.hardThreshold) {
+    const ratio = estimated / this.contextLimit;
+
+    if (ratio < compaction.softThreshold) {
+      return;
+    }
+
+    if (ratio < compaction.mediumThreshold) {
+      return;
+    }
+
+    if (ratio < compaction.hardThreshold) {
+      this.applyOutcomeSummaries(messages);
       return;
     }
 
     const systemMessages = messages.filter((message) => message.role === 'system');
     const nonSystem = messages.filter((message) => message.role !== 'system');
-    if (nonSystem.length <= compaction.recentMessagesToPreserve + 1) {
+    if (nonSystem.length <= this.keepRecent + 1) {
       return;
     }
 
-    const recent = nonSystem.slice(-compaction.recentMessagesToPreserve);
-    const middle = nonSystem.slice(0, -compaction.recentMessagesToPreserve);
+    const recent = nonSystem.slice(-this.keepRecent);
+    const middle = nonSystem.slice(0, -this.keepRecent);
+    const started = Date.now();
 
     if (compaction.strategy === 'truncate') {
       messages.length = 0;
       messages.push(...systemMessages, ...recent);
+      emitCompactionTelemetry({
+        trigger: 'hard',
+        strategy: 'truncate',
+        phase: 'llm_summary',
+        foldedMessageCount: middle.length,
+        inputTokenEstimate: estimated,
+        outputTokenEstimate: 0,
+        cacheHit: false,
+        fallbackTriggered: false,
+        durationMs: Date.now() - started,
+      });
       return;
     }
 
     try {
-      const summaryText = await this.compactSegment(middle, compaction);
+      const compacted = await this.compactSegment(middle, compaction);
       const summaryMessage: ChatMessage = {
-        role: 'user',
-        content: summaryText,
+        role: 'assistant',
+        content: compacted.text,
       };
       messages.length = 0;
       messages.push(...systemMessages, summaryMessage, ...recent);
+      emitCompactionTelemetry({
+        trigger: 'hard',
+        strategy: compaction.strategy,
+        phase: 'llm_summary',
+        foldedMessageCount: middle.length,
+        inputTokenEstimate: estimated,
+        outputTokenEstimate: estimateMessageTokens([summaryMessage]),
+        cacheHit: compacted.cacheHit,
+        fallbackTriggered: false,
+        durationMs: Date.now() - started,
+      });
     } catch (error) {
       if (compaction.failurePolicy === 'throw') {
         throw error;
       }
       if (compaction.failurePolicy === 'preserve') {
+        this.logger.warn('Compaction failed; preserving full history', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        emitCompactionTelemetry({
+          trigger: 'hard',
+          strategy: compaction.strategy,
+          phase: 'llm_summary',
+          foldedMessageCount: 0,
+          inputTokenEstimate: estimated,
+          outputTokenEstimate: 0,
+          cacheHit: false,
+          fallbackTriggered: true,
+          fallbackReason: 'preserve',
+          durationMs: Date.now() - started,
+        });
         return;
       }
       messages.length = 0;
       messages.push(...systemMessages, ...recent);
+      emitCompactionTelemetry({
+        trigger: 'hard',
+        strategy: compaction.strategy,
+        phase: 'llm_summary',
+        foldedMessageCount: middle.length,
+        inputTokenEstimate: estimated,
+        outputTokenEstimate: 0,
+        cacheHit: false,
+        fallbackTriggered: true,
+        fallbackReason: 'truncate',
+        durationMs: Date.now() - started,
+      });
     }
+  }
+
+  private applyOutcomeSummaries(messages: ChatMessage[]): void {
+    const systemMessages = messages.filter((message) => message.role === 'system');
+    const nonSystem = messages.filter((message) => message.role !== 'system');
+    if (nonSystem.length <= this.keepRecent) {
+      return;
+    }
+
+    const recent = nonSystem.slice(-this.keepRecent);
+    const older = nonSystem.slice(0, -this.keepRecent);
+    const toolNames = collectToolUseNames(messages);
+    let changed = false;
+    const summarized = older.map((message) => {
+      const next = summarizeToolResultMessage(message, toolNames);
+      if (next !== message) {
+        changed = true;
+      }
+      return next;
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    messages.length = 0;
+    messages.push(...systemMessages, ...summarized, ...recent);
   }
 
   private async compactSegment(
     segment: ChatMessage[],
     compaction: ResolvedCompactionConfig,
-  ): Promise<string> {
+  ): Promise<{ text: string; cacheHit: boolean }> {
     const folded = segment.map((message) => ({
       role: message.role,
-      content: extractTextFromContent(message.content),
+      content: extractFoldedContent(message),
     }));
     const hash = DigestCache.hashMessages(folded);
     const cached = this.digestCache?.get(hash);
     if (cached) {
-      return formatCompacted(compaction.strategy, cached.topicIndex, cached.digest);
+      return {
+        text: formatCompacted(cached.strategy, cached.topicIndex, cached.digest),
+        cacheHit: true,
+      };
     }
 
     if (compaction.strategy === 'hierarchical') {
@@ -197,7 +301,7 @@ export class ContextManager {
         ).content,
       );
       this.digestCache?.set(hash, { strategy: 'hierarchical', topicIndex, digest });
-      return formatCompacted('hierarchical', topicIndex, digest);
+      return { text: formatCompacted('hierarchical', topicIndex, digest), cacheHit: false };
     }
 
     const digest = extractTextFromContent(
@@ -209,7 +313,7 @@ export class ContextManager {
       ).content,
     );
     this.digestCache?.set(hash, { strategy: 'prose', digest });
-    return formatCompacted('prose', undefined, digest);
+    return { text: formatCompacted('prose', undefined, digest), cacheHit: false };
   }
 
   private async completeCompaction(prompt: string, compaction: ResolvedCompactionConfig) {
@@ -237,8 +341,86 @@ function formatCompacted(
   topicIndex: string | undefined,
   digest: string,
 ): string {
-  if (strategy === 'hierarchical' && topicIndex) {
-    return `[Topic index]\n${topicIndex}\n\n[Conversation digest]\n${digest}`;
+  const body = strategy === 'hierarchical' && topicIndex ? `${topicIndex}\n\n${digest}` : digest;
+  return `${COMPACTED_PREFIX}${body}`;
+}
+
+function emitCompactionTelemetry(event: CompactionTelemetryEvent): void {
+  recordActiveSpanEvent('ottrix.compaction', {
+    trigger: event.trigger,
+    strategy: event.strategy,
+    phase: event.phase,
+    foldedMessageCount: event.foldedMessageCount,
+    inputTokenEstimate: event.inputTokenEstimate,
+    outputTokenEstimate: event.outputTokenEstimate,
+    cacheHit: event.cacheHit,
+    fallbackTriggered: event.fallbackTriggered,
+    durationMs: event.durationMs,
+    ...(event.fallbackReason ? { fallbackReason: event.fallbackReason } : {}),
+  });
+}
+
+function collectToolUseNames(messages: ChatMessage[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const message of messages) {
+    if (typeof message.content === 'string') {
+      continue;
+    }
+    for (const block of message.content) {
+      if (block.type === 'tool_use') {
+        names.set((block as ToolUseBlock).id, block.name);
+      }
+    }
   }
-  return `[Conversation summary of earlier turns]\n${digest}`;
+  return names;
+}
+
+function summarizeToolResultMessage(
+  message: ChatMessage,
+  toolNames: Map<string, string>,
+): ChatMessage {
+  if (typeof message.content === 'string') {
+    return message;
+  }
+
+  let changed = false;
+  const content = message.content.map((block) => {
+    if (block.type !== 'tool_result') {
+      return block;
+    }
+    const result = block as ToolResultBlock;
+    const preview =
+      typeof result.content === 'string' ? result.content : extractTextFromContent(result.content);
+    if (preview.startsWith("[Tool '")) {
+      return block;
+    }
+    changed = true;
+    const name = toolNames.get(result.tool_use_id) ?? 'tool';
+    return { ...result, content: buildOutcomeSummaryText(name, preview) };
+  });
+
+  return changed ? { ...message, content } : message;
+}
+
+function extractFoldedContent(message: ChatMessage): string {
+  if (typeof message.content === 'string') {
+    return message.content;
+  }
+  return message.content
+    .map((block: ContentBlock) => {
+      if (block.type === 'text') {
+        return block.text;
+      }
+      if (block.type === 'tool_result') {
+        return typeof block.content === 'string'
+          ? block.content
+          : extractTextFromContent(block.content);
+      }
+      if (block.type === 'tool_use') {
+        return `${block.name}(${JSON.stringify(block.input)})`;
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
 }

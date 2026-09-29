@@ -10,11 +10,14 @@ import {
   formatSseEvent,
   KEEPALIVE_INTERVAL_MS,
   mapOttrixError,
+  rateLimitClientKey,
   requestCorsHeaders,
+  retryAfterHeader,
   scanMessageForInjection,
   SSE_HEADERS,
   validateCorsConfig,
   type CorsConfig,
+  type RateLimitHook,
 } from 'ottrix/http';
 import {
   isRunContextSupported,
@@ -40,6 +43,8 @@ export interface AgentHandlerOptions {
   runContext?: boolean;
   /** Query param for GET streaming. @defaultValue `'message'` */
   queryField?: string;
+  /** Optional application-owned rate limit check. Denied requests receive 429. */
+  rateLimitHook?: RateLimitHook;
 }
 
 /** CORS headers for this request. An allowlist that rejects the origin yields an empty set. */
@@ -61,6 +66,31 @@ export function assertCors(cors: boolean | CorsConfig | undefined): void {
 
 function shouldUseRunContext(enabled: boolean | undefined): boolean {
   return enabled !== false && isRunContextSupported();
+}
+
+export async function enforceRateLimit(
+  request: Request,
+  options: AgentHandlerOptions,
+  cors: Record<string, string>,
+): Promise<Response | null> {
+  if (!options.rateLimitHook) {
+    return null;
+  }
+  const decision = await options.rateLimitHook.check(
+    rateLimitClientKey({
+      forwardedFor: request.headers.get('x-forwarded-for') ?? undefined,
+      origin: request.headers.get('origin') ?? undefined,
+    }),
+  );
+  if (decision.allowed) {
+    return null;
+  }
+  const retryAfter = retryAfterHeader(decision.retryAfterMs);
+  return jsonResponse(
+    { error: 'Too many requests' },
+    429,
+    mergeHeaders(cors, retryAfter ? { 'Retry-After': retryAfter } : {}),
+  );
 }
 
 async function scanInput(
@@ -105,6 +135,10 @@ export function createPostHandler(options: AgentHandlerOptions) {
 
   return async function POST(request: Request): Promise<Response> {
     const cors = resolveCors(request, options.cors);
+    const limited = await enforceRateLimit(request, options, cors);
+    if (limited) {
+      return limited;
+    }
 
     try {
       const body = await readJsonBody(request);
@@ -136,6 +170,10 @@ export function createStreamHandler(options: AgentHandlerOptions) {
 
   return async function GET(request: Request): Promise<Response> {
     const cors = resolveCors(request, options.cors);
+    const limited = await enforceRateLimit(request, options, cors);
+    if (limited) {
+      return limited;
+    }
     const url = new URL(request.url);
     const parsed = extractMessage({ [queryField]: url.searchParams.get(queryField) }, queryField);
 
@@ -219,11 +257,17 @@ export function createAgentHandlers(options: AgentHandlerOptions) {
   return {
     POST: createPostHandler(options),
     GET: createStreamHandler(options),
-    OPTIONS: async (request: Request) =>
-      new Response(null, {
+    OPTIONS: async (request: Request) => {
+      const cors = resolveCors(request, options.cors);
+      const limited = await enforceRateLimit(request, options, cors);
+      if (limited) {
+        return limited;
+      }
+      return new Response(null, {
         status: 204,
-        headers: resolveCors(request, options.cors),
-      }),
+        headers: cors,
+      });
+    },
   };
 }
 

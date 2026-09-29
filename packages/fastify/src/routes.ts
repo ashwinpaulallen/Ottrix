@@ -61,36 +61,33 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (fastif
   if (rateLimitHook || cors !== false) {
     const corsOption = cors;
     fastify.addHook('onRequest', async (request, reply) => {
-      if (rateLimitHook) {
-        const decision = await rateLimitHook.check(
-          rateLimitClientKey({
-            forwardedFor: request.headers['x-forwarded-for'],
-            remoteAddress: request.ip,
-            origin: typeof request.headers.origin === 'string' ? request.headers.origin : undefined,
-          }),
-        );
-        if (!decision.allowed) {
-          const retryAfter = retryAfterHeader(decision.retryAfterMs);
-          if (retryAfter !== undefined) {
-            reply.header('Retry-After', retryAfter);
+        const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
+        if (corsOption !== false) {
+          const headers = requestCorsHeaders(origin, corsOption === true ? true : corsOption);
+          if (headers) {
+            for (const [key, value] of Object.entries(headers)) {
+              reply.header(key, value);
+            }
           }
-          await reply.code(429).send({ error: 'Too many requests' });
-          return;
         }
-      }
 
-      if (corsOption === false) {
-        return;
-      }
-
-      const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined;
-      const headers = requestCorsHeaders(origin, corsOption === true ? true : corsOption);
-      if (!headers) {
-        return;
-      }
-      for (const [key, value] of Object.entries(headers)) {
-        reply.header(key, value);
-      }
+        if (rateLimitHook) {
+          const decision = await rateLimitHook.check(
+            rateLimitClientKey({
+              forwardedFor: request.headers['x-forwarded-for'],
+              remoteAddress: request.ip,
+              origin,
+            }),
+          );
+          if (!decision.allowed) {
+            const retryAfter = retryAfterHeader(decision.retryAfterMs);
+            if (retryAfter !== undefined) {
+              reply.header('Retry-After', retryAfter);
+            }
+            await reply.code(429).send({ error: 'Too many requests' });
+            return;
+          }
+        }
     });
   }
 

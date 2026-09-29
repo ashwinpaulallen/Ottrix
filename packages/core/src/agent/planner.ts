@@ -113,6 +113,7 @@ const DEFAULT_RULES: PlanningRule[] = [
  */
 export class Planner {
   private provider?: CompletionProvider;
+  private readonly explicitProvider: boolean;
   private readonly mode: PlannerMode;
   private readonly rules: PlanningRule[];
   private readonly planningSystemPrompt: string;
@@ -123,6 +124,7 @@ export class Planner {
    */
   constructor(options: PlannerOptions = {}) {
     this.provider = options.provider;
+    this.explicitProvider = options.provider !== undefined;
     this.mode = options.mode ?? (options.provider ? 'llm' : 'rules');
     this.rules = options.rules ?? DEFAULT_RULES;
     this.planningSystemPrompt = options.planningSystemPrompt ?? DEFAULT_PLANNING_SYSTEM_PROMPT;
@@ -131,6 +133,11 @@ export class Planner {
   /** Whether planning calls an LLM (`mode: 'llm'`). */
   usesLlm(): boolean {
     return this.mode === 'llm';
+  }
+
+  /** True when the planner was constructed with an explicit provider. */
+  hasExplicitProvider(): boolean {
+    return this.explicitProvider;
   }
 
   /**

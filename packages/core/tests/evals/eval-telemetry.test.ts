@@ -102,6 +102,7 @@ describe('EvalRunner telemetry correlation', () => {
     expect(agentSpans[0]?.attributes['ottrix.eval.case_id']).toBe(`${report.evalRunId}-0`);
     expect(agentSpans[0]?.attributes['ottrix.eval.case_index']).toBe(0);
     expect(agentSpans[0]?.attributes['ottrix.eval.dataset_size']).toBe(2);
+    expect(agentSpans[0]?.attributes['ottrix.eval.case']).toBe('Capital of France?');
     expect(report.results[0]?.traceId).toBe(agentSpans[0]?.traceId);
     expect(report.results[0]?.runId).toBe(`${report.evalRunId}-0`);
   });

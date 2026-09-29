@@ -175,6 +175,55 @@ describe('plan lifecycle events', () => {
     expect(events.some((event) => event.type === 'plan_step_started')).toBe(false);
   });
 
+  it('treats retryable: undefined as retryable', async () => {
+    const events: AgentEvent[] = [];
+    const planner = new Planner({ mode: 'rules' });
+    const plan = await planner.plan('Say hello');
+    const agent = new Agent({
+      name: 'test',
+      provider: new MockCompletionProvider(),
+      onAgentEvent: (event) => events.push(event),
+    });
+
+    await agent.executeControlledPlanStep({
+      plan,
+      stepId: plan.steps[0]!.id,
+      execute: async () => {
+        throw Object.assign(new Error('missing flag'), { retryable: undefined });
+      },
+    });
+
+    const failed = events.find((event) => event.type === 'plan_step_failed');
+    expect(failed).toMatchObject({
+      type: 'plan_step_failed',
+      data: { retryable: true, reason: 'missing flag' },
+    });
+  });
+
+  it('yields plan_revised from agent.stream() when the reflector replans', async () => {
+    const provider = new MockCompletionProvider().enqueueStream(
+      textCompletion('A partial draft.', usage),
+    );
+    const reflectorProvider = new MockCompletionProvider()
+      .enqueue(textCompletion(JSON.stringify({ onTrack: false, confidence: 0.2, suggestion: 'refocus' })))
+      .enqueue(textCompletion(JSON.stringify({ shouldContinue: false, reason: 'stop' })));
+
+    const agent = new Agent({
+      name: 'test',
+      provider,
+      planner: new Planner({ mode: 'rules' }),
+      reflector: new Reflector({ provider: reflectorProvider }),
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of agent.stream('Please research climate trends')) {
+      events.push(event);
+    }
+
+    expect(events.some((event) => event.type === 'plan_revised')).toBe(true);
+    expect(events.some((event) => event.type === 'plan_created')).toBe(true);
+  });
+
   it('yields plan events from agent.stream() beside text events', async () => {
     const provider = new MockCompletionProvider().enqueueStream(
       textCompletion('Research summary for the stream.', usage),

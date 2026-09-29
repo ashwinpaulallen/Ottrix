@@ -230,7 +230,10 @@ export interface AgentConfig<
    * - Medium (75%): replace old tool results with one-line outcome summaries
    * - Hard (85%): LLM summarization of the folded segment
    *
-   * Defaults to prose strategy with truncate fallback if not set.
+   * When omitted, the agent uses the legacy single-threshold summarization
+   * (85% of the context window). When set, unspecified fields default to
+   * prose strategy with truncate fallback. `recentMessagesToPreserve` falls
+   * back to {@link keepRecentMessages} when omitted.
    *
    * @example
    * compaction: {

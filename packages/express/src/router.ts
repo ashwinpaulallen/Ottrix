@@ -79,6 +79,20 @@ export function createAgentRouter(options: AgentRouterOptions): ExpressRouter {
     router.use(runContextMiddleware(extractors));
   }
 
+  if (cors !== false) {
+    const corsOption = cors;
+    router.use((req, res, next) => {
+      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+      const headers = requestCorsHeaders(origin, corsOption === true ? true : corsOption);
+      if (headers) {
+        for (const [key, value] of Object.entries(headers)) {
+          res.setHeader(key, value);
+        }
+      }
+      next();
+    });
+  }
+
   if (rateLimitHook) {
     router.use(async (req, res, next) => {
       try {
@@ -101,20 +115,6 @@ export function createAgentRouter(options: AgentRouterOptions): ExpressRouter {
       } catch (error) {
         next(error);
       }
-    });
-  }
-
-  if (cors !== false) {
-    const corsOption = cors;
-    router.use((req, res, next) => {
-      const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
-      const headers = requestCorsHeaders(origin, corsOption === true ? true : corsOption);
-      if (headers) {
-        for (const [key, value] of Object.entries(headers)) {
-          res.setHeader(key, value);
-        }
-      }
-      next();
     });
   }
 
